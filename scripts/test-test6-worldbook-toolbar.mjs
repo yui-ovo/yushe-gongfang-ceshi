@@ -13,7 +13,7 @@ for (const marker of [
   'async function undoWorldOperation(side)',
   "if (action === 'undo') return undoWorldOperation(side);",
   "pushUndo(source, move ? '从世界书移动到预设' : '从世界书拖入预设'",
-  '.pmm-wb-kind-switch button.is-active{background:transparent',
+  '.pmm-wb-kind-switch button.is-active{background:var(--pm-quote-color,#3b82f6)',
   '.pmm-wb-tool{width:27px;height:27px;min-width:27px;padding:0;border:0',
 ]) {
   assert.ok(source.includes(marker), `test.6 世界书工具栏缺少实现：${marker}`);
