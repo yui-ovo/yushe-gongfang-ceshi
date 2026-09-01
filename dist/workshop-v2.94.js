@@ -8893,18 +8893,14 @@ html.pmm-dnd-compat-active #preset-manager-main-panel{user-select:none!important
         customKey,
       } = options;
       const pending = headers.filter(header => (
-        header.dataset[datasetKey] !== mode
-        || !header.style.getPropertyValue(viewportVariable)
+        !header.style.getPropertyValue(viewportVariable)
         || !header.style.getPropertyValue(nativeVariable)
       ));
       const customClass = CUSTOM_CLASSES[customKey];
       const wasCustom = root.classList.contains(customClass);
       if (pending.length > 0 && wasCustom) root.classList.remove(customClass);
       for (const header of pending) {
-        /* 切换布局只重测可视区域；名称框原始宽度一旦取得就保持稳定。 */
-        if (header.dataset[datasetKey] !== mode) {
-          header.style.removeProperty(viewportVariable);
-        }
+        /* 外层标题卡片和名称框原始宽度都只测一次；切换布局只测量新挂载的标题栏。 */
         const left = header.querySelector('.header-left');
         const title = header.querySelector('.title-select,.title-input');
         if (!header.style.getPropertyValue(viewportVariable)) {
