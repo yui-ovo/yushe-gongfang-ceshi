@@ -93,7 +93,7 @@
   function entriesFromWorld(data) {
     const entries = data?.entries && typeof data.entries === 'object' ? Object.values(data.entries) : [];
     return entries.filter(entry => entry && typeof entry === 'object')
-      .sort((a, b) => Number(a.uid) - Number(b.uid));
+      .sort((a, b) => Number(a.displayIndex ?? a.uid) - Number(b.displayIndex ?? b.uid));
   }
 
   function entryKey(entry) { return String(entry.uid); }
@@ -135,6 +135,13 @@
 
   function worldToWorld(entry, data) {
     return { ...clone(entry), uid: freeWorldUid(data) };
+  }
+
+  function maxWorldDisplayIndex(data) {
+    return Object.values(data?.entries || {}).reduce((max, entry) => {
+      const value = Number(entry?.displayIndex);
+      return Number.isFinite(value) ? Math.max(max, value) : max;
+    }, -1);
   }
 
   function setStatus(text) {
@@ -201,6 +208,25 @@
     side.entries = entriesFromWorld(side.data);
   }
 
+  async function loadWorldInfoFresh(name) {
+    if (!name) throw new Error('没有选择世界书');
+    const response = await SELF.fetch('/api/worldinfo/get', {
+      method: 'POST',
+      headers: context?.getRequestHeaders?.() || { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name }),
+      cache: 'no-cache',
+    });
+    if (!response.ok) throw new Error(`重新读取世界书失败（${response.status}）`);
+    const data = await response.json();
+    if (!data?.entries || typeof data.entries !== 'object') throw new Error('世界书数据格式无效');
+    return data;
+  }
+
+  function applyWorldData(side, data) {
+    side.data = clone(data);
+    side.entries = entriesFromWorld(side.data);
+  }
+
   async function saveWorldSide(side) {
     if (!side.data?.entries) throw new Error('世界书数据尚未载入');
     await context.saveWorldInfo(side.name, clone(side.data), true);
@@ -237,19 +263,29 @@
   }
 
   function removeWorldEntries(side, keys) {
-    for (const key of keys.map(String)) delete side.data.entries[key];
+    for (const key of keys.map(String)) {
+      delete side.data.entries[key];
+      if (Array.isArray(side.data.originalData?.entries)) {
+        side.data.originalData.entries = side.data.originalData.entries.filter(entry => String(entry?.uid) !== key);
+      }
+    }
     side.entries = entriesFromWorld(side.data);
   }
 
   function appendWorldEntries(target, sourceKind, entries) {
     target.data.entries ||= {};
+    let displayIndex = maxWorldDisplayIndex(target.data);
+    const added = [];
     for (const entry of entries) {
       const addition = sourceKind === 'world'
         ? worldToWorld(entry, target.data)
         : presetToWorld(entry, target.data);
+      addition.displayIndex = ++displayIndex;
       target.data.entries[addition.uid] = addition;
+      added.push(addition);
     }
     target.entries = entriesFromWorld(target.data);
+    return added;
   }
 
   function pushUndo(owner, label, options = {}) {
@@ -469,21 +505,37 @@
     const keys = forcedKeys?.length ? forcedKeys.map(String) : [...source.selected];
     if (!keys.length) return notify('warning', '请先勾选需要缝合的世界书条目');
     if (move && source.name === target.name) return notify('warning', '同一本世界书内不需要移动');
-    const entries = keys.map(key => findEntry(source, key)).filter(Boolean).map(clone);
-    if (!entries.length) return;
     await enqueue(move ? '移动世界书条目' : '复制世界书条目', async () => {
+      const sameBook = source.name === target.name;
+      const latestSource = await loadWorldInfoFresh(source.name);
+      const latestTarget = sameBook ? latestSource : await loadWorldInfoFresh(target.name);
+      applyWorldData(source, latestSource);
+      applyWorldData(target, latestTarget);
+      const entries = keys.map(key => findEntry(source, key)).filter(Boolean).map(clone);
+      if (!entries.length) throw new Error('没有从来源世界书读取到所选条目');
       pushUndo(source, move ? '在世界书之间移动条目' : '在世界书之间拖入条目', {
         worldSides:move ? [source, target] : [target],
       });
-      appendWorldEntries(target, 'world', entries);
+      const additions = appendWorldEntries(target, 'world', entries);
+      const addedUids = additions.map(entry => String(entry.uid));
       await saveWorldSide(target);
       if (move) {
         removeWorldEntries(source, keys);
         await saveWorldSide(source);
       }
+      const persistedTarget = await loadWorldInfoFresh(target.name);
+      if (!addedUids.every(uid => persistedTarget.entries?.[uid])) {
+        throw new Error('目标世界书保存后未找到新条目');
+      }
+      applyWorldData(target, persistedTarget);
+      if (move) {
+        const persistedSource = await loadWorldInfoFresh(source.name);
+        if (keys.some(key => persistedSource.entries?.[key])) throw new Error('来源世界书仍保留着待移动条目');
+        applyWorldData(source, persistedSource);
+      } else if (sameBook) {
+        applyWorldData(source, persistedTarget);
+      }
       source.selected.clear();
-      await loadWorldSide(target);
-      if (move) await loadWorldSide(source);
       renderPanels();
       notify('success', `已${move ? '移动' : '复制'} ${entries.length} 条`);
     });
@@ -1000,6 +1052,20 @@
     });
   }
 
+  function clearWorldDropIndicators() {
+    state.host?.querySelectorAll?.('.pmm-wb-list--drop-target,.pmm-wb-panel--drop-target').forEach(node => {
+      node.classList.remove('pmm-wb-list--drop-target', 'pmm-wb-panel--drop-target');
+    });
+  }
+
+  function showWorldDropIndicator(sideName) {
+    const panel = state.host?.querySelector?.(`[data-pmm-wb-panel="${sideName}"]`);
+    const list = panel?.querySelector?.('[data-wb-list]');
+    clearWorldDropIndicators();
+    panel?.classList.add('pmm-wb-panel--drop-target');
+    list?.classList.add('pmm-wb-list--drop-target');
+  }
+
   function onDragStart(event) {
     if (!state.open) return;
     const custom = event.target.closest?.('[data-wb-drag-side][data-wb-drag-key]');
@@ -1025,18 +1091,25 @@
   function onDragOver(event) {
     if (!state.open || !dragPayload) return;
     const customList = event.target.closest?.('[data-wb-list]');
+    const customPanel = event.target.closest?.('[data-pmm-wb-panel]');
     const nativeList = state.topType === 'preset' && event.target.closest?.('.pm-main-wrapper > .preset-panel .prompt-panel__list');
-    const targetSide = customList?.dataset.wbList || (nativeList ? 'top' : '');
-    if (!targetSide || targetSide === dragPayload.from) return;
+    const targetSide = customList?.dataset.wbList || customPanel?.dataset.pmmWbPanel || (nativeList ? 'top' : '');
+    if (!targetSide || targetSide === dragPayload.from) {
+      clearWorldDropIndicators();
+      return;
+    }
     event.preventDefault();
     if (event.dataTransfer) event.dataTransfer.dropEffect = 'copy';
+    if (nativeList) clearWorldDropIndicators();
+    else showWorldDropIndicator(targetSide);
   }
 
   function onDrop(event) {
     if (!state.open || !dragPayload) return;
     const customList = event.target.closest?.('[data-wb-list]');
+    const customPanel = event.target.closest?.('[data-pmm-wb-panel]');
     const nativeList = state.topType === 'preset' && event.target.closest?.('.pm-main-wrapper > .preset-panel .prompt-panel__list');
-    const targetSide = customList?.dataset.wbList || (nativeList ? 'top' : '');
+    const targetSide = customList?.dataset.wbList || customPanel?.dataset.pmmWbPanel || (nativeList ? 'top' : '');
     if (!targetSide || targetSide === dragPayload.from) return;
     event.preventDefault();
     event.stopPropagation();
@@ -1044,6 +1117,7 @@
     const payload = dragPayload;
     dragPayload = null;
     clearNativeDropIndicators();
+    clearWorldDropIndicators();
     TOP.setTimeout(clearNativeDropIndicators, 0);
     void transfer(payload.from, false, payload.keys, placement);
   }
@@ -1116,6 +1190,7 @@
 .pmm-wb-tool{width:27px;height:27px;min-width:27px;padding:0;border:0;border-radius:5px;background:transparent;color:var(--pm-text-secondary,currentColor);display:inline-flex;align-items:center;justify-content:center;opacity:.72}.pmm-wb-tool:active:not(:disabled){transform:scale(.94)}.pmm-wb-tool:disabled{opacity:.22}.pmm-wb-tool i{font-size:10px}.pmm-wb-status{font-size:9px;opacity:.5;white-space:nowrap}
 .pmm-wb-search-bar{min-height:38px;display:flex;align-items:center;gap:7px;padding:5px 9px;border-bottom:1px solid var(--pm-border,rgba(127,127,127,.12))}.pmm-wb-search-bar input{flex:1;min-width:0;height:28px;padding:0 8px;border:1px solid var(--pm-border,rgba(127,127,127,.16));border-radius:7px;background:var(--pm-card-bg,rgba(127,127,127,.05));color:inherit}.pmm-wb-search-bar span{font-size:10px;opacity:.55}
 .pmm-wb-content{flex:1;min-height:0;overflow:hidden}.pmm-wb-list{height:100%;min-height:0;overflow:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;padding:7px;display:flex;flex-direction:column;gap:var(--pmm-user-item-gap,5px)}
+#preset-manager-main-panel .pmm-wb-inline-panel.pmm-wb-panel--drop-target{border-color:var(--pm-quote-color,#3485f6)!important;box-shadow:0 0 0 1px var(--pm-quote-color,#3485f6),0 4px 18px rgba(0,0,0,.10)!important}.pmm-wb-list.pmm-wb-list--drop-target{box-shadow:inset 0 3px 0 var(--pm-quote-color,#3485f6)!important}
 .pmm-wb-entry{flex:none;border:1px solid var(--pm-border,rgba(127,127,127,.14));border-radius:10px;background:var(--pm-card-bg,rgba(255,255,255,.68));overflow:hidden}.pmm-wb-entry.is-expanded{border-color:color-mix(in srgb,var(--pm-quote-color,#3485f6) 58%,transparent)}.pmm-wb-entry-head{min-height:var(--pmm-user-item-height,43px);display:flex;align-items:center;gap:6px;padding:3px 8px}.pmm-wb-entry-head button{border:0;background:transparent;color:inherit}.pmm-wb-check,.pmm-wb-expand{width:27px;height:29px;padding:0;opacity:.68}.pmm-wb-check.is-selected{color:var(--pm-quote-color,#3485f6);opacity:1}.pmm-wb-entry-title{min-width:0;flex:1;text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:var(--pmm-user-item-font,12px)}
 .pmm-wb-dot{width:7px;height:7px;border-radius:50%;flex:none;box-shadow:0 0 6px currentColor}.pmm-wb-dot.is-blue{color:#3485f6;background:#3485f6}.pmm-wb-dot.is-green{color:#19bf72;background:#19bf72}.pmm-wb-toggle{width:25px!important;height:14px!important;min-width:25px!important;border-radius:8px!important;padding:1.5px!important;background:#9ba3ad!important;flex:none}.pmm-wb-toggle span{display:block;width:11px;height:11px;border-radius:50%;background:#fff;transition:transform .15s}.pmm-wb-toggle.is-on{background:var(--pm-quote-color,#2878ed)!important}.pmm-wb-toggle.is-on span{transform:translateX(11px)}
 .pmm-wb-details{padding:7px 9px 9px;border-top:1px solid var(--pm-border,rgba(127,127,127,.10));display:flex;flex-direction:column;gap:6px;font-size:10px!important;line-height:1.35}.pmm-wb-details label,.pmm-wb-wide-field{display:flex;flex-direction:column;gap:2px;min-width:0}.pmm-wb-details label>span,.pmm-wb-field-head>span:first-child{font-size:8.5px!important;line-height:1.2;opacity:.62}.pmm-wb-details input,.pmm-wb-details select,.pmm-wb-details textarea{width:100%;min-height:26px!important;border:1px solid var(--pm-border,rgba(127,127,127,.17));border-radius:6px;background:var(--pm-card-bg,rgba(127,127,127,.05));color:inherit;padding:4px 6px!important;font-size:10.5px!important;line-height:1.35!important}.pmm-wb-details textarea{min-height:132px!important;resize:vertical}.pmm-wb-detail-row{display:flex;align-items:flex-end;gap:6px}.pmm-wb-detail-row label:first-child{flex:1}.pmm-wb-title-row .pmm-wb-strategy{align-self:flex-end;height:26px!important;min-width:50px!important;padding:0 6px!important;border:1px solid currentColor;border-radius:7px;background:transparent;font-size:9px!important;line-height:1!important}.pmm-wb-strategy span{display:inline-block;width:6px;height:6px;margin-right:3px;border-radius:50%;background:currentColor}.pmm-wb-strategy.is-blue{color:#3485f6}.pmm-wb-strategy.is-green{color:#19bf72}.pmm-wb-meta-grid{display:grid;grid-template-columns:minmax(130px,2fr) minmax(58px,.65fr);gap:6px}.pmm-wb-meta-grid.has-depth{grid-template-columns:minmax(120px,2fr) repeat(2,minmax(52px,.6fr))}.pmm-wb-meta-grid .is-outlet{grid-column:1/-1}.pmm-wb-field-head{min-height:19px;display:flex;align-items:center;justify-content:space-between;gap:6px}.pmm-wb-content-tools{display:flex;align-items:center;gap:5px}.pmm-wb-content-tools small{font-size:8.5px;opacity:.58}.pmm-wb-content-tools button{width:22px;height:20px;padding:0;border:0;border-radius:5px;background:transparent;color:inherit;opacity:.7}.pmm-wb-content-tools button:active{transform:scale(.94)}.pmm-wb-more{flex:none;border:1px dashed var(--pm-border,rgba(127,127,127,.22));border-radius:8px;background:transparent;color:inherit;padding:8px;opacity:.65}.pmm-wb-empty{margin:auto;padding:24px;text-align:center;opacity:.52}
@@ -1236,6 +1311,7 @@
   function clearDrag() {
     dragPayload = null;
     clearNativeDropIndicators();
+    clearWorldDropIndicators();
   }
 
   try { TOP.__PMM_WORLDBOOK_STITCH_TEST2__?.cleanup?.(); } catch (_) {}
