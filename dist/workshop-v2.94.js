@@ -3734,7 +3734,7 @@ async function ce(){
   });
 })();
 
-/* ===== 个人测试通道 test.1：底部工具栏“世界书”占位入口 ===== */
+/* ===== 个人测试通道：底部工具栏“世界书”入口 ===== */
 (() => {
   'use strict';
 
@@ -3760,7 +3760,7 @@ async function ce(){
     event.preventDefault();
     event.stopPropagation();
     event.stopImmediatePropagation?.();
-    TOP.__PMM_WORLDBOOK_STITCH_TEST2__?.open?.();
+    TOP.__PMM_WORLDBOOK_STITCH_TEST3__?.open?.();
   }
 
   function createButton(toolbar) {
@@ -3771,7 +3771,7 @@ async function ce(){
     button.type = 'button';
     button.className = 'panel-btn pmm-worldbook-placeholder';
     button.title = '世界书';
-    button.setAttribute('aria-label', '世界书（功能待添加）');
+    button.setAttribute('aria-label', '打开世界书缝合');
     button.setAttribute(BUTTON_MARK, '1');
     copyScopeAttributes(templateButton, button);
 
@@ -3832,7 +3832,7 @@ async function ce(){
   observer.observe(DOC.documentElement, { childList: true, subtree: true });
 
   TOP[API_KEY] = { cleanup, install: installIntoToolbars };
-  console.info('[预设工坊测试版] test.1 已添加“世界书”工具栏占位入口。');
+  console.info('[预设工坊测试版] 已添加“世界书”工具栏入口。');
 })();
 
 /* ===== PMM_EDIT_UNDO_V291：条目标题、正文与分组改名撤销 ===== */
