@@ -306,9 +306,10 @@
 
   function nativePresetSnapshot() {
     const panel = state.nativeTop;
-    if (!panel) return { name: '', prompts: [], selected: new Set(), runtimePrompts: null };
+    if (!panel) return { name: '', prompts: [], selected: new Set(), runtimePrompts: null, panelComponent: null };
     let prompts = null;
     let runtimePrompts = null;
+    let panelComponent = null;
     let selected = new Set();
     let component = panel.__vueParentComponent || null;
     for (let depth = 0; component && depth < 14; depth++, component = component.parent) {
@@ -317,6 +318,7 @@
         || componentArray(component.setupState?.prompts);
       if (!runtimePrompts && foundPrompts) runtimePrompts = foundPrompts;
       prompts ||= foundPrompts;
+      if (!panelComponent && foundPrompts && typeof component.emit === 'function') panelComponent = component;
       const candidate = component.props?.selectedIds
         ?? component.vnode?.props?.selectedIds
         ?? component.setupState?.selectedIds;
@@ -334,7 +336,27 @@
     }
     const select = panel.querySelector('.title-select');
     const name = String(select?.value || select?.selectedOptions?.[0]?.textContent || getLoadedPresetNameSafe() || '').trim();
-    return { name, prompts, selected, runtimePrompts };
+    return { name, prompts, selected, runtimePrompts, panelComponent };
+  }
+
+  function emitNativePresetDrop(target, additions, placement = null) {
+    const component = target?.panelComponent;
+    if (!component || typeof component.emit !== 'function' || !additions.length) return false;
+    try {
+      component.emit(
+        'cross-panel-drop',
+        additions,
+        placement?.targetId || '',
+        placement?.position || 'after',
+        undefined,
+        undefined,
+        false,
+      );
+      return true;
+    } catch (error) {
+      console.warn('[世界书缝合] 原生预设拖入链路不可用，改用直接保存兜底', error);
+      return false;
+    }
   }
 
   function syncVisiblePresetEntries(name, prompts) {
@@ -397,11 +419,22 @@
     if (!entries.length) return;
     const target = nativePresetSnapshot();
     await enqueue(move ? '移动到上方预设' : '复制到上方预设', async () => {
+      const additions = entries.map(worldToPreset);
+      if (emitNativePresetDrop(target, additions, placement)) {
+        if (move) {
+          pushUndo(source, '从世界书移动到预设', { worldSides:[source] });
+          removeWorldEntries(source, keys);
+          await saveWorldSide(source);
+        }
+        source.selected.clear();
+        if (move) await loadWorldSide(source);
+        renderPanels();
+        return;
+      }
       pushUndo(source, move ? '从世界书移动到预设' : '从世界书拖入预设', {
         worldSides:move ? [source] : [],
         presetSnapshots:[target],
       });
-      const additions = entries.map(worldToPreset);
       await savePresetEntries(target.name, insertPresetEntries(target.prompts, additions, placement));
       if (move) {
         removeWorldEntries(source, keys);
