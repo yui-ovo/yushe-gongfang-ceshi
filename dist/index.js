@@ -1,5 +1,5 @@
 const EXTENSION_NAME = '🧪预设工坊测试版';
-const EXTENSION_VERSION = '2.94.0';
+const EXTENSION_VERSION = '2.94.0-test.1';
 const RUNTIME_ID = 'TH-script--🧩预设工坊（GitHub 扩展）--2f53f6af-3c9e-4c71-bc52-9f635be25300';
 const LEGACY_IFRAME_PREFIX = 'TH-script--🧩预设工坊';
 const HELPER_WAIT_TIMEOUT = 60_000;
@@ -158,7 +158,7 @@ export async function startPresetWorkshop() {
   document.body.appendChild(iframe);
 
   iframe.addEventListener('load', () => {
-    console.info(`[${EXTENSION_NAME}] GitHub 扩展运行环境已启动（v2.94）`);
+    console.info(`[${EXTENSION_NAME}] GitHub 扩展运行环境已启动（v${EXTENSION_VERSION}）`);
   }, { once: true });
 
   return iframe;

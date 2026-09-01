@@ -3734,6 +3734,106 @@ async function ce(){
   });
 })();
 
+/* ===== 个人测试通道 test.1：底部工具栏“世界书”占位入口 ===== */
+(() => {
+  'use strict';
+
+  const TOP = window.top || window;
+  const DOC = TOP.document || document;
+  const API_KEY = '__PMM_WORLDBOOK_SLOT_TEST1__';
+  const BUTTON_MARK = 'data-pmm-worldbook-placeholder';
+  let observer = null;
+  let frameId = 0;
+
+  try { TOP[API_KEY]?.cleanup?.(); } catch (_) {}
+
+  function copyScopeAttributes(source, target) {
+    if (!source || !target) return;
+    for (const attribute of source.attributes) {
+      if (attribute.name.startsWith('data-v-')) {
+        target.setAttribute(attribute.name, '');
+      }
+    }
+  }
+
+  function stopPlaceholderAction(event) {
+    event.preventDefault();
+    event.stopPropagation();
+    event.stopImmediatePropagation?.();
+  }
+
+  function createButton(toolbar) {
+    const templateButton = toolbar.querySelector('.panel-btn:last-of-type') || toolbar.querySelector('.panel-btn');
+    if (!templateButton) return null;
+
+    const button = DOC.createElement('button');
+    button.type = 'button';
+    button.className = 'panel-btn pmm-worldbook-placeholder';
+    button.title = '世界书';
+    button.setAttribute('aria-label', '世界书（功能待添加）');
+    button.setAttribute(BUTTON_MARK, '1');
+    copyScopeAttributes(templateButton, button);
+
+    const icon = DOC.createElement('i');
+    icon.className = 'fa-solid fa-book-atlas';
+    icon.setAttribute('aria-hidden', 'true');
+    copyScopeAttributes(templateButton.querySelector('i'), icon);
+
+    const label = DOC.createElement('span');
+    label.className = 'btn-label';
+    label.textContent = '世界书';
+    copyScopeAttributes(templateButton.querySelector('.btn-label'), label);
+
+    button.append(icon, label);
+    button.addEventListener('click', stopPlaceholderAction, true);
+    button.addEventListener('dblclick', stopPlaceholderAction, true);
+    return button;
+  }
+
+  function installIntoToolbars() {
+    for (const toolbar of DOC.querySelectorAll('.side-panel-root .panel-buttons')) {
+      if (toolbar.querySelector(`[${BUTTON_MARK}="1"]`)) continue;
+      const button = createButton(toolbar);
+      if (button) toolbar.append(button);
+    }
+  }
+
+  function scheduleInstall() {
+    if (frameId) return;
+    frameId = TOP.requestAnimationFrame(() => {
+      frameId = 0;
+      installIntoToolbars();
+    });
+  }
+
+  function mutationTouchesToolbar(mutation) {
+    const target = mutation.target;
+    if (target?.nodeType === 1 && target.matches?.('.side-panel-root, .panel-buttons')) return true;
+    return [...mutation.addedNodes].some(node => node.nodeType === 1 && (
+      node.matches?.('.side-panel-root, .panel-buttons, #preset-manager-main-panel') ||
+      node.querySelector?.('.side-panel-root .panel-buttons')
+    ));
+  }
+
+  function cleanup() {
+    observer?.disconnect();
+    observer = null;
+    if (frameId) TOP.cancelAnimationFrame(frameId);
+    frameId = 0;
+    DOC.querySelectorAll(`[${BUTTON_MARK}="1"]`).forEach(button => button.remove());
+    try { if (TOP[API_KEY]?.cleanup === cleanup) delete TOP[API_KEY]; } catch (_) {}
+  }
+
+  installIntoToolbars();
+  observer = new MutationObserver(mutations => {
+    if (mutations.some(mutationTouchesToolbar)) scheduleInstall();
+  });
+  observer.observe(DOC.documentElement, { childList: true, subtree: true });
+
+  TOP[API_KEY] = { cleanup, install: installIntoToolbars };
+  console.info('[预设工坊测试版] test.1 已添加“世界书”工具栏占位入口。');
+})();
+
 /* ===== PMM_EDIT_UNDO_V291：条目标题、正文与分组改名撤销 ===== */
 ;(() => {
   const SELF = globalThis;
