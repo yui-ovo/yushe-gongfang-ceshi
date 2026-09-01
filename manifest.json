@@ -1,12 +1,12 @@
 {
-  "display_name": "🧩预设工坊",
-  "loading_order": 110,
+  "display_name": "🧪预设工坊测试版",
+  "loading_order": 109,
   "requires": [],
   "optional": [],
   "js": "dist/index.js",
   "author": "kookt",
   "version": "2.94.0",
-  "homePage": "https://github.com/yui-ovo/ST-Preset-Workshop",
+  "homePage": "https://github.com/yui-ovo/yushe-gongfang-ceshi",
   "auto_update": true,
   "minimum_client_version": "1.12.13"
 }

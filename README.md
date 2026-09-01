@@ -1,8 +1,13 @@
-# 🧩预设工坊
+# 🧪预设工坊测试版
+
+> 这是个人开发测试通道，功能可能尚未完成。正式用户请安装
+> [🧩预设工坊](https://github.com/yui-ovo/ST-Preset-Workshop)。
 
 适用于 SillyTavern 的双端预设管理扩展，首个扩展版本由酒馆助手脚本 **v2.53** 无损迁移而来，当前版本为 **v2.94**。
 
-本仓库是正常浏览器版，不包含 Gecko 后台 iframe 实验补丁。Firefox、雨见等 Gecko／GeckoView 手机浏览器请改用 [Gecko 兼容测试版](https://github.com/yui-ovo/ST-Preset-Workshop-Gecko)，请勿同时安装两个版本。
+本仓库从正常浏览器版复制，用于在大功能完成前独立开发和验证，不包含 Gecko 后台 iframe 实验补丁。Firefox、雨见等 Gecko／GeckoView 手机浏览器请改用 [Gecko 兼容版](https://github.com/yui-ovo/ST-Preset-Workshop-Gecko)。
+
+测试版和正式版共用运行实例锁与本地设置。请勿同时启用两个版本；测试时关闭正式版，完成测试后再切换回来。
 
 ## 依赖
 
@@ -16,7 +21,7 @@
 
 1. 打开 SillyTavern 的“扩展”。
 2. 选择“安装扩展”。
-3. 粘贴本仓库的 Git URL：`https://github.com/yui-ovo/ST-Preset-Workshop.git`。
+3. 粘贴测试仓库的 Git URL：`https://github.com/yui-ovo/yushe-gongfang-ceshi.git`。
 4. 安装完成后刷新 SillyTavern。
 
 ## 当前版本
@@ -48,4 +53,4 @@
 
 ## 安全说明
 
-第三方扩展能够在 SillyTavern 页面中运行代码。请只从本项目的正式仓库安装，并在更新前查看版本说明。
+第三方扩展能够在 SillyTavern 页面中运行代码。本仓库仅供个人测试；对外发布请使用正式仓库。
