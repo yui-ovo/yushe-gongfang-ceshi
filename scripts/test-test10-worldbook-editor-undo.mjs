@@ -6,7 +6,7 @@ const source = await readFile(new URL('../dist/worldbook-stitch-test3.js', impor
 for (const marker of [
   'data-wb-editor-undo',
   'const undoStack = [];',
-  'let previousValue = original;',
+  'let previousValue = text;',
   'now - lastInputAt > 450',
   'textarea.value = undoStack.pop();',
   "undoButton.title = available ? '撤销本次编辑' : '暂无可撤销输入';",

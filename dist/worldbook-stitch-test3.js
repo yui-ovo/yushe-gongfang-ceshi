@@ -461,16 +461,12 @@
     </div>`;
   }
 
-  function openContentEditor(sideName, key) {
-    const side = state[sideName];
-    const entry = side ? findEntry(side, key) : null;
-    if (!entry || !state.host) return;
-    state.host.querySelector('.pmm-wb-editor-overlay')?.remove();
-    const original = String(entry.content || '');
-    const panel = state.host.querySelector(`[data-pmm-wb-panel="${sideName}"]`);
-    const sourceField = panel?.querySelector(`[data-wb-key="${safeId(key)}"][data-wb-field="content"]`);
-    const sourceEntry = sourceField?.closest('.pmm-wb-entry');
-    const styles = [panel, sourceEntry, sourceField, state.host].filter(Boolean).map(node => TOP.getComputedStyle(node));
+  function openTextEditor({ host, title, original, sourceField, themeNodes, ariaLabel, onSave }) {
+    if (!host || !sourceField) return;
+    installStyle();
+    host.querySelector('.pmm-wb-editor-overlay')?.remove();
+    const text = String(original || '');
+    const styles = [...(themeNodes || []), sourceField, host].filter(Boolean).map(node => TOP.getComputedStyle(node));
     const visibleColor = value => {
       const normalized = String(value || '').replace(/\s+/g, '').toLowerCase();
       return normalized && normalized !== 'transparent' && normalized !== 'rgba(0,0,0,0)';
@@ -490,15 +486,15 @@
     overlay.style.setProperty('--pmm-wb-editor-text', pickStyle('color', '#222', true));
     overlay.style.setProperty('--pmm-wb-editor-border', sourceField ? TOP.getComputedStyle(sourceField).borderColor : pickStyle('borderColor', 'rgba(127,127,127,.22)', true));
     overlay.style.setProperty('--pmm-wb-editor-accent', styles.map(style => style.getPropertyValue('--pm-quote-color').trim()).find(Boolean) || pickStyle('color', '#3485f6', true));
-    overlay.innerHTML = `<section class="pmm-wb-editor-dialog" role="dialog" aria-modal="true" aria-label="放大编辑世界书正文">
-      <header><strong>${h(entryTitle(entry))}</strong><span data-wb-editor-count>${original.length} 字符</span><button type="button" data-wb-editor-undo title="暂无可撤销输入" aria-label="撤销本次编辑" disabled><i class="fa-solid fa-rotate-left"></i></button><button type="button" data-wb-editor-cancel title="取消"><i class="fa-solid fa-xmark"></i></button><button type="button" data-wb-editor-save title="完成"><i class="fa-solid fa-check"></i></button></header>
-      <textarea spellcheck="false">${h(original)}</textarea>
+    overlay.innerHTML = `<section class="pmm-wb-editor-dialog" role="dialog" aria-modal="true" aria-label="${h(ariaLabel || '放大编辑正文')}">
+      <header><strong>${h(title)}</strong><span data-wb-editor-count>${text.length} 字符</span><button type="button" data-wb-editor-undo title="暂无可撤销输入" aria-label="撤销本次编辑" disabled><i class="fa-solid fa-rotate-left"></i></button><button type="button" data-wb-editor-cancel title="取消"><i class="fa-solid fa-xmark"></i></button><button type="button" data-wb-editor-save title="完成"><i class="fa-solid fa-check"></i></button></header>
+      <textarea spellcheck="false">${h(text)}</textarea>
     </section>`;
     const textarea = overlay.querySelector('textarea');
     const counter = overlay.querySelector('[data-wb-editor-count]');
     const undoButton = overlay.querySelector('[data-wb-editor-undo]');
     const undoStack = [];
-    let previousValue = original;
+    let previousValue = text;
     let lastInputAt = 0;
     const updateUndoButton = () => {
       const available = undoStack.length > 0;
@@ -509,14 +505,7 @@
     const saveEditor = () => {
       const next = String(textarea.value || '');
       overlay.remove();
-      if (next === original) return;
-      pushUndo(side, '编辑世界书正文', { worldSides:[side] });
-      entry.content = next;
-      side.data.entries[String(entry.uid)] = entry;
-      void enqueue('保存世界书正文', async () => {
-        await saveWorldSide(side);
-        renderPanels();
-      });
+      if (next !== text) onSave(next);
     };
     textarea.addEventListener('input', () => {
       const now = Date.now();
@@ -546,8 +535,68 @@
         closeEditor();
       }
     });
-    state.host.append(overlay);
+    host.append(overlay);
     TOP.setTimeout(() => textarea.focus(), 20);
+  }
+
+  function openContentEditor(sideName, key) {
+    const side = state[sideName];
+    const entry = side ? findEntry(side, key) : null;
+    if (!entry || !state.host) return;
+    const panel = state.host.querySelector(`[data-pmm-wb-panel="${sideName}"]`);
+    const sourceField = panel?.querySelector(`[data-wb-key="${safeId(key)}"][data-wb-field="content"]`);
+    const sourceEntry = sourceField?.closest('.pmm-wb-entry');
+    openTextEditor({
+      host: state.host,
+      title: entryTitle(entry),
+      original: entry.content,
+      sourceField,
+      themeNodes: [panel, sourceEntry],
+      ariaLabel: '放大编辑世界书正文',
+      onSave(next) {
+        pushUndo(side, '编辑世界书正文', { worldSides:[side] });
+        entry.content = next;
+        side.data.entries[String(entry.uid)] = entry;
+        void enqueue('保存世界书正文', async () => {
+          await saveWorldSide(side);
+          renderPanels();
+        });
+      },
+    });
+  }
+
+  function openPresetContentEditor(button) {
+    const editor = button.closest('.prompt-editor');
+    const sourceField = editor?.querySelector('.prompt-editor__textarea');
+    const host = button.closest('#preset-manager-main-panel') || DOC.getElementById('preset-manager-main-panel');
+    if (!editor || !sourceField || !host) return;
+    const item = editor.closest('.prompt-item');
+    const panel = editor.closest('.preset-panel');
+    const title = editor.querySelector('.prompt-editor__name-input')?.value
+      || item?.querySelector('.prompt-card__name,.prompt-card__title')?.textContent?.trim()
+      || '预设条目';
+    openTextEditor({
+      host,
+      title,
+      original: sourceField.value,
+      sourceField,
+      themeNodes: [panel, item, editor],
+      ariaLabel: '放大编辑预设正文',
+      onSave(next) {
+        sourceField.value = next;
+        sourceField.dispatchEvent(new TOP.Event('input', { bubbles: true }));
+        sourceField.dispatchEvent(new TOP.Event('change', { bubbles: true }));
+      },
+    });
+  }
+
+  function onPresetExpandClick(event) {
+    const button = event.target.closest?.('.prompt-editor__expand-btn');
+    if (!button || !button.closest('#preset-manager-main-panel')) return;
+    event.preventDefault();
+    event.stopPropagation();
+    event.stopImmediatePropagation?.();
+    openPresetContentEditor(button);
   }
 
   function renderEntry(sideName, side, entry) {
@@ -965,9 +1014,9 @@
 .pmm-wb-entry{flex:none;border:1px solid var(--pm-border,rgba(127,127,127,.14));border-radius:10px;background:var(--pm-card-bg,rgba(255,255,255,.68));overflow:hidden}.pmm-wb-entry.is-expanded{border-color:color-mix(in srgb,var(--pm-quote-color,#3485f6) 58%,transparent)}.pmm-wb-entry-head{min-height:var(--pmm-user-item-height,43px);display:flex;align-items:center;gap:6px;padding:3px 8px}.pmm-wb-entry-head button{border:0;background:transparent;color:inherit}.pmm-wb-check,.pmm-wb-expand{width:27px;height:29px;padding:0;opacity:.68}.pmm-wb-check.is-selected{color:var(--pm-quote-color,#3485f6);opacity:1}.pmm-wb-entry-title{min-width:0;flex:1;text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:var(--pmm-user-item-font,12px)}
 .pmm-wb-dot{width:7px;height:7px;border-radius:50%;flex:none;box-shadow:0 0 6px currentColor}.pmm-wb-dot.is-blue{color:#3485f6;background:#3485f6}.pmm-wb-dot.is-green{color:#19bf72;background:#19bf72}.pmm-wb-toggle{width:25px!important;height:14px!important;min-width:25px!important;border-radius:8px!important;padding:1.5px!important;background:#9ba3ad!important;flex:none}.pmm-wb-toggle span{display:block;width:11px;height:11px;border-radius:50%;background:#fff;transition:transform .15s}.pmm-wb-toggle.is-on{background:var(--pm-quote-color,#2878ed)!important}.pmm-wb-toggle.is-on span{transform:translateX(11px)}
 .pmm-wb-details{padding:7px 9px 9px;border-top:1px solid var(--pm-border,rgba(127,127,127,.10));display:flex;flex-direction:column;gap:6px;font-size:10px!important;line-height:1.35}.pmm-wb-details label,.pmm-wb-wide-field{display:flex;flex-direction:column;gap:2px;min-width:0}.pmm-wb-details label>span,.pmm-wb-field-head>span:first-child{font-size:8.5px!important;line-height:1.2;opacity:.62}.pmm-wb-details input,.pmm-wb-details select,.pmm-wb-details textarea{width:100%;min-height:26px!important;border:1px solid var(--pm-border,rgba(127,127,127,.17));border-radius:6px;background:var(--pm-card-bg,rgba(127,127,127,.05));color:inherit;padding:4px 6px!important;font-size:10.5px!important;line-height:1.35!important}.pmm-wb-details textarea{min-height:132px!important;resize:vertical}.pmm-wb-detail-row{display:flex;align-items:flex-end;gap:6px}.pmm-wb-detail-row label:first-child{flex:1}.pmm-wb-title-row .pmm-wb-strategy{align-self:flex-end;height:26px!important;min-width:50px!important;padding:0 6px!important;border:1px solid currentColor;border-radius:7px;background:transparent;font-size:9px!important;line-height:1!important}.pmm-wb-strategy span{display:inline-block;width:6px;height:6px;margin-right:3px;border-radius:50%;background:currentColor}.pmm-wb-strategy.is-blue{color:#3485f6}.pmm-wb-strategy.is-green{color:#19bf72}.pmm-wb-meta-grid{display:grid;grid-template-columns:minmax(130px,2fr) minmax(58px,.65fr);gap:6px}.pmm-wb-meta-grid.has-depth{grid-template-columns:minmax(120px,2fr) repeat(2,minmax(52px,.6fr))}.pmm-wb-meta-grid .is-outlet{grid-column:1/-1}.pmm-wb-field-head{min-height:19px;display:flex;align-items:center;justify-content:space-between;gap:6px}.pmm-wb-content-tools{display:flex;align-items:center;gap:5px}.pmm-wb-content-tools small{font-size:8.5px;opacity:.58}.pmm-wb-content-tools button{width:22px;height:20px;padding:0;border:0;border-radius:5px;background:transparent;color:inherit;opacity:.7}.pmm-wb-content-tools button:active{transform:scale(.94)}.pmm-wb-more{flex:none;border:1px dashed var(--pm-border,rgba(127,127,127,.22));border-radius:8px;background:transparent;color:inherit;padding:8px;opacity:.65}.pmm-wb-empty{margin:auto;padding:24px;text-align:center;opacity:.52}
-.pmm-wb-editor-overlay{position:absolute;inset:0;z-index:16000;display:flex;align-items:center;justify-content:center;padding:max(10px,env(safe-area-inset-top)) 9px max(10px,env(safe-area-inset-bottom));background:rgba(0,0,0,.43);backdrop-filter:blur(5px);-webkit-backdrop-filter:blur(5px);color:var(--pmm-wb-editor-text,#222)}.pmm-wb-editor-dialog{width:min(96%,720px);height:min(88%,760px);min-height:260px;display:flex;flex-direction:column;overflow:hidden;border:1px solid var(--pmm-wb-editor-border,rgba(127,127,127,.22));border-radius:13px;background-color:var(--pmm-wb-editor-bg,#fff);background-image:var(--pmm-wb-editor-bg-image,none);color:var(--pmm-wb-editor-text,#222);box-shadow:0 18px 52px rgba(0,0,0,.36)}.pmm-wb-editor-dialog header{min-height:42px;display:flex;align-items:center;gap:7px;padding:6px 8px;border-bottom:1px solid var(--pmm-wb-editor-border,rgba(127,127,127,.14))}.pmm-wb-editor-dialog header strong{min-width:0;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px}.pmm-wb-editor-dialog header span{font-size:9px;opacity:.58;white-space:nowrap}.pmm-wb-editor-dialog header button{width:28px;height:28px;padding:0;border:0;border-radius:7px;background:color-mix(in srgb,var(--pmm-wb-editor-text,#222) 8%,transparent);color:inherit}.pmm-wb-editor-dialog header button:disabled{opacity:.28}.pmm-wb-editor-dialog header button[data-wb-editor-save]{color:var(--pmm-wb-editor-accent,#3485f6)}.pmm-wb-editor-dialog textarea{flex:1;min-height:0;width:auto;margin:8px;padding:10px;border:1px solid var(--pmm-wb-editor-border,rgba(127,127,127,.18));border-radius:9px;background:var(--pmm-wb-editor-field-bg,rgba(127,127,127,.05));color:var(--pmm-wb-editor-text,#222);font-size:12px!important;line-height:1.55!important;resize:none}
+.pmm-wb-editor-overlay{position:absolute;inset:0;z-index:16000;display:flex;align-items:center;justify-content:center;padding:max(12px,env(safe-area-inset-top)) 12px max(12px,env(safe-area-inset-bottom));background:rgba(0,0,0,.43);backdrop-filter:blur(5px);-webkit-backdrop-filter:blur(5px);color:var(--pmm-wb-editor-text,#222)}.pmm-wb-editor-dialog{width:min(92%,660px);height:min(82%,680px);max-height:calc(100dvh - 28px);min-height:250px;display:flex;flex-direction:column;overflow:hidden;border:1px solid var(--pmm-wb-editor-border,rgba(127,127,127,.22));border-radius:13px;background-color:var(--pmm-wb-editor-bg,#fff);background-image:var(--pmm-wb-editor-bg-image,none);color:var(--pmm-wb-editor-text,#222);box-shadow:0 18px 52px rgba(0,0,0,.36)}.pmm-wb-editor-dialog header{min-height:42px;display:flex;align-items:center;gap:7px;padding:6px 8px;border-bottom:1px solid var(--pmm-wb-editor-border,rgba(127,127,127,.14))}.pmm-wb-editor-dialog header strong{min-width:0;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px}.pmm-wb-editor-dialog header span{font-size:9px;opacity:.58;white-space:nowrap}.pmm-wb-editor-dialog header button{width:28px;height:28px;padding:0;border:0;border-radius:7px;background:color-mix(in srgb,var(--pmm-wb-editor-text,#222) 8%,transparent);color:inherit}.pmm-wb-editor-dialog header button:disabled{opacity:.28}.pmm-wb-editor-dialog header button[data-wb-editor-save]{color:var(--pmm-wb-editor-accent,#3485f6)}.pmm-wb-editor-dialog textarea{flex:1;min-height:0;width:auto;margin:8px;padding:10px;border:1px solid var(--pmm-wb-editor-border,rgba(127,127,127,.18));border-radius:9px;background:var(--pmm-wb-editor-field-bg,rgba(127,127,127,.05));color:var(--pmm-wb-editor-text,#222);font-size:12px!important;line-height:1.55!important;resize:none}
 .pmm-wb-source-picker{position:absolute;inset:0;z-index:14000;display:flex;align-items:flex-start;justify-content:center;padding:max(12px,env(safe-area-inset-top)) 10px;background:rgba(0,0,0,.42);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px)}.pmm-wb-picker-dialog{width:min(94%,430px);max-height:min(78%,620px);margin-top:7vh;display:flex;flex-direction:column;overflow:hidden;border:1px solid var(--pm-border,rgba(127,127,127,.22));border-radius:13px;background:var(--pm-panel-bg,var(--pm-card-bg,#fff));color:var(--pm-text-primary,inherit);box-shadow:0 18px 50px rgba(0,0,0,.35)}.pmm-wb-picker-head{display:grid;grid-template-columns:minmax(0,1fr) 34px;gap:6px;padding:8px;border-bottom:1px solid var(--pm-border,rgba(127,127,127,.14))}.pmm-wb-picker-head input{height:34px;min-width:0;padding:0 9px;border:1px solid var(--pm-border,rgba(127,127,127,.2));border-radius:8px;background:var(--pm-card-bg,rgba(127,127,127,.05));color:inherit}.pmm-wb-picker-head button{border:0;border-radius:8px;background:rgba(127,127,127,.08);color:inherit}.pmm-wb-picker-list{min-height:0;overflow:auto;padding:6px}.pmm-wb-picker-list button{width:100%;min-height:38px;margin-bottom:3px;padding:7px 9px;border:1px solid transparent;border-radius:8px;background:transparent;color:inherit;text-align:left}.pmm-wb-picker-list button.is-current{border-color:var(--pm-quote-color,#3b82f6);background:color-mix(in srgb,var(--pm-quote-color,#3b82f6) 11%,transparent)}
-@media(max-width:768px){.pmm-wb-header{height:42px;min-height:42px;padding:4px}.pmm-wb-source-select{max-width:145px!important}.pmm-wb-status{display:none}.pmm-wb-tool{width:24px;height:25px;min-width:24px}.pmm-wb-kind-switch button{width:22px}.pmm-wb-list{padding:5px}.pmm-wb-entry-head{min-height:var(--pmm-user-item-height,39px);padding:2px 6px}.pmm-wb-details{padding:6px 7px 8px;gap:5px}.pmm-wb-meta-grid,.pmm-wb-meta-grid.has-depth{grid-template-columns:minmax(0,1.7fr) minmax(52px,.58fr) minmax(52px,.58fr)}.pmm-wb-details textarea{min-height:118px!important}.pmm-wb-editor-dialog{width:100%;height:100%;max-height:none;border-radius:11px}.pmm-wb-editor-dialog textarea{margin:6px;padding:8px;font-size:11px!important}}
+@media(max-width:768px){.pmm-wb-header{height:42px;min-height:42px;padding:4px}.pmm-wb-source-select{max-width:145px!important}.pmm-wb-status{display:none}.pmm-wb-tool{width:24px;height:25px;min-width:24px}.pmm-wb-kind-switch button{width:22px}.pmm-wb-list{padding:5px}.pmm-wb-entry-head{min-height:var(--pmm-user-item-height,39px);padding:2px 6px}.pmm-wb-details{padding:6px 7px 8px;gap:5px}.pmm-wb-meta-grid,.pmm-wb-meta-grid.has-depth{grid-template-columns:minmax(0,1.7fr) minmax(52px,.58fr) minmax(52px,.58fr)}.pmm-wb-details textarea{min-height:118px!important}.pmm-wb-editor-dialog{width:94%;height:82%;max-height:calc(100dvh - 24px);border-radius:12px}.pmm-wb-editor-dialog textarea{margin:6px;padding:8px;font-size:11px!important}}
 `;
     DOC.head.append(style);
   }
@@ -1066,7 +1115,9 @@
 
   function cleanup() {
     close();
+    DOC.querySelector('#preset-manager-main-panel .pmm-wb-editor-overlay')?.remove();
     DOC.getElementById(STYLE_ID)?.remove();
+    DOC.removeEventListener('click', onPresetExpandClick, true);
     DOC.removeEventListener('click', onDocumentClick, true);
     DOC.removeEventListener('change', onDocumentChange, true);
     DOC.removeEventListener('input', onDocumentInput, true);
@@ -1081,6 +1132,7 @@
 
   try { TOP.__PMM_WORLDBOOK_STITCH_TEST2__?.cleanup?.(); } catch (_) {}
   try { TOP[API_KEY]?.cleanup?.(); } catch (_) {}
+  DOC.addEventListener('click', onPresetExpandClick, true);
   DOC.addEventListener('click', onDocumentClick, true);
   DOC.addEventListener('change', onDocumentChange, true);
   DOC.addEventListener('input', onDocumentInput, true);
