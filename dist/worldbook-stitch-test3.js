@@ -339,7 +339,23 @@
     return { name, prompts, selected, runtimePrompts, panelComponent };
   }
 
-  function emitNativePresetDrop(target, additions, placement = null) {
+  async function emitNativePresetDrop(target, additions, placement = null) {
+    let bridge = SELF.__PMM_WORLDBOOK_PRESET_DROP_BRIDGE__;
+    try {
+      bridge = bridge || TOP.__PMM_WORLDBOOK_PRESET_DROP_BRIDGE__;
+    } catch (_) {}
+    if (typeof bridge?.drop === 'function' && additions.length) {
+      try {
+        const result = await bridge.drop({
+          entries: additions,
+          targetId: placement?.targetId || '',
+          position: placement?.position || 'after',
+        });
+        if (result?.ok !== false) return true;
+      } catch (error) {
+        console.warn('[世界书缝合] 工坊显式拖入桥调用失败，尝试组件事件', error);
+      }
+    }
     const component = target?.panelComponent;
     if (!component || typeof component.emit !== 'function' || !additions.length) return false;
     try {
@@ -420,7 +436,7 @@
     const target = nativePresetSnapshot();
     await enqueue(move ? '移动到上方预设' : '复制到上方预设', async () => {
       const additions = entries.map(worldToPreset);
-      if (emitNativePresetDrop(target, additions, placement)) {
+      if (await emitNativePresetDrop(target, additions, placement)) {
         if (move) {
           pushUndo(source, '从世界书移动到预设', { worldSides:[source] });
           removeWorldEntries(source, keys);
