@@ -3760,6 +3760,7 @@ async function ce(){
     event.preventDefault();
     event.stopPropagation();
     event.stopImmediatePropagation?.();
+    TOP.__PMM_WORLDBOOK_STITCH_TEST2__?.open?.();
   }
 
   function createButton(toolbar) {

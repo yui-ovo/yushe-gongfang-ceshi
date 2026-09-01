@@ -1,5 +1,5 @@
 const EXTENSION_NAME = '🧪预设工坊测试版';
-const EXTENSION_VERSION = '2.94.0-test.1';
+const EXTENSION_VERSION = '2.94.0-test.2';
 const RUNTIME_ID = 'TH-script--🧩预设工坊（GitHub 扩展）--2f53f6af-3c9e-4c71-bc52-9f635be25300';
 const LEGACY_IFRAME_PREFIX = 'TH-script--🧩预设工坊';
 const HELPER_WAIT_TIMEOUT = 60_000;
@@ -105,6 +105,7 @@ function buildRuntimeDocument() {
   const parentJqueryUrl = new URL('../bridge/parent-jquery.js', import.meta.url).href;
   const predefineUrl = new URL('../bridge/predefine.js', import.meta.url).href;
   const workshopUrl = new URL('./workshop-v2.94.js', import.meta.url).href;
+  const worldbookStitchUrl = new URL('./worldbook-stitch-test2.js', import.meta.url).href;
 
   return `<!DOCTYPE html>
 <html>
@@ -118,6 +119,7 @@ function buildRuntimeDocument() {
 </head>
 <body>
 <script type="module" src="${workshopUrl}"></script>
+<script type="module" src="${worldbookStitchUrl}"></script>
 </body>
 </html>`;
 }
