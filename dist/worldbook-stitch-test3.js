@@ -118,9 +118,8 @@
       name: entryTitle(entry),
       content: String(entry.content || ''),
       enabled: entry.disable !== true,
-      role: Number(entry.position) === 4
-        ? ['system', 'user', 'assistant'][Number(entry.role)] || 'system'
-        : 'system',
+      role: 'system',
+      position: { type: 'relative' },
     };
   }
 
@@ -215,16 +214,22 @@
   async function savePresetEntries(name, prompts) {
     if (!name) throw new Error('没有识别到上方预设');
     const next = clone(prompts);
+    let saved = false;
+    if (typeof SELF.setPreset === 'function') {
+      await SELF.setPreset(name, { prompts: next });
+      saved = true;
+    }
     if (name === getLoadedPresetNameSafe() && typeof SELF.updatePresetWith === 'function') {
       await SELF.updatePresetWith('in_use', preset => {
         preset.prompts = next;
         return preset;
       });
-    } else if (typeof SELF.setPreset === 'function') {
-      await SELF.setPreset(name, { prompts: next });
-    } else {
+      saved = true;
+    }
+    if (!saved) {
       throw new Error('当前酒馆没有提供预设保存接口');
     }
+    syncVisiblePresetEntries(name, next);
   }
 
   function findEntry(side, key) {
@@ -301,14 +306,17 @@
 
   function nativePresetSnapshot() {
     const panel = state.nativeTop;
-    if (!panel) return { name: '', prompts: [], selected: new Set() };
+    if (!panel) return { name: '', prompts: [], selected: new Set(), runtimePrompts: null };
     let prompts = null;
+    let runtimePrompts = null;
     let selected = new Set();
     let component = panel.__vueParentComponent || null;
     for (let depth = 0; component && depth < 14; depth++, component = component.parent) {
-      prompts ||= componentArray(component.props?.prompts)
+      const foundPrompts = componentArray(component.props?.prompts)
         || componentArray(component.vnode?.props?.prompts)
         || componentArray(component.setupState?.prompts);
+      if (!runtimePrompts && foundPrompts) runtimePrompts = foundPrompts;
+      prompts ||= foundPrompts;
       const candidate = component.props?.selectedIds
         ?? component.vnode?.props?.selectedIds
         ?? component.setupState?.selectedIds;
@@ -326,7 +334,36 @@
     }
     const select = panel.querySelector('.title-select');
     const name = String(select?.value || select?.selectedOptions?.[0]?.textContent || getLoadedPresetNameSafe() || '').trim();
-    return { name, prompts, selected };
+    return { name, prompts, selected, runtimePrompts };
+  }
+
+  function syncVisiblePresetEntries(name, prompts) {
+    const visible = nativePresetSnapshot();
+    if (!name || visible.name !== name || !Array.isArray(visible.runtimePrompts)) return false;
+    try {
+      visible.runtimePrompts.splice(0, visible.runtimePrompts.length, ...clone(prompts));
+      TOP.setTimeout(scheduleDecorate, 0);
+      return true;
+    } catch (error) {
+      console.warn('[世界书缝合] 预设已保存，但当前卡片即时刷新失败', error);
+      return false;
+    }
+  }
+
+  function insertPresetEntries(prompts, additions, placement = null) {
+    const next = clone(prompts);
+    if (!placement?.targetId) {
+      next.push(...additions);
+      return next;
+    }
+    const targetIndex = next.findIndex(prompt => String(prompt.id) === String(placement.targetId));
+    if (targetIndex < 0) {
+      next.push(...additions);
+      return next;
+    }
+    const insertionIndex = targetIndex + (placement.position === 'after' ? 1 : 0);
+    next.splice(insertionIndex, 0, ...additions);
+    return next;
   }
 
   async function transferFromNativeTop(move, forcedIds = null) {
@@ -352,7 +389,7 @@
     });
   }
 
-  async function transferToNativeTop(move, forcedKeys = null) {
+  async function transferToNativeTop(move, forcedKeys = null, placement = null) {
     const source = state.bottom;
     const keys = forcedKeys?.length ? forcedKeys.map(String) : [...source.selected];
     if (!keys.length) return notify('warning', '请先在下方世界书勾选需要缝合的条目');
@@ -365,7 +402,7 @@
         presetSnapshots:[target],
       });
       const additions = entries.map(worldToPreset);
-      await savePresetEntries(target.name, [...target.prompts, ...additions]);
+      await savePresetEntries(target.name, insertPresetEntries(target.prompts, additions, placement));
       if (move) {
         removeWorldEntries(source, keys);
         await saveWorldSide(source);
@@ -403,12 +440,12 @@
     });
   }
 
-  async function transfer(fromName, move, forcedKeys = null) {
+  async function transfer(fromName, move, forcedKeys = null, placement = null) {
     if (fromName === 'top' && state.topType === 'preset') {
       return transferFromNativeTop(move, forcedKeys);
     }
     if (fromName === 'bottom' && state.topType === 'preset') {
-      return transferToNativeTop(move, forcedKeys);
+      return transferToNativeTop(move, forcedKeys, placement);
     }
     return transferWorldToWorld(fromName, move, forcedKeys);
   }
@@ -898,6 +935,22 @@
     return card?.dataset?.promptId ? String(card.dataset.promptId) : '';
   }
 
+  function nativeDropPlacement(event) {
+    const card = event.target?.closest?.('.prompt-item[data-prompt-id],.prompt-card[data-prompt-id]');
+    if (!card?.dataset?.promptId) return null;
+    const rect = card.getBoundingClientRect();
+    return {
+      targetId: String(card.dataset.promptId),
+      position: Number(event.clientY) < rect.top + rect.height / 2 ? 'before' : 'after',
+    };
+  }
+
+  function clearNativeDropIndicators() {
+    state.nativeTop?.querySelectorAll('.prompt-item--drop-before,.prompt-item--drop-after,.prompt-card--drop-before,.prompt-card--drop-after,.prompt-panel__list--drop-target').forEach(node => {
+      node.classList.remove('prompt-item--drop-before', 'prompt-item--drop-after', 'prompt-card--drop-before', 'prompt-card--drop-after', 'prompt-panel__list--drop-target');
+    });
+  }
+
   function onDragStart(event) {
     if (!state.open) return;
     const custom = event.target.closest?.('[data-wb-drag-side][data-wb-drag-key]');
@@ -938,9 +991,12 @@
     if (!targetSide || targetSide === dragPayload.from) return;
     event.preventDefault();
     event.stopPropagation();
+    const placement = nativeList ? nativeDropPlacement(event) : null;
     const payload = dragPayload;
     dragPayload = null;
-    void transfer(payload.from, false, payload.keys);
+    clearNativeDropIndicators();
+    TOP.setTimeout(clearNativeDropIndicators, 0);
+    void transfer(payload.from, false, payload.keys, placement);
   }
 
   function onDocumentClick(event) {
@@ -1128,7 +1184,10 @@
     try { if (TOP[API_KEY]?.cleanup === cleanup) delete TOP[API_KEY]; } catch (_) {}
   }
 
-  function clearDrag() { dragPayload = null; }
+  function clearDrag() {
+    dragPayload = null;
+    clearNativeDropIndicators();
+  }
 
   try { TOP.__PMM_WORLDBOOK_STITCH_TEST2__?.cleanup?.(); } catch (_) {}
   try { TOP[API_KEY]?.cleanup?.(); } catch (_) {}
