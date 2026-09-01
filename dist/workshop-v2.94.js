@@ -9184,12 +9184,96 @@ html.pmm-dnd-compat-active #preset-manager-main-panel{user-select:none!important
     }
   }
 
+  function parseLayoutThemeColor(value) {
+    const text = String(value || '').trim();
+    if (!text) return null;
+    const hex = text.match(/^#([0-9a-f]{3}|[0-9a-f]{6})([0-9a-f]{2})?$/i);
+    if (hex) {
+      let rgb = hex[1];
+      if (rgb.length === 3) rgb = rgb.split('').map(char => char + char).join('');
+      return {
+        r:parseInt(rgb.slice(0, 2), 16),
+        g:parseInt(rgb.slice(2, 4), 16),
+        b:parseInt(rgb.slice(4, 6), 16),
+        a:hex[2] ? parseInt(hex[2], 16) / 255 : 1,
+      };
+    }
+    const rgb = text.match(/^rgba?\(\s*([\d.]+)[,\s]+([\d.]+)[,\s]+([\d.]+)(?:\s*[,/]\s*([\d.]+)%?)?/i);
+    if (rgb) {
+      let alpha = rgb[4] == null ? 1 : Number(rgb[4]);
+      if (rgb[4] != null && text.includes('%')) alpha /= 100;
+      return { r:Number(rgb[1]), g:Number(rgb[2]), b:Number(rgb[3]), a:alpha };
+    }
+    const srgb = text.match(/^color\(srgb\s+([\d.]+)\s+([\d.]+)\s+([\d.]+)(?:\s*\/\s*([\d.]+))?\s*\)$/i);
+    return srgb ? {
+      r:Number(srgb[1]) * 255,
+      g:Number(srgb[2]) * 255,
+      b:Number(srgb[3]) * 255,
+      a:srgb[4] == null ? 1 : Number(srgb[4]),
+    } : null;
+  }
+
+  function layoutThemeLuminance(color) {
+    const channels = [color.r, color.g, color.b].map(channel => {
+      const normalized = Math.max(0, Math.min(255, Number(channel))) / 255;
+      return normalized <= .04045 ? normalized / 12.92 : Math.pow((normalized + .055) / 1.055, 2.4);
+    });
+    return .2126 * channels[0] + .7152 * channels[1] + .0722 * channels[2];
+  }
+
+  function layoutThemeFromSurface(value, minimumAlpha = .35) {
+    const color = parseLayoutThemeColor(value);
+    if (!color || !Number.isFinite(color.a) || color.a < minimumAlpha) return '';
+    return layoutThemeLuminance(color) < .38 ? 'dark' : 'light';
+  }
+
+  function resolveLayoutCardTheme() {
+    let themeMode = '';
+    try { themeMode = String(TOP.localStorage?.getItem('preset-manager-theme-mode') || ''); } catch (_) {}
+    if (themeMode === 'dark' || themeMode === 'light') return themeMode;
+
+    /* 魔法棒(auto)要看已经解析后的工坊表面色，不能把 auto 当成浅色。 */
+    const nodes = [
+      root?.querySelector('.pm-panel-container'),
+      root?.querySelector('.preset-panel'),
+      root?.querySelector('.prompt-group,.section-group,.prompt-item'),
+      root,
+    ].filter(Boolean);
+    const styles = nodes.map(node => VIEW.getComputedStyle?.(node)).filter(Boolean);
+    for (const style of styles) {
+      const surfaces = [
+        style.getPropertyValue('--pm-panel-bg'),
+        style.getPropertyValue('--pm-card-bg'),
+        style.getPropertyValue('--pm-glass-bg'),
+        style.getPropertyValue('--pm-card-bg-translucent'),
+        style.backgroundColor,
+      ];
+      for (const surface of surfaces) {
+        const resolved = layoutThemeFromSurface(surface);
+        if (resolved) return resolved;
+      }
+    }
+
+    /* 透明美化没有可用表面色时，用正文明暗反推底色。 */
+    for (const style of styles) {
+      const textColor = parseLayoutThemeColor(
+        style.getPropertyValue('--pm-text-primary') || style.color,
+      );
+      if (textColor && textColor.a >= .35) {
+        return layoutThemeLuminance(textColor) >= .55 ? 'dark' : 'light';
+      }
+    }
+    return VIEW.matchMedia?.('(prefers-color-scheme: dark)')?.matches ? 'dark' : 'light';
+  }
+
+  function syncLayoutCardTheme(panel = card) {
+    if (panel) panel.dataset.pmmLayoutTheme = resolveLayoutCardTheme();
+  }
+
   function buildCard() {
     const panel = DOC.createElement('section');
     panel.id = 'pmm-mobile-layout-card';
-    let themeMode = '';
-    try { themeMode = String(TOP.localStorage?.getItem('preset-manager-theme-mode') || ''); } catch (_) {}
-    panel.dataset.pmmLayoutTheme = themeMode === 'dark' ? 'dark' : 'light';
+    syncLayoutCardTheme(panel);
     panel.setAttribute('role', 'dialog');
     panel.setAttribute('aria-modal', 'false');
     panel.setAttribute('aria-label', isMobile() ? '手机版布局调节' : '电脑版布局调节');
@@ -9420,7 +9504,7 @@ html.pmm-dnd-compat-active #preset-manager-main-panel{user-select:none!important
     container = nextContainer;
     if (!container) return;
     modeObserver = new MutationObserverCtor(scheduleSync);
-    modeObserver.observe(container, { attributes:true, attributeFilter:['class'] });
+    modeObserver.observe(container, { attributes:true, attributeFilter:['class', 'style'] });
   }
 
   function watchToolbar(nextToolbar) {
@@ -9477,6 +9561,7 @@ html.pmm-dnd-compat-active #preset-manager-main-panel{user-select:none!important
     else container?.querySelectorAll(':scope > .pmm-split-handle').forEach(handle => handle.remove());
     /* 只在面板/布局同步时测量；拖动任一名称框不再触碰另一项的基准。 */
     capturePresetViewportWidths();
+    syncLayoutCardTheme();
     applyState(false);
   }
 
