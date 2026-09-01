@@ -8,6 +8,7 @@
   const API_KEY = '__PMM_WORLDBOOK_STITCH_TEST3__';
   const STYLE_ID = 'pmm-worldbook-stitch-test3-style';
   const PAGE_SIZE = 240;
+  const HISTORY_LIMIT = 20;
   const MODE_CLASSES = ['pm-panel-container--merge-mode', 'pm-panel-container--branch-mode', 'pm-panel-container--favorite-mode'];
   const POSITION_OPTIONS = [
     [0, '角色定义之前'], [1, '角色定义之后'], [5, '示例消息之前'], [6, '示例消息之后'],
@@ -31,7 +32,7 @@
   function emptyWorldSide() {
     return {
       kind: 'world', name: '', data: null, entries: [], selected: new Set(), expanded: new Set(),
-      limit: PAGE_SIZE, multi: false, query: '', searchOpen: false, scrollTop: 0,
+      limit: PAGE_SIZE, multi: false, query: '', searchOpen: false, scrollTop: 0, history: [],
     };
   }
 
@@ -246,6 +247,46 @@
     target.entries = entriesFromWorld(target.data);
   }
 
+  function pushUndo(owner, label, options = {}) {
+    if (!owner) return;
+    const worlds = [];
+    const worldNames = new Set();
+    for (const side of options.worldSides || []) {
+      if (!side?.name || !side.data?.entries || worldNames.has(side.name)) continue;
+      worldNames.add(side.name);
+      worlds.push({ name:side.name, data:clone(side.data) });
+    }
+    const presets = [];
+    const presetNames = new Set();
+    for (const snapshot of options.presetSnapshots || []) {
+      if (!snapshot?.name || !Array.isArray(snapshot.prompts) || presetNames.has(snapshot.name)) continue;
+      presetNames.add(snapshot.name);
+      presets.push({ name:snapshot.name, prompts:clone(snapshot.prompts) });
+    }
+    if (!worlds.length && !presets.length) return;
+    owner.history.push({ label, worlds, presets });
+    if (owner.history.length > HISTORY_LIMIT) owner.history.splice(0, owner.history.length - HISTORY_LIMIT);
+  }
+
+  async function undoWorldOperation(side) {
+    const snapshot = side?.history?.[side.history.length - 1];
+    if (!snapshot) return notify('info', '目前没有可以撤销的世界书操作');
+    await enqueue(`撤销${snapshot.label ? `：${snapshot.label}` : ''}`, async () => {
+      for (const preset of snapshot.presets) await savePresetEntries(preset.name, preset.prompts);
+      for (const world of snapshot.worlds) await context.saveWorldInfo(world.name, clone(world.data), true);
+      for (const target of [state.top, state.bottom]) {
+        const restored = snapshot.worlds.find(world => world.name === target.name);
+        if (!restored) continue;
+        target.data = clone(restored.data);
+        target.entries = entriesFromWorld(target.data);
+        target.selected.clear();
+      }
+      side.history.pop();
+      renderPanels();
+      notify('success', `已撤销：${snapshot.label || '上一步世界书操作'}`);
+    });
+  }
+
   function componentArray(value) {
     const raw = value?.value ?? value;
     return Array.isArray(raw) ? raw : null;
@@ -296,6 +337,10 @@
     const entries = source.prompts.filter(prompt => wanted.has(String(prompt.id))).map(clone);
     if (!entries.length) return notify('warning', '没有读取到已勾选的预设条目');
     await enqueue(move ? '移动到下方世界书' : '复制到下方世界书', async () => {
+      pushUndo(state.bottom, move ? '从预设移动到世界书' : '从预设拖入世界书', {
+        worldSides:[state.bottom],
+        presetSnapshots:move ? [source] : [],
+      });
       appendWorldEntries(state.bottom, 'preset', entries);
       await saveWorldSide(state.bottom);
       if (move) {
@@ -315,6 +360,10 @@
     if (!entries.length) return;
     const target = nativePresetSnapshot();
     await enqueue(move ? '移动到上方预设' : '复制到上方预设', async () => {
+      pushUndo(source, move ? '从世界书移动到预设' : '从世界书拖入预设', {
+        worldSides:move ? [source] : [],
+        presetSnapshots:[target],
+      });
       const additions = entries.map(worldToPreset);
       await savePresetEntries(target.name, [...target.prompts, ...additions]);
       if (move) {
@@ -337,6 +386,9 @@
     const entries = keys.map(key => findEntry(source, key)).filter(Boolean).map(clone);
     if (!entries.length) return;
     await enqueue(move ? '移动世界书条目' : '复制世界书条目', async () => {
+      pushUndo(source, move ? '在世界书之间移动条目' : '在世界书之间拖入条目', {
+        worldSides:move ? [source, target] : [target],
+      });
       appendWorldEntries(target, 'world', entries);
       await saveWorldSide(target);
       if (move) {
@@ -422,7 +474,7 @@
   }
 
   function typeSwitchMarkup() {
-    return `<span class="pmm-wb-kind-switch" data-pmm-wb-kind-switch>
+    return `<span class="pmm-wb-kind-switch pmm-wb-kind-switch--toolbar" data-pmm-wb-kind-switch>
       <button type="button" data-wb-action="top-kind" data-wb-kind="preset" class="${state.topType === 'preset' ? 'is-active' : ''}" title="上方显示预设"><i class="fa-solid fa-sliders"></i></button>
       <button type="button" data-wb-action="top-kind" data-wb-kind="world" class="${state.topType === 'world' ? 'is-active' : ''}" title="上方显示世界书"><i class="fa-solid fa-book-atlas"></i></button>
     </span>`;
@@ -439,7 +491,6 @@
       : side.entries;
     const visible = filtered.slice(0, side.limit);
     const remaining = filtered.length - visible.length;
-    const transferDirection = sideName === 'top' ? 'down' : 'up';
     return `<section class="preset-panel pmm-wb-inline-panel" data-pmm-wb-panel="${sideName}">
       <div class="pmm-wb-main-content">
         <header class="pmm-wb-header">
@@ -447,15 +498,14 @@
             <span class="pmm-wb-title-row">
               <select class="title-select pmm-wb-source-select" data-wb-action="select-source" data-wb-side="${sideName}" aria-label="选择世界书">${sourceOptions(side)}</select>
               <button class="pmm-preset-search-btn" data-wb-action="source-picker" data-wb-side="${sideName}" title="搜索世界书"><i class="fa-solid fa-magnifying-glass"></i></button>
-              ${sideName === 'top' ? typeSwitchMarkup() : ''}
             </span>
           </div>
           <div class="pmm-wb-header-right">
             <span class="pmm-wb-status">${h(state.status)}</span>
-            ${toolbarButton('multi', side.multi ? '退出多选' : '多选', 'fa-list-check', `data-wb-side="${sideName}"`)}
+            ${sideName === 'top' ? typeSwitchMarkup() : ''}
+            ${toolbarButton('multi', side.multi ? '退出多选' : '多选', 'fa-check-double', `data-wb-side="${sideName}"`)}
+            ${toolbarButton('undo', side.history.length ? `撤销：${side.history[side.history.length - 1].label}` : '暂无可撤销操作', 'fa-rotate-left', `data-wb-side="${sideName}" ${side.history.length ? '' : 'disabled'}`)}
             ${toolbarButton('entry-search', '搜索条目', 'fa-magnifying-glass', `data-wb-side="${sideName}"`)}
-            ${side.selected.size ? toolbarButton('transfer-copy', `${transferDirection === 'down' ? '向下' : '向上'}复制所选`, 'fa-copy', `data-wb-side="${sideName}"`) : ''}
-            ${side.selected.size ? toolbarButton('transfer-move', `${transferDirection === 'down' ? '向下' : '向上'}移动所选`, transferDirection === 'down' ? 'fa-arrow-down' : 'fa-arrow-up', `data-wb-side="${sideName}"`) : ''}
             ${side.multi ? toolbarButton('batch-delete', '删除所选', 'fa-trash', `data-wb-side="${sideName}" ${side.selected.size ? '' : 'disabled'}`) : ''}
             ${toolbarButton('save', '保存', 'fa-floppy-disk', `data-wb-side="${sideName}"`)}
             ${toolbarButton(sideName === 'top' ? 'close-main' : 'exit', '关闭', 'fa-xmark')}
@@ -498,28 +548,19 @@
     panel.classList.toggle('pmm-wb-native-hidden', state.topType !== 'preset');
     let switcher = panel.querySelector('[data-pmm-wb-kind-switch]');
     if (!switcher) {
-      const row = panel.querySelector('.title-row');
-      if (row) {
+      const headerRight = panel.querySelector('.header-right');
+      if (headerRight) {
         const holder = DOC.createElement('span');
         holder.innerHTML = typeSwitchMarkup();
         switcher = holder.firstElementChild;
-        const search = row.querySelector('.pmm-preset-search-btn');
-        (search || row.querySelector('.title-select'))?.insertAdjacentElement('afterend', switcher);
+        headerRight.prepend(switcher);
       }
     } else {
       switcher.querySelectorAll('[data-wb-kind]').forEach(button => {
         button.classList.toggle('is-active', button.dataset.wbKind === state.topType);
       });
     }
-    let actions = panel.querySelector('[data-pmm-wb-native-transfer]');
-    if (!actions) {
-      actions = DOC.createElement('span');
-      actions.className = 'pmm-wb-native-transfer';
-      actions.dataset.pmmWbNativeTransfer = '1';
-      actions.innerHTML = `${toolbarButton('transfer-copy', '向下复制所选', 'fa-copy', 'data-wb-side="top"')}${toolbarButton('transfer-move', '向下移动所选', 'fa-arrow-down', 'data-wb-side="top"')}`;
-      panel.querySelector('.header-right')?.prepend(actions);
-    }
-    actions.hidden = nativePresetSnapshot().selected.size === 0;
+    panel.querySelector('[data-pmm-wb-native-transfer]')?.remove();
   }
 
   function renderPanels() {
@@ -568,6 +609,7 @@
     const fieldName = target.dataset.wbField;
     const entry = findEntry(side, key);
     if (!entry || !fieldName) return;
+    pushUndo(side, '编辑世界书条目', { worldSides:[side] });
     entry[fieldName] = parseFieldValue(target, fieldName);
     side.data.entries[String(entry.uid)] = entry;
     await enqueue('保存条目', async () => {
@@ -582,6 +624,7 @@
     if (!keys.length) return;
     if (!TOP.confirm?.(`确定删除所选的 ${keys.length} 条世界书条目吗？`)) return;
     await enqueue('批量删除', async () => {
+      pushUndo(side, '批量删除世界书条目', { worldSides:[side] });
       removeWorldEntries(side, keys);
       await saveWorldSide(side);
       side.selected.clear();
@@ -612,6 +655,7 @@
       if (event.target === overlay) return overlay.remove();
       const button = event.target.closest('[data-wb-picker-name]');
       if (!button) return;
+      if (side.name !== button.dataset.wbPickerName) side.history.length = 0;
       side.name = button.dataset.wbPickerName;
       overlay.remove();
       void enqueue('载入世界书', async () => { await loadWorldSide(side); renderPanels(); });
@@ -654,6 +698,7 @@
       if (!side.multi) side.selected.clear();
       return renderPanels();
     }
+    if (action === 'undo') return undoWorldOperation(side);
     if (action === 'transfer-copy') return transfer(sideName, false);
     if (action === 'transfer-move') return transfer(sideName, true);
     if (action === 'batch-delete') return deleteSelected(sideName);
@@ -681,11 +726,13 @@
       return renderPanels();
     }
     if (action === 'toggle') {
+      pushUndo(side, '切换世界书条目开关', { worldSides:[side] });
       entry.disable = entry.disable !== true;
       side.data.entries[String(entry.uid)] = entry;
       return enqueue('切换条目开关', async () => { await saveWorldSide(side); renderPanels(); });
     }
     if (action === 'strategy') {
+      pushUndo(side, '切换世界书蓝绿灯', { worldSides:[side] });
       entry.constant = entry.constant !== true;
       if (entry.constant) entry.vectorized = false;
       side.data.entries[String(entry.uid)] = entry;
@@ -767,6 +814,7 @@
     const target = event.target;
     if (target.matches?.('[data-wb-action="select-source"]')) {
       const side = state[target.dataset.wbSide];
+      if (side.name !== target.value) side.history.length = 0;
       side.name = target.value;
       void enqueue('载入世界书', async () => { await loadWorldSide(side); renderPanels(); });
       return;
@@ -799,14 +847,15 @@
 #preset-manager-main-panel.pmm-worldbook-mode .pm-panel-container--merge-mode .title-action-btn[title^="导入"],
 #preset-manager-main-panel.pmm-worldbook-mode .pm-panel-container--merge-mode .title-action-btn[title^="导出"],
 #preset-manager-main-panel.pmm-worldbook-mode .pm-panel-container--merge-mode button[title="取消当前预设全部分组"]{display:none!important}
+#preset-manager-main-panel.pmm-worldbook-mode .pm-main-wrapper>.preset-panel .theme-switch-card{display:none!important}
 #preset-manager-main-panel .pmm-wb-native-hidden{display:none!important}
 #preset-manager-main-panel .pmm-wb-inline-panel{min-width:0!important;min-height:0!important;width:100%!important;height:100%!important;display:flex!important;overflow:hidden!important;border:1px solid var(--pm-border,rgba(127,127,127,.17))!important;border-radius:12px!important;background:var(--pm-panel-bg,var(--pm-card-bg,rgba(255,255,255,.96)))!important;color:var(--pm-text-primary,inherit)!important;box-shadow:0 4px 18px rgba(0,0,0,.10)!important}
 .pmm-wb-main-content{width:100%;height:100%;min-height:0;display:flex;flex-direction:column;overflow:hidden}
 .pmm-wb-header{height:46px;min-height:46px;display:flex;align-items:center;justify-content:space-between;gap:5px;padding:5px 7px;border-bottom:1px solid var(--pm-border,rgba(127,127,127,.12));background:var(--pm-toolbar-bg,transparent)}
-.pmm-wb-header-left,.pmm-wb-header-right,.pmm-wb-title-row,.pmm-wb-native-transfer{display:flex;align-items:center;gap:3px;min-width:0}.pmm-wb-header-left{flex:1}.pmm-wb-header-right{flex:0 0 auto}
-.pmm-wb-source-select{min-width:70px!important;max-width:190px!important;flex:1 1 110px!important}.pmm-wb-kind-switch{display:inline-flex;align-items:center;gap:1px;padding:2px;border-radius:7px;background:color-mix(in srgb,currentColor 6%,transparent)}
-.pmm-wb-kind-switch button{width:25px;height:23px;padding:0;border:0;border-radius:5px;background:transparent;color:var(--pm-text-secondary,currentColor);opacity:.62}.pmm-wb-kind-switch button.is-active{background:var(--pm-quote-color,#3b82f6);color:#fff;opacity:1}.pmm-wb-kind-switch i{font-size:10px}
-.pmm-wb-tool{width:27px;height:27px;min-width:27px;padding:0;border:1px solid var(--pm-border,rgba(127,127,127,.14));border-radius:7px;background:transparent;color:var(--pm-text-secondary,currentColor);display:inline-flex;align-items:center;justify-content:center;opacity:.72}.pmm-wb-tool:active:not(:disabled){transform:scale(.94)}.pmm-wb-tool:disabled{opacity:.22}.pmm-wb-tool i{font-size:10px}.pmm-wb-status{font-size:9px;opacity:.5;white-space:nowrap}
+.pmm-wb-header-left,.pmm-wb-header-right,.pmm-wb-title-row{display:flex;align-items:center;gap:3px;min-width:0}.pmm-wb-header-left{flex:1}.pmm-wb-header-right{flex:0 0 auto}
+.pmm-wb-source-select{min-width:70px!important;max-width:190px!important;flex:1 1 110px!important}.pmm-wb-kind-switch{display:inline-flex;align-items:center;gap:1px;padding:0;background:transparent}
+.pmm-wb-kind-switch button{width:27px;height:27px;padding:0;border:0;border-radius:5px;background:transparent;color:var(--pm-text-secondary,currentColor);opacity:.48;display:inline-flex;align-items:center;justify-content:center}.pmm-wb-kind-switch button.is-active{background:transparent;color:var(--pm-quote-color,#3b82f6);opacity:1}.pmm-wb-kind-switch button:active{transform:scale(.94)}.pmm-wb-kind-switch i{font-size:10px}
+.pmm-wb-tool{width:27px;height:27px;min-width:27px;padding:0;border:0;border-radius:5px;background:transparent;color:var(--pm-text-secondary,currentColor);display:inline-flex;align-items:center;justify-content:center;opacity:.72}.pmm-wb-tool:active:not(:disabled){transform:scale(.94)}.pmm-wb-tool:disabled{opacity:.22}.pmm-wb-tool i{font-size:10px}.pmm-wb-status{font-size:9px;opacity:.5;white-space:nowrap}
 .pmm-wb-search-bar{min-height:38px;display:flex;align-items:center;gap:7px;padding:5px 9px;border-bottom:1px solid var(--pm-border,rgba(127,127,127,.12))}.pmm-wb-search-bar input{flex:1;min-width:0;height:28px;padding:0 8px;border:1px solid var(--pm-border,rgba(127,127,127,.16));border-radius:7px;background:var(--pm-card-bg,rgba(127,127,127,.05));color:inherit}.pmm-wb-search-bar span{font-size:10px;opacity:.55}
 .pmm-wb-content{flex:1;min-height:0;overflow:hidden}.pmm-wb-list{height:100%;min-height:0;overflow:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;padding:7px;display:flex;flex-direction:column;gap:var(--pmm-user-item-gap,5px)}
 .pmm-wb-entry{flex:none;border:1px solid var(--pm-border,rgba(127,127,127,.14));border-radius:10px;background:var(--pm-card-bg,rgba(255,255,255,.68));overflow:hidden}.pmm-wb-entry.is-expanded{border-color:color-mix(in srgb,var(--pm-quote-color,#3485f6) 58%,transparent)}.pmm-wb-entry-head{min-height:var(--pmm-user-item-height,43px);display:flex;align-items:center;gap:6px;padding:3px 8px}.pmm-wb-entry-head button{border:0;background:transparent;color:inherit}.pmm-wb-check,.pmm-wb-expand{width:27px;height:29px;padding:0;opacity:.68}.pmm-wb-check.is-selected{color:var(--pm-quote-color,#3485f6);opacity:1}.pmm-wb-entry-title{min-width:0;flex:1;text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:var(--pmm-user-item-font,12px)}

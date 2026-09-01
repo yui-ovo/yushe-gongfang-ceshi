@@ -14,7 +14,6 @@ for (const marker of [
   'pm-panel-container--merge-mode',
   'pmm-wb-native-hidden',
   'data-pmm-wb-kind-switch',
-  'data-pmm-wb-native-transfer',
   'worldToPreset',
   'presetToWorld',
   'worldToWorld',
