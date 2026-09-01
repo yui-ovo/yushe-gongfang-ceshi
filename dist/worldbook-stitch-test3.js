@@ -436,20 +436,64 @@
     const atDepth = Number(entry.position) === 4;
     const outlet = Number(entry.position) === 7;
     const green = entry.constant !== true;
+    const content = String(entry.content || '');
     return `<div class="pmm-wb-details">
       <div class="pmm-wb-detail-row pmm-wb-title-row">
-        <label><span>条目名称</span>${field(sideName, key, 'comment', entry.comment || '')}</label>
+        <label><span><i class="fa-solid fa-tag"></i> 条目名称</span>${field(sideName, key, 'comment', entry.comment || '')}</label>
         <button class="pmm-wb-strategy ${green ? 'is-green' : 'is-blue'}" data-wb-action="strategy" data-wb-side="${sideName}" data-wb-key="${safeId(key)}" title="${green ? '关键词触发（绿灯）' : '常驻触发（蓝灯）'}"><span></span>${green ? '绿灯' : '蓝灯'}</button>
       </div>
       <div class="pmm-wb-meta-grid ${atDepth ? 'has-depth' : ''}">
-        <label class="is-position"><span>位置</span><select data-wb-side="${sideName}" data-wb-key="${safeId(key)}" data-wb-field="position">${positionOptions(entry.position)}</select></label>
+        <label class="is-position"><span><i class="fa-solid fa-sliders"></i> 位置</span><select data-wb-side="${sideName}" data-wb-key="${safeId(key)}" data-wb-field="position">${positionOptions(entry.position)}</select></label>
         <label><span>顺序</span>${field(sideName, key, 'order', Number(entry.order ?? 100), { type: 'number', extra: 'step="1"' })}</label>
         ${atDepth ? `<label><span>深度</span>${field(sideName, key, 'depth', Number(entry.depth ?? 4), { type: 'number', extra: 'min="0" max="999" step="1"' })}</label><label><span>角色</span><select data-wb-side="${sideName}" data-wb-key="${safeId(key)}" data-wb-field="role">${roleOptions(entry.role)}</select></label>` : ''}
         ${outlet ? `<label class="is-outlet"><span>Outlet 名称</span>${field(sideName, key, 'outletName', entry.outletName || '')}</label>` : ''}
       </div>
       ${green ? `<label class="pmm-wb-wide-field"><span>关键词</span>${field(sideName, key, 'key', Array.isArray(entry.key) ? entry.key.join(', ') : '')}</label>` : ''}
-      <label class="pmm-wb-wide-field"><span>内容正文</span>${field(sideName, key, 'content', entry.content || '', { type: 'textarea' })}</label>
+      <div class="pmm-wb-wide-field pmm-wb-content-field">
+        <div class="pmm-wb-field-head"><span><i class="fa-solid fa-align-left"></i> 内容正文</span><span class="pmm-wb-content-tools"><small>${content.length} 字符</small><button type="button" data-wb-action="content-expand" data-wb-side="${sideName}" data-wb-key="${safeId(key)}" title="放大编辑正文" aria-label="放大编辑正文"><i class="fa-solid fa-expand"></i></button></span></div>
+        ${field(sideName, key, 'content', content, { type: 'textarea' })}
+      </div>
     </div>`;
+  }
+
+  function openContentEditor(sideName, key) {
+    const side = state[sideName];
+    const entry = side ? findEntry(side, key) : null;
+    if (!entry || !state.host) return;
+    state.host.querySelector('.pmm-wb-editor-overlay')?.remove();
+    const original = String(entry.content || '');
+    const overlay = DOC.createElement('div');
+    overlay.className = 'pmm-wb-editor-overlay';
+    overlay.innerHTML = `<section class="pmm-wb-editor-dialog" role="dialog" aria-modal="true" aria-label="放大编辑世界书正文">
+      <header><strong>${h(entryTitle(entry))}</strong><span data-wb-editor-count>${original.length} 字符</span><button type="button" data-wb-editor-cancel title="取消"><i class="fa-solid fa-xmark"></i></button><button type="button" data-wb-editor-save title="完成"><i class="fa-solid fa-check"></i></button></header>
+      <textarea spellcheck="false">${h(original)}</textarea>
+    </section>`;
+    const textarea = overlay.querySelector('textarea');
+    const counter = overlay.querySelector('[data-wb-editor-count]');
+    const closeEditor = () => overlay.remove();
+    const saveEditor = () => {
+      const next = String(textarea.value || '');
+      overlay.remove();
+      if (next === original) return;
+      pushUndo(side, '编辑世界书正文', { worldSides:[side] });
+      entry.content = next;
+      side.data.entries[String(entry.uid)] = entry;
+      void enqueue('保存世界书正文', async () => {
+        await saveWorldSide(side);
+        renderPanels();
+      });
+    };
+    textarea.addEventListener('input', () => { counter.textContent = `${textarea.value.length} 字符`; });
+    overlay.querySelector('[data-wb-editor-cancel]').addEventListener('click', closeEditor);
+    overlay.querySelector('[data-wb-editor-save]').addEventListener('click', saveEditor);
+    overlay.addEventListener('keydown', event => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        closeEditor();
+      }
+    });
+    state.host.append(overlay);
+    TOP.setTimeout(() => textarea.focus(), 20);
   }
 
   function renderEntry(sideName, side, entry) {
@@ -724,6 +768,7 @@
       side.expanded.has(key) ? side.expanded.delete(key) : side.expanded.add(key);
       return renderPanels();
     }
+    if (action === 'content-expand') return openContentEditor(sideName, key);
     if (action === 'toggle') {
       pushUndo(side, '切换世界书条目开关', { worldSides:[side] });
       entry.disable = entry.disable !== true;
@@ -858,10 +903,11 @@
 .pmm-wb-search-bar{min-height:38px;display:flex;align-items:center;gap:7px;padding:5px 9px;border-bottom:1px solid var(--pm-border,rgba(127,127,127,.12))}.pmm-wb-search-bar input{flex:1;min-width:0;height:28px;padding:0 8px;border:1px solid var(--pm-border,rgba(127,127,127,.16));border-radius:7px;background:var(--pm-card-bg,rgba(127,127,127,.05));color:inherit}.pmm-wb-search-bar span{font-size:10px;opacity:.55}
 .pmm-wb-content{flex:1;min-height:0;overflow:hidden}.pmm-wb-list{height:100%;min-height:0;overflow:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;padding:7px;display:flex;flex-direction:column;gap:var(--pmm-user-item-gap,5px)}
 .pmm-wb-entry{flex:none;border:1px solid var(--pm-border,rgba(127,127,127,.14));border-radius:10px;background:var(--pm-card-bg,rgba(255,255,255,.68));overflow:hidden}.pmm-wb-entry.is-expanded{border-color:color-mix(in srgb,var(--pm-quote-color,#3485f6) 58%,transparent)}.pmm-wb-entry-head{min-height:var(--pmm-user-item-height,43px);display:flex;align-items:center;gap:6px;padding:3px 8px}.pmm-wb-entry-head button{border:0;background:transparent;color:inherit}.pmm-wb-check,.pmm-wb-expand{width:27px;height:29px;padding:0;opacity:.68}.pmm-wb-check.is-selected{color:var(--pm-quote-color,#3485f6);opacity:1}.pmm-wb-entry-title{min-width:0;flex:1;text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:var(--pmm-user-item-font,12px)}
-.pmm-wb-dot{width:7px;height:7px;border-radius:50%;flex:none;box-shadow:0 0 6px currentColor}.pmm-wb-dot.is-blue{color:#3485f6;background:#3485f6}.pmm-wb-dot.is-green{color:#19bf72;background:#19bf72}.pmm-wb-toggle{width:34px!important;height:19px!important;border-radius:11px!important;padding:2px!important;background:#9ba3ad!important;flex:none}.pmm-wb-toggle span{display:block;width:15px;height:15px;border-radius:50%;background:#fff;transition:transform .15s}.pmm-wb-toggle.is-on{background:var(--pm-quote-color,#2878ed)!important}.pmm-wb-toggle.is-on span{transform:translateX(15px)}
-.pmm-wb-details{padding:8px 11px 11px;border-top:1px solid var(--pm-border,rgba(127,127,127,.10));display:flex;flex-direction:column;gap:8px}.pmm-wb-details label{display:flex;flex-direction:column;gap:3px;min-width:0}.pmm-wb-details label>span{font-size:10px;opacity:.62}.pmm-wb-details input,.pmm-wb-details select,.pmm-wb-details textarea{width:100%;border:1px solid var(--pm-border,rgba(127,127,127,.17));border-radius:7px;background:var(--pm-card-bg,rgba(127,127,127,.05));color:inherit;padding:6px 8px}.pmm-wb-details textarea{min-height:100px;resize:vertical;line-height:1.45}.pmm-wb-detail-row{display:flex;align-items:center;gap:7px}.pmm-wb-detail-row label:first-child{flex:1}.pmm-wb-title-row .pmm-wb-strategy{align-self:flex-end;height:33px;min-width:65px;border:1px solid currentColor;border-radius:8px;background:transparent}.pmm-wb-strategy span{display:inline-block;width:8px;height:8px;margin-right:4px;border-radius:50%;background:currentColor}.pmm-wb-strategy.is-blue{color:#3485f6}.pmm-wb-strategy.is-green{color:#19bf72}.pmm-wb-meta-grid{display:grid;grid-template-columns:minmax(130px,2fr) minmax(65px,.7fr);gap:7px}.pmm-wb-meta-grid.has-depth{grid-template-columns:minmax(120px,2fr) repeat(3,minmax(58px,.65fr))}.pmm-wb-meta-grid .is-outlet{grid-column:1/-1}.pmm-wb-more{flex:none;border:1px dashed var(--pm-border,rgba(127,127,127,.22));border-radius:8px;background:transparent;color:inherit;padding:8px;opacity:.65}.pmm-wb-empty{margin:auto;padding:24px;text-align:center;opacity:.52}
+.pmm-wb-dot{width:7px;height:7px;border-radius:50%;flex:none;box-shadow:0 0 6px currentColor}.pmm-wb-dot.is-blue{color:#3485f6;background:#3485f6}.pmm-wb-dot.is-green{color:#19bf72;background:#19bf72}.pmm-wb-toggle{width:25px!important;height:14px!important;min-width:25px!important;border-radius:8px!important;padding:1.5px!important;background:#9ba3ad!important;flex:none}.pmm-wb-toggle span{display:block;width:11px;height:11px;border-radius:50%;background:#fff;transition:transform .15s}.pmm-wb-toggle.is-on{background:var(--pm-quote-color,#2878ed)!important}.pmm-wb-toggle.is-on span{transform:translateX(11px)}
+.pmm-wb-details{padding:7px 9px 9px;border-top:1px solid var(--pm-border,rgba(127,127,127,.10));display:flex;flex-direction:column;gap:6px;font-size:10px!important;line-height:1.35}.pmm-wb-details label,.pmm-wb-wide-field{display:flex;flex-direction:column;gap:2px;min-width:0}.pmm-wb-details label>span,.pmm-wb-field-head>span:first-child{font-size:8.5px!important;line-height:1.2;opacity:.62}.pmm-wb-details input,.pmm-wb-details select,.pmm-wb-details textarea{width:100%;min-height:26px!important;border:1px solid var(--pm-border,rgba(127,127,127,.17));border-radius:6px;background:var(--pm-card-bg,rgba(127,127,127,.05));color:inherit;padding:4px 6px!important;font-size:10.5px!important;line-height:1.35!important}.pmm-wb-details textarea{min-height:68px!important;resize:vertical}.pmm-wb-detail-row{display:flex;align-items:flex-end;gap:6px}.pmm-wb-detail-row label:first-child{flex:1}.pmm-wb-title-row .pmm-wb-strategy{align-self:flex-end;height:26px!important;min-width:50px!important;padding:0 6px!important;border:1px solid currentColor;border-radius:7px;background:transparent;font-size:9px!important;line-height:1!important}.pmm-wb-strategy span{display:inline-block;width:6px;height:6px;margin-right:3px;border-radius:50%;background:currentColor}.pmm-wb-strategy.is-blue{color:#3485f6}.pmm-wb-strategy.is-green{color:#19bf72}.pmm-wb-meta-grid{display:grid;grid-template-columns:minmax(130px,2fr) minmax(58px,.65fr);gap:6px}.pmm-wb-meta-grid.has-depth{grid-template-columns:minmax(120px,2fr) repeat(3,minmax(52px,.6fr))}.pmm-wb-meta-grid .is-outlet{grid-column:1/-1}.pmm-wb-field-head{min-height:19px;display:flex;align-items:center;justify-content:space-between;gap:6px}.pmm-wb-content-tools{display:flex;align-items:center;gap:5px}.pmm-wb-content-tools small{font-size:8.5px;opacity:.58}.pmm-wb-content-tools button{width:22px;height:20px;padding:0;border:0;border-radius:5px;background:transparent;color:inherit;opacity:.7}.pmm-wb-content-tools button:active{transform:scale(.94)}.pmm-wb-more{flex:none;border:1px dashed var(--pm-border,rgba(127,127,127,.22));border-radius:8px;background:transparent;color:inherit;padding:8px;opacity:.65}.pmm-wb-empty{margin:auto;padding:24px;text-align:center;opacity:.52}
+.pmm-wb-editor-overlay{position:absolute;inset:0;z-index:16000;display:flex;align-items:center;justify-content:center;padding:max(10px,env(safe-area-inset-top)) 9px max(10px,env(safe-area-inset-bottom));background:rgba(0,0,0,.43);backdrop-filter:blur(5px);-webkit-backdrop-filter:blur(5px)}.pmm-wb-editor-dialog{width:min(96%,720px);height:min(88%,760px);min-height:260px;display:flex;flex-direction:column;overflow:hidden;border:1px solid var(--pm-border,rgba(127,127,127,.22));border-radius:13px;background:var(--pm-panel-bg,var(--pm-card-bg,#fff));color:var(--pm-text-primary,inherit);box-shadow:0 18px 52px rgba(0,0,0,.36)}.pmm-wb-editor-dialog header{min-height:42px;display:flex;align-items:center;gap:7px;padding:6px 8px;border-bottom:1px solid var(--pm-border,rgba(127,127,127,.14))}.pmm-wb-editor-dialog header strong{min-width:0;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px}.pmm-wb-editor-dialog header span{font-size:9px;opacity:.58;white-space:nowrap}.pmm-wb-editor-dialog header button{width:28px;height:28px;padding:0;border:0;border-radius:7px;background:rgba(127,127,127,.08);color:inherit}.pmm-wb-editor-dialog header button[data-wb-editor-save]{color:var(--pm-quote-color,#3485f6)}.pmm-wb-editor-dialog textarea{flex:1;min-height:0;width:auto;margin:8px;padding:10px;border:1px solid var(--pm-border,rgba(127,127,127,.18));border-radius:9px;background:var(--pm-card-bg,rgba(127,127,127,.05));color:inherit;font-size:12px!important;line-height:1.55!important;resize:none}
 .pmm-wb-source-picker{position:absolute;inset:0;z-index:14000;display:flex;align-items:flex-start;justify-content:center;padding:max(12px,env(safe-area-inset-top)) 10px;background:rgba(0,0,0,.42);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px)}.pmm-wb-picker-dialog{width:min(94%,430px);max-height:min(78%,620px);margin-top:7vh;display:flex;flex-direction:column;overflow:hidden;border:1px solid var(--pm-border,rgba(127,127,127,.22));border-radius:13px;background:var(--pm-panel-bg,var(--pm-card-bg,#fff));color:var(--pm-text-primary,inherit);box-shadow:0 18px 50px rgba(0,0,0,.35)}.pmm-wb-picker-head{display:grid;grid-template-columns:minmax(0,1fr) 34px;gap:6px;padding:8px;border-bottom:1px solid var(--pm-border,rgba(127,127,127,.14))}.pmm-wb-picker-head input{height:34px;min-width:0;padding:0 9px;border:1px solid var(--pm-border,rgba(127,127,127,.2));border-radius:8px;background:var(--pm-card-bg,rgba(127,127,127,.05));color:inherit}.pmm-wb-picker-head button{border:0;border-radius:8px;background:rgba(127,127,127,.08);color:inherit}.pmm-wb-picker-list{min-height:0;overflow:auto;padding:6px}.pmm-wb-picker-list button{width:100%;min-height:38px;margin-bottom:3px;padding:7px 9px;border:1px solid transparent;border-radius:8px;background:transparent;color:inherit;text-align:left}.pmm-wb-picker-list button.is-current{border-color:var(--pm-quote-color,#3b82f6);background:color-mix(in srgb,var(--pm-quote-color,#3b82f6) 11%,transparent)}
-@media(max-width:768px){.pmm-wb-header{height:42px;min-height:42px;padding:4px}.pmm-wb-source-select{max-width:145px!important}.pmm-wb-status{display:none}.pmm-wb-tool{width:24px;height:25px;min-width:24px}.pmm-wb-kind-switch button{width:22px}.pmm-wb-list{padding:5px}.pmm-wb-entry-head{min-height:var(--pmm-user-item-height,39px);padding:2px 6px}.pmm-wb-details{padding:7px 8px 9px}.pmm-wb-meta-grid,.pmm-wb-meta-grid.has-depth{grid-template-columns:minmax(0,1.7fr) minmax(56px,.65fr) minmax(56px,.65fr)}.pmm-wb-meta-grid.has-depth label:nth-child(4){grid-column:1/-1}.pmm-wb-details textarea{min-height:82px}}
+@media(max-width:768px){.pmm-wb-header{height:42px;min-height:42px;padding:4px}.pmm-wb-source-select{max-width:145px!important}.pmm-wb-status{display:none}.pmm-wb-tool{width:24px;height:25px;min-width:24px}.pmm-wb-kind-switch button{width:22px}.pmm-wb-list{padding:5px}.pmm-wb-entry-head{min-height:var(--pmm-user-item-height,39px);padding:2px 6px}.pmm-wb-details{padding:6px 7px 8px;gap:5px}.pmm-wb-meta-grid,.pmm-wb-meta-grid.has-depth{grid-template-columns:minmax(0,1.7fr) minmax(52px,.58fr) minmax(52px,.58fr)}.pmm-wb-meta-grid.has-depth label:nth-child(4){grid-column:1/-1}.pmm-wb-details textarea{min-height:58px!important}.pmm-wb-editor-dialog{width:100%;height:100%;max-height:none;border-radius:11px}.pmm-wb-editor-dialog textarea{margin:6px;padding:8px;font-size:11px!important}}
 `;
     DOC.head.append(style);
   }
@@ -948,6 +994,7 @@
     renderFrame = 0;
     state.topCard?.remove();
     state.bottomCard?.remove();
+    state.host?.querySelector('.pmm-wb-editor-overlay')?.remove();
     state.nativeTop?.classList.remove('pmm-wb-native-hidden');
     state.nativeTop?.querySelector('[data-pmm-wb-kind-switch]')?.remove();
     state.nativeTop?.querySelector('[data-pmm-wb-native-transfer]')?.remove();
