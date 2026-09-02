@@ -4490,12 +4490,15 @@ async function ce(){
     const nameInput = editor?.querySelector('.prompt-editor__name-input');
     const panel = panelFor(editor);
     if (!editor || !textarea || !panel) return null;
+    const promptCard = editor.closest('.prompt-card[data-prompt-id], .prompt-item[data-prompt-id]');
+    const promptModel = promptModelFromElement(editor) || promptModelFromElement(promptCard);
     const start = Number.isFinite(textarea.selectionStart) ? textarea.selectionStart : textarea.value.length;
     const end = Number.isFinite(textarea.selectionEnd) ? textarea.selectionEnd : start;
     return {
       editor,
       textarea,
       panel,
+      promptId: promptModel?.id ?? promptCard?.dataset?.promptId ?? null,
       title: String(nameInput?.value ?? ''),
       start,
       end,
@@ -4797,6 +4800,127 @@ async function ce(){
   function applyBatchVariableRename(batch, plan) {
     if (!plan?.renamedSetOccurrences || !plan?.updates?.length || typeof batch?.update !== 'function') return false;
     batch.record?.(`批量重命名变量：${plan.oldName} → ${plan.newName}`);
+    for (const update of plan.updates) batch.update(update.id, { content: update.content });
+    return true;
+  }
+
+  function unwrapWholeSetVariable(content) {
+    const source = String(content ?? '');
+    const leading = source.match(/^\s*/u)?.[0] || '';
+    const trailing = source.match(/\s*$/u)?.[0] || '';
+    const coreEnd = source.length - trailing.length;
+    const core = source.slice(leading.length, coreEnd);
+    const head = core.match(/^\{\{\s*setvar::([^:{}\r\n]+?)::/iu);
+    if (!head || !core.endsWith('}}')) return null;
+    const name = text(head[1]);
+    const body = core.slice(head[0].length, -2);
+    if (!name || !body.trim()) return null;
+    return { name, content: `${leading}${body}${trailing}` };
+  }
+
+  function removeGetVariableName(content, name) {
+    const escaped = escapeVariableRegex(text(name));
+    const fullLine = new RegExp(`^[\\t ]*\\{\\{\\s*getvar::\\s*${escaped}\\s*\\}\\}[\\t ]*(?:\\r?\\n|$)`, 'gimu');
+    let count = 0;
+    let value = String(content ?? '').replace(fullLine, () => {
+      count++;
+      return '';
+    });
+    value = value.replace(variableMacroRegex('getvar', name), () => {
+      count++;
+      return '';
+    });
+    return { content: value, count };
+  }
+
+  function removeEmptySetVariableName(content, name) {
+    let count = 0;
+    const value = String(content ?? '').replace(emptySetVariableRegex(name), () => {
+      count++;
+      return '';
+    });
+    return { content: value, count };
+  }
+
+  function buildVariableStripPlan(batch, selectedIds, cleanRelated) {
+    const prompts = typeof batch?.prompts === 'function' ? batch.prompts() : [];
+    const allPrompts = Array.isArray(prompts) ? prompts : [];
+    const selected = new Set(selectedIds || []);
+    const contents = new Map(allPrompts.map(prompt => [prompt.id, String(prompt?.content ?? '')]));
+    const removedVariables = new Map();
+    let unwrappedEntries = 0;
+    let skippedEntries = 0;
+
+    for (const prompt of allPrompts) {
+      if (!selected.has(prompt?.id)) continue;
+      const result = unwrapWholeSetVariable(contents.get(prompt.id));
+      if (!result) {
+        skippedEntries++;
+        continue;
+      }
+      contents.set(prompt.id, result.content);
+      unwrappedEntries++;
+      const current = removedVariables.get(result.name) || { name: result.name, entries: 0 };
+      current.entries++;
+      removedVariables.set(result.name, current);
+    }
+
+    const variables = Array.from(removedVariables.values());
+    for (const variable of variables) {
+      variable.remainingSetOccurrences = allPrompts.reduce(
+        (total, prompt) => total + countNonEmptySetVariable(contents.get(prompt.id), variable.name),
+        0,
+      );
+      variable.getOccurrences = allPrompts.reduce(
+        (total, prompt) => total + countVariableMacro(contents.get(prompt.id), 'getvar', variable.name),
+        0,
+      );
+      variable.emptySetOccurrences = allPrompts.reduce(
+        (total, prompt) => total + countEmptySetVariable(contents.get(prompt.id), variable.name),
+        0,
+      );
+      variable.cleanable = variable.remainingSetOccurrences === 0;
+    }
+
+    let removedGetOccurrences = 0;
+    let removedEmptySetOccurrences = 0;
+    if (cleanRelated) {
+      for (const variable of variables.filter(item => item.cleanable)) {
+        for (const prompt of allPrompts) {
+          const before = contents.get(prompt.id);
+          const withoutGet = removeGetVariableName(before, variable.name);
+          const withoutEmptySet = removeEmptySetVariableName(withoutGet.content, variable.name);
+          removedGetOccurrences += withoutGet.count;
+          removedEmptySetOccurrences += withoutEmptySet.count;
+          contents.set(prompt.id, withoutEmptySet.content);
+        }
+      }
+    }
+
+    const updates = allPrompts
+      .map(prompt => ({ id: prompt.id, before: String(prompt?.content ?? ''), content: contents.get(prompt.id) }))
+      .filter(update => update.before !== update.content);
+    const cleanableVariables = variables.filter(item => item.cleanable);
+    const retainedVariables = variables.filter(item => !item.cleanable);
+
+    return {
+      cleanRelated: Boolean(cleanRelated),
+      unwrappedEntries,
+      skippedEntries,
+      variables,
+      cleanableVariables,
+      retainedVariables,
+      cleanableGetOccurrences: cleanableVariables.reduce((total, item) => total + item.getOccurrences, 0),
+      cleanableEmptySetOccurrences: cleanableVariables.reduce((total, item) => total + item.emptySetOccurrences, 0),
+      removedGetOccurrences,
+      removedEmptySetOccurrences,
+      updates,
+    };
+  }
+
+  function applyVariableStripPlan(batch, plan) {
+    if (!plan?.unwrappedEntries || !plan?.updates?.length || typeof batch?.update !== 'function') return false;
+    batch.record?.(`去除变量格式 ${plan.unwrappedEntries} 条`);
     for (const update of plan.updates) batch.update(update.id, { content: update.content });
     return true;
   }
@@ -5199,6 +5323,76 @@ async function ce(){
     await insertFromBasket(ctx, 'getvar');
   }
 
+  async function handleStripButton(group) {
+    const ctx = editorContext(group);
+    if (!ctx) return toast('error', '没有找到当前正文编辑框');
+    const batch = selectedBatchContext(ctx.editor, ctx.panel);
+    if (typeof batch?.prompts !== 'function' || typeof batch?.update !== 'function') {
+      return toast('error', '当前面板暂时无法安全去除变量格式，请重新打开工坊后再试');
+    }
+    const selectedIds = batch.state?.active && batch.state.count > 0
+      ? Array.from(batch.state.ids || [])
+      : (ctx.promptId == null ? [] : [ctx.promptId]);
+    if (!selectedIds.length) return toast('warning', '没有找到要处理的条目');
+
+    const preview = buildVariableStripPlan(batch, selectedIds, false);
+    if (!preview.unwrappedEntries) {
+      return toast('info', preview.skippedEntries > 0
+        ? '所选条目没有完整包裹正文的 S 变量格式；空变量登记和正文中的局部 S 不会被误拆'
+        : '没有找到可去除的变量格式');
+    }
+
+    const cleanableNames = preview.cleanableVariables.map(item => item.name);
+    const retainedNames = preview.retainedVariables.map(item => item.name);
+    const canCleanRelated = cleanableNames.length > 0
+      && (preview.cleanableGetOccurrences > 0 || preview.cleanableEmptySetOccurrences > 0);
+    const skippedHint = preview.skippedEntries > 0 ? `，另有 ${preview.skippedEntries} 条因不是完整 S 包裹而跳过` : '';
+    let cleanDescription;
+    if (canCleanRelated) {
+      cleanDescription = `去除 ${preview.unwrappedEntries} 条 S 包装，并清理已失效变量“${cleanableNames.join('、')}”的 ${preview.cleanableGetOccurrences} 处 G 与 ${preview.cleanableEmptySetOccurrences} 处空 setvar 登记。`;
+      if (retainedNames.length) cleanDescription += ` “${retainedNames.join('、')}”仍有正文 S，相关项会保留。`;
+    } else if (cleanableNames.length) {
+      cleanDescription = `“${cleanableNames.join('、')}”已无正文 S，但当前没有找到对应 G 或空 setvar 登记。`;
+    } else {
+      cleanDescription = `“${retainedNames.join('、')}”仍有其他正文 S，不能安全清理同名 G 与空 setvar 登记。`;
+    }
+
+    const action = await showMenu(
+      ctx.panel,
+      '去除变量格式',
+      [
+        {
+          value: 'unwrap-only',
+          label: '只变成普通条目',
+          description: `去掉 ${preview.unwrappedEntries} 条的外层 setvar，完整保留变量正文；所有 G 和空 setvar 登记不变${skippedHint}。`,
+        },
+        {
+          value: 'clean-related',
+          label: '同时清理失效变量',
+          description: cleanDescription,
+          disabled: !canCleanRelated,
+        },
+      ],
+      '只会拆除完整包住整条正文的 setvar；条目标题、开关、位置和排序不变。执行后可用工坊撤销恢复。',
+    );
+    if (!action) return;
+
+    const plan = buildVariableStripPlan(batch, selectedIds, action === 'clean-related');
+    if (!applyVariableStripPlan(batch, plan)) return toast('error', '去除变量格式没有写入，请重新打开预设后再试');
+    if (action === 'clean-related') {
+      const cleaned = [];
+      if (plan.removedGetOccurrences > 0) cleaned.push(`${plan.removedGetOccurrences} 处 G`);
+      if (plan.removedEmptySetOccurrences > 0) cleaned.push(`${plan.removedEmptySetOccurrences} 处空变量登记`);
+      const retained = plan.retainedVariables.length
+        ? `；仍在使用的“${plan.retainedVariables.map(item => item.name).join('、')}”相关项已保留`
+        : '';
+      toast('success', `已将 ${plan.unwrappedEntries} 条变成普通条目，并清理 ${cleaned.join('、')}${retained}`);
+    } else {
+      toast('success', `已将 ${plan.unwrappedEntries} 条变成普通条目，G 与空变量登记保持不变`);
+    }
+    queueBasketReconcile();
+  }
+
   function updateBasketBadges(panel = null) {
     const panels = panel ? [panel] : Array.from(DOC.querySelectorAll(`${ROOT_SELECTOR} .preset-panel`));
     for (const currentPanel of panels) {
@@ -5221,7 +5415,8 @@ async function ce(){
     group.className = 'pmm-variable-tools';
     group.innerHTML = `
       <button type="button" class="pmm-variable-btn pmm-variable-btn--s" title="S · 设置 setvar">S<span class="pmm-variable-badge" hidden></span></button>
-      <button type="button" class="pmm-variable-btn pmm-variable-btn--g" title="G · 插入 getvar">G</button>`;
+      <button type="button" class="pmm-variable-btn pmm-variable-btn--g" title="G · 插入 getvar">G</button>
+      <button type="button" class="pmm-variable-btn pmm-variable-btn--strip" title="去除变量格式" aria-label="去除变量格式"><span>S</span></button>`;
     const counter = header.querySelector('.prompt-editor__char-count');
     header.insertBefore(group, counter || null);
     group.querySelector('.pmm-variable-btn--s').addEventListener('click', event => {
@@ -5229,6 +5424,9 @@ async function ce(){
     });
     group.querySelector('.pmm-variable-btn--g').addEventListener('click', event => {
       event.preventDefault(); event.stopPropagation(); handleGetButton(group);
+    });
+    group.querySelector('.pmm-variable-btn--strip').addEventListener('click', event => {
+      event.preventDefault(); event.stopPropagation(); handleStripButton(group);
     });
     updateBasketBadges(panel);
   }
@@ -5329,6 +5527,8 @@ async function ce(){
       .pmm-variable-tools{display:inline-flex;align-items:center;gap:4px;margin-left:4px}
       .pmm-variable-btn{position:relative;display:inline-flex;align-items:center;justify-content:center;width:25px;height:23px;padding:0;border:1px solid var(--pm-border,rgba(127,127,127,.35));border-radius:6px;background:var(--pm-card-bg,rgba(127,127,127,.12));color:var(--pm-text-primary,inherit);font-size:11px;font-weight:800;line-height:1;cursor:pointer;touch-action:manipulation}
       .pmm-variable-btn:hover,.pmm-variable-btn:focus-visible{border-color:var(--pm-quote-color,#4a9eff);color:var(--pm-quote-color,#4a9eff);outline:none}
+      .pmm-variable-btn--strip span{position:relative;z-index:1;pointer-events:none}
+      .pmm-variable-btn--strip::after{content:"";position:absolute;z-index:2;width:17px;height:1.5px;border-radius:2px;background:currentColor;transform:rotate(45deg);pointer-events:none}
       .pmm-variable-badge{position:absolute;right:-5px;top:-6px;min-width:14px;height:14px;padding:0 3px;border-radius:8px;background:var(--pm-quote-color,#4a9eff);color:#fff;font-size:8px;font-weight:700;line-height:14px;text-align:center;box-sizing:border-box}
       .pmm-variable-overlay{position:fixed;inset:0;z-index:2147483000!important;isolation:isolate;display:flex;align-items:center;justify-content:center;padding:18px;background:rgba(0,0,0,.56);backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px);box-sizing:border-box}
       .pmm-variable-dialog{width:min(430px,calc(100vw - 30px));max-height:min(78vh,650px);display:flex;flex-direction:column;gap:12px;padding:16px;border:1px solid var(--pmm-var-border,rgba(127,127,127,.4));border-radius:16px;background:var(--pmm-var-panel,var(--pmm-var-bg,#172132));color:var(--pmm-var-text,#f4f6fa);box-shadow:0 20px 60px rgba(0,0,0,.38);box-sizing:border-box}
@@ -5374,6 +5574,7 @@ async function ce(){
   console.info('[预设工坊] V2.85 已加载：批量变量化后的正文会立即同步到当前分组视图。');
   console.info('[预设工坊] test.16 已加载：多选 S 支持批量重命名，部分拆分保留旧 G，完整改名同步旧 G。');
   console.info('[预设工坊] test.17 已加载：空 setvar 登记不参与正文 S 判断，并随拆分新增或随完整改名同步。');
+  console.info('[预设工坊] test.18 已加载：S 斜线按钮可还原普通条目，并按剩余正文 S 安全清理失效 G 与空登记。');
 })();
 
 ;(()=>{
