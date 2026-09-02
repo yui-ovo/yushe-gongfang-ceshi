@@ -4547,6 +4547,16 @@ async function ce(){
     return new RegExp(`(\\{\\{\\s*getvar::\\s*)${escaped}(\\s*\\}\\})`, 'giu');
   }
 
+  function emptySetVariableRegex(name) {
+    const escaped = escapeVariableRegex(text(name));
+    return new RegExp(`(\\{\\{\\s*setvar::\\s*)${escaped}(\\s*::\\s*\\}\\})`, 'giu');
+  }
+
+  function nonEmptySetVariableRegex(name) {
+    const escaped = escapeVariableRegex(text(name));
+    return new RegExp(`(\\{\\{\\s*setvar::\\s*)${escaped}(\\s*::)(?!\\s*\\}\\})`, 'giu');
+  }
+
   function countVariableMacro(content, kind, name) {
     return Array.from(String(content ?? '').matchAll(variableMacroRegex(kind, name))).length;
   }
@@ -4554,6 +4564,32 @@ async function ce(){
   function replaceVariableMacroName(content, kind, oldName, newName) {
     let count = 0;
     const value = String(content ?? '').replace(variableMacroRegex(kind, oldName), (...args) => {
+      count++;
+      return `${args[1]}${newName}${args[2]}`;
+    });
+    return { content: value, count };
+  }
+
+  function countEmptySetVariable(content, name) {
+    return Array.from(String(content ?? '').matchAll(emptySetVariableRegex(name))).length;
+  }
+
+  function countNonEmptySetVariable(content, name) {
+    return Array.from(String(content ?? '').matchAll(nonEmptySetVariableRegex(name))).length;
+  }
+
+  function replaceNonEmptySetVariableName(content, oldName, newName) {
+    let count = 0;
+    const value = String(content ?? '').replace(nonEmptySetVariableRegex(oldName), (...args) => {
+      count++;
+      return `${args[1]}${newName}${args[2]}`;
+    });
+    return { content: value, count };
+  }
+
+  function replaceEmptySetVariableName(content, oldName, newName) {
+    let count = 0;
+    const value = String(content ?? '').replace(emptySetVariableRegex(oldName), (...args) => {
       count++;
       return `${args[1]}${newName}${args[2]}`;
     });
@@ -4568,8 +4604,9 @@ async function ce(){
     let convertibleCount = 0;
     for (const prompt of selected) {
       const content = String(prompt?.content ?? '');
-      const matches = Array.from(content.matchAll(/\{\{\s*setvar::([^:{}\r\n]+?)::/giu));
-      if (!matches.length) convertibleCount++;
+      const hasAnySet = /\{\{\s*setvar::[^:{}\r\n]+?::/iu.test(content);
+      const matches = Array.from(content.matchAll(/\{\{\s*setvar::([^:{}\r\n]+?)::(?!\s*\}\})/giu));
+      if (!hasAnySet) convertibleCount++;
       const namesInEntry = new Set();
       for (const match of matches) {
         const name = text(match[1]);
@@ -4586,7 +4623,11 @@ async function ce(){
     const allPrompts = Array.isArray(prompts) ? prompts : [];
     for (const variable of variables.values()) {
       variable.totalSetOccurrences = allPrompts.reduce(
-        (total, prompt) => total + countVariableMacro(prompt?.content, 'setvar', variable.name),
+        (total, prompt) => total + countNonEmptySetVariable(prompt?.content, variable.name),
+        0,
+      );
+      variable.totalEmptySetOccurrences = allPrompts.reduce(
+        (total, prompt) => total + countEmptySetVariable(prompt?.content, variable.name),
         0,
       );
       variable.totalGetOccurrences = allPrompts.reduce(
@@ -4611,7 +4652,7 @@ async function ce(){
 
     for (const prompt of allPrompts) {
       if (!selectedIds.has(prompt?.id)) continue;
-      const result = replaceVariableMacroName(contents.get(prompt.id), 'setvar', oldName, newName);
+      const result = replaceNonEmptySetVariableName(contents.get(prompt.id), oldName, newName);
       if (!result.count) continue;
       selectedEntries++;
       renamedSetOccurrences += result.count;
@@ -4619,13 +4660,21 @@ async function ce(){
     }
 
     const remainingOldSet = allPrompts.reduce(
-      (total, prompt) => total + countVariableMacro(contents.get(prompt.id), 'setvar', oldName),
+      (total, prompt) => total + countNonEmptySetVariable(contents.get(prompt.id), oldName),
       0,
     );
     const existingNewSet = allPrompts.reduce(
-      (total, prompt) => total + countVariableMacro(contents.get(prompt.id), 'setvar', newName),
+      (total, prompt) => total + countNonEmptySetVariable(contents.get(prompt.id), newName),
       0,
     ) - renamedSetOccurrences;
+    const oldEmptySetOccurrences = allPrompts.reduce(
+      (total, prompt) => total + countEmptySetVariable(contents.get(prompt.id), oldName),
+      0,
+    );
+    const existingNewEmptySet = allPrompts.reduce(
+      (total, prompt) => total + countEmptySetVariable(contents.get(prompt.id), newName),
+      0,
+    );
     const oldGetOccurrences = allPrompts.reduce(
       (total, prompt) => total + countVariableMacro(contents.get(prompt.id), 'getvar', oldName),
       0,
@@ -4638,8 +4687,47 @@ async function ce(){
     let addedGetOccurrences = 0;
     let renamedGetOccurrences = 0;
     let skippedGetEntries = 0;
+    let addedEmptySetOccurrences = 0;
+    let renamedEmptySetOccurrences = 0;
+    let skippedEmptySetEntries = 0;
 
     if (syncGet && renamedSetOccurrences > 0) {
+      for (const prompt of allPrompts) {
+        const before = contents.get(prompt.id);
+        const oldCount = countEmptySetVariable(before, oldName);
+        if (!oldCount) continue;
+        const hasNewInEntry = countEmptySetVariable(before, newName) > 0;
+        if (mode === 'split') {
+          if (hasNewInEntry) {
+            skippedEmptySetEntries++;
+            continue;
+          }
+          let inserted = false;
+          const after = before.replace(emptySetVariableRegex(oldName), match => {
+            if (inserted) return match;
+            inserted = true;
+            const cloned = replaceEmptySetVariableName(match, oldName, newName).content;
+            addedEmptySetOccurrences++;
+            return `${match}${cloned}`;
+          });
+          contents.set(prompt.id, after);
+        } else if (hasNewInEntry) {
+          const after = before.replace(emptySetVariableRegex(oldName), () => {
+            renamedEmptySetOccurrences++;
+            return '';
+          });
+          contents.set(prompt.id, after);
+        } else {
+          let renamed = false;
+          const after = before.replace(emptySetVariableRegex(oldName), (...args) => {
+            renamedEmptySetOccurrences++;
+            if (renamed) return '';
+            renamed = true;
+            return `${args[1]}${newName}${args[2]}`;
+          });
+          contents.set(prompt.id, after);
+        }
+      }
       for (const prompt of allPrompts) {
         const before = contents.get(prompt.id);
         const oldCount = countVariableMacro(before, 'getvar', oldName);
@@ -4650,7 +4738,10 @@ async function ce(){
             skippedGetEntries++;
             continue;
           }
+          let inserted = false;
           const after = before.replace(variableMacroRegex('getvar', oldName), match => {
+            if (inserted) return match;
+            inserted = true;
             addedGetOccurrences++;
             return `${match}\n{{getvar::${newName}}}`;
           });
@@ -4664,9 +4755,14 @@ async function ce(){
             .replace(/\n{3,}/g, '\n\n');
           contents.set(prompt.id, after);
         } else {
-          const result = replaceVariableMacroName(before, 'getvar', oldName, newName);
-          renamedGetOccurrences += result.count;
-          contents.set(prompt.id, result.content);
+          let renamed = false;
+          const after = before.replace(variableMacroRegex('getvar', oldName), (...args) => {
+            renamedGetOccurrences++;
+            if (renamed) return '';
+            renamed = true;
+            return `${args[1]}${newName}${args[2]}`;
+          });
+          contents.set(prompt.id, after);
         }
       }
     }
@@ -4684,11 +4780,16 @@ async function ce(){
       renamedSetOccurrences,
       remainingOldSet,
       existingNewSet,
+      oldEmptySetOccurrences,
+      existingNewEmptySet,
       oldGetOccurrences,
       existingNewGet,
       addedGetOccurrences,
       renamedGetOccurrences,
       skippedGetEntries,
+      addedEmptySetOccurrences,
+      renamedEmptySetOccurrences,
+      skippedEmptySetEntries,
       updates,
     };
   }
@@ -4986,15 +5087,11 @@ async function ce(){
     let smartLabel;
     let smartDescription;
     if (preview.mode === 'split') {
-      smartLabel = '保留旧 G，并新增新 G';
-      smartDescription = preview.oldGetOccurrences > 0
-        ? `改名后仍有 ${preview.remainingOldSet} 处 S 使用“${oldName}”；保留旧 G，并在找到的 ${preview.oldGetOccurrences} 处旧 G 后新增“${newName}”。${mergeHint}`
-        : `改名后仍有 ${preview.remainingOldSet} 处 S 使用“${oldName}”；当前未找到对应 G，只改 S，并把“${newName}”加入 G 的变量列表。${mergeHint}`;
+      smartLabel = '保留旧项，并新增新变量';
+      smartDescription = `改名后仍有 ${preview.remainingOldSet} 处正文 S 使用“${oldName}”；保留旧 G 与旧的空 setvar 登记，并为“${newName}”新增对应项。当前找到 ${preview.oldGetOccurrences} 处 G、${preview.oldEmptySetOccurrences} 处空登记。${mergeHint}`;
     } else {
-      smartLabel = '将旧 G 同步改名';
-      smartDescription = preview.oldGetOccurrences > 0
-        ? `改名后已没有 S 使用“${oldName}”；将 ${preview.oldGetOccurrences} 处旧 G 同步改成“${newName}”。${mergeHint}`
-        : `改名后已没有 S 使用“${oldName}”；当前未找到对应 G，只修改所选 S。${mergeHint}`;
+      smartLabel = '同步改名 G 与空变量';
+      smartDescription = `改名后已没有正文 S 使用“${oldName}”；将 ${preview.oldGetOccurrences} 处 G 与 ${preview.oldEmptySetOccurrences} 处空 setvar 登记同步改成“${newName}”。${mergeHint}`;
     }
     const gAction = await showMenu(
       ctx.panel,
@@ -5004,7 +5101,7 @@ async function ce(){
         {
           value: 'set-only',
           label: '只改已选 S',
-          description: `把已选 ${preview.selectedEntries} 条里的 ${preview.renamedSetOccurrences} 处“${oldName}”改成“${newName}”，所有 G 保持原样。${mergeHint}`,
+          description: `把已选 ${preview.selectedEntries} 条里的 ${preview.renamedSetOccurrences} 处“${oldName}”改成“${newName}”，所有 G 与空 setvar 登记保持原样。${mergeHint}`,
         },
       ],
       `预览：${oldName} → ${newName}。执行后可以直接使用工坊的撤销按钮恢复。`,
@@ -5016,17 +5113,23 @@ async function ce(){
     addVariables(ctx.panel, [newName], { quiet: true });
 
     if (gAction === 'set-only') {
-      toast('success', `已将 ${plan.selectedEntries} 条中的 ${plan.renamedSetOccurrences} 处 S 改为“${newName}”，G 未修改`);
-    } else if (plan.mode === 'split' && plan.addedGetOccurrences > 0) {
-      toast('success', `已拆分变量：改名 ${plan.renamedSetOccurrences} 处 S，保留旧 G，并新增 ${plan.addedGetOccurrences} 处 G“${newName}”`);
-    } else if (plan.mode === 'split' && plan.existingNewGet > 0) {
-      toast('success', `已拆分变量：改名 ${plan.renamedSetOccurrences} 处 S；G“${newName}”已存在，未重复新增`);
+      toast('success', `已将 ${plan.selectedEntries} 条中的 ${plan.renamedSetOccurrences} 处 S 改为“${newName}”，G 与空变量登记未修改`);
     } else if (plan.mode === 'split') {
-      toast('success', `已拆分变量并保留旧 G；未找到对应 G，“${newName}”已加入 G 的变量列表`);
-    } else if (plan.renamedGetOccurrences > 0) {
-      toast('success', `已完整改名 ${plan.renamedSetOccurrences} 处 S，并同步处理 ${plan.renamedGetOccurrences} 处 G`);
+      const additions = [];
+      if (plan.addedGetOccurrences > 0) additions.push(`${plan.addedGetOccurrences} 处 G`);
+      if (plan.addedEmptySetOccurrences > 0) additions.push(`${plan.addedEmptySetOccurrences} 处空变量登记`);
+      const detail = additions.length
+        ? `，新增 ${additions.join('、')}`
+        : (plan.existingNewGet > 0 || plan.existingNewEmptySet > 0)
+          ? '；新 G 或空变量登记已经存在，未重复新增'
+          : `；未找到可同步的 G 或空变量登记，“${newName}”已加入 G 的变量列表`;
+      toast('success', `已拆分变量：改名 ${plan.renamedSetOccurrences} 处正文 S，并保留旧项${detail}`);
     } else {
-      toast('success', `已完整改名 ${plan.renamedSetOccurrences} 处 S；没有需要修改的 G`);
+      const synced = [];
+      if (plan.renamedGetOccurrences > 0) synced.push(`${plan.renamedGetOccurrences} 处 G`);
+      if (plan.renamedEmptySetOccurrences > 0) synced.push(`${plan.renamedEmptySetOccurrences} 处空变量登记`);
+      const detail = synced.length ? `，同步处理 ${synced.join('、')}` : '；没有需要同步的 G 或空变量登记';
+      toast('success', `已完整改名 ${plan.renamedSetOccurrences} 处正文 S${detail}`);
     }
     queueBasketReconcile();
   }
@@ -5053,7 +5156,7 @@ async function ce(){
             value: 'rename',
             label: '批量重命名变量',
             description: summary.variables.length > 0
-              ? `只修改已选条目中的变量名；已识别 ${summary.variables.length} 个变量名，可智能保留或同步 G。`
+              ? `只修改已选条目中的变量名；已识别 ${summary.variables.length} 个变量名，可智能保留或同步 G 与空变量登记。`
               : '已选条目中没有 S 变量。',
             disabled: summary.variables.length === 0,
           },
@@ -5270,6 +5373,7 @@ async function ce(){
   console.info('[预设工坊] V2.84 已加载：S 从展开编辑器组件链准确识别当前面板多选状态。');
   console.info('[预设工坊] V2.85 已加载：批量变量化后的正文会立即同步到当前分组视图。');
   console.info('[预设工坊] test.16 已加载：多选 S 支持批量重命名，部分拆分保留旧 G，完整改名同步旧 G。');
+  console.info('[预设工坊] test.17 已加载：空 setvar 登记不参与正文 S 判断，并随拆分新增或随完整改名同步。');
 })();
 
 ;(()=>{

@@ -10,8 +10,8 @@ for (const marker of [
   'batchVariableUpdate:(e,n)=>a(\'update\',e,n)',
   'batchVariableRecord:le',
   "label: '批量重命名变量'",
-  "smartLabel = '保留旧 G，并新增新 G'",
-  "smartLabel = '将旧 G 同步改名'",
+  "smartLabel = '保留旧项，并新增新变量'",
+  "smartLabel = '同步改名 G 与空变量'",
   "label: '只改已选 S'",
   'test.16 已加载：多选 S 支持批量重命名',
 ]) {
