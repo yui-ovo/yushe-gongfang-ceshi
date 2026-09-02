@@ -33,8 +33,8 @@ for (const marker of [
   'syncWorldUndoButton(sideName);',
   '48%,var(--pm-panel-bg,#fff)',
   "DOC.addEventListener('focusin', onDocumentFocusIn, true)",
-  'data-pmm-wb-tool-reserved',
-  '.pmm-wb-tool[data-pmm-wb-tool-reserved]{visibility:hidden!important;pointer-events:none!important}',
+  "side.multi\n              ? toolbarButton('batch-delete', '删除所选'",
+  ": toolbarButton('undo', side.history.length ? `撤销：${side.history[side.history.length - 1].label}`",
 ]) {
   assert.ok(source.includes(marker), `test.37 缺少世界书搜索高亮实现：${marker}`);
 }
@@ -72,8 +72,8 @@ const undoAvailability = history => Boolean(history.at(-1));
 assert.equal(undoAvailability([{ label: '删除 1 处匹配文字' }]), true, '删除后必须立即提供撤销');
 assert.equal(undoAvailability([]), false, '没有历史时撤销仍应禁用');
 
-const deleteSlotVisible = multi => Boolean(multi);
-assert.equal(deleteSlotVisible(false), false, '普通状态只隐藏删除工具位，不应移除工具位');
-assert.equal(deleteSlotVisible(true), true, '多选状态应在预留位置显示删除工具');
+const sharedToolbarAction = multi => multi ? 'batch-delete' : 'undo';
+assert.equal(sharedToolbarAction(false), 'undo', '普通状态应在固定工具位显示撤销');
+assert.equal(sharedToolbarAction(true), 'batch-delete', '多选状态应在相同工具位显示删除所选');
 
-console.log('test.37 回归通过：世界书正文高亮、键盘避让、替换撤销、日间按钮柔化、稳定工具栏与主题色均已覆盖。');
+console.log('test.37 回归通过：世界书正文高亮、键盘避让、替换撤销、日间按钮柔化、撤销／删除共用工具位与主题色均已覆盖。');
