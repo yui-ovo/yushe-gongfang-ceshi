@@ -13,8 +13,8 @@ for (const marker of [
   'function boundCharacterNames(worldName)',
   'placeholder="搜索世界书或角色名"',
   "row.characters.some(name => name.toLocaleLowerCase().includes(query))",
-  "sectionMarkup('角色绑定世界书', 'fa-user-group', boundRows)",
-  "sectionMarkup('未绑定角色的世界书', 'fa-book', unboundRows)",
+  "sectionMarkup('bound', '角色绑定世界书', 'fa-user-group', boundRows, boundExpanded)",
+  "sectionMarkup('unbound', '未绑定角色的世界书', 'fa-book', unboundRows, unboundExpanded)",
   '绑定角色：${h(characters.join(\'、\'))}',
   '.pmm-wb-picker-section-title',
 ]) {
@@ -26,12 +26,12 @@ const pickerEnd = source.indexOf('  async function switchTopKind(kind)', pickerS
 const picker = source.slice(pickerStart, pickerEnd);
 assert.ok(
   picker.indexOf("const boundRows = rows.filter(row => row.characters.length > 0)")
-    < picker.indexOf("sectionMarkup('角色绑定世界书'"),
+    < picker.indexOf("sectionMarkup('bound', '角色绑定世界书'"),
   '角色绑定分组没有使用真实绑定结果',
 );
 assert.ok(
-  picker.indexOf("sectionMarkup('角色绑定世界书'")
-    < picker.indexOf("sectionMarkup('未绑定角色的世界书'"),
+  picker.indexOf("sectionMarkup('bound', '角色绑定世界书'")
+    < picker.indexOf("sectionMarkup('unbound', '未绑定角色的世界书'"),
   '选择弹窗没有把角色绑定世界书排在未绑定角色世界书之前',
 );
 
