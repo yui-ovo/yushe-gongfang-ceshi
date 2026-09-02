@@ -3,17 +3,12 @@ import { readFile } from 'node:fs/promises';
 
 const source = await readFile(new URL('../dist/workshop-v2.94.js', import.meta.url), 'utf8');
 for (const marker of [
-  "text: '空变量项指：只有变量名，里面没有内容的变量。例如：'",
-  "example: `{{setvar::${text(variableName) || '变量名'}:: }}`",
+  "text: '空变量项指：只有变量名，里面无内容的变量。如：{{setvar::变量名:: }}'",
   'class="pmm-variable-note"',
   '.pmm-variable-note{margin:0',
   'font-size:9px',
   'font-style:italic',
-  '.pmm-variable-note code{font-family:ui-monospace',
-  'font-style:normal',
-  'emptyVariableNote(oldName)',
   'emptyVariableNote()',
-  'emptyVariableNote(noteVariableName)',
   'test.22 已加载：空变量项改为顶部小字示例',
 ]) {
   assert.ok(source.includes(marker), `test.22 顶部空变量说明缺少实现：${marker}`);
@@ -33,4 +28,9 @@ assert.ok(
 );
 assert.ok(!uiCopy.includes('（只有变量名，无内容）'), '按钮说明中不应继续出现突兀的括号解释');
 
-console.log('test.22 回归通过：三个变量弹窗顶部显示小号斜体定义与等宽示例，选项正文已精简。');
+assert.ok(!source.includes('.pmm-variable-note code{'), '空变量示例不应继续使用特殊代码样式');
+assert.ok(!source.includes('note.example'), '空变量示例不应与说明文字分开渲染');
+
+await import('./test-test23-unified-empty-variable-note.mjs');
+
+console.log('test.22 回归通过：三个变量弹窗顶部显示统一的小号斜体说明，选项正文已精简。');

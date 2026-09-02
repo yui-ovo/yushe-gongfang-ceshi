@@ -4988,10 +4988,9 @@ async function ce(){
     position();
   }
 
-  function emptyVariableNote(variableName = '变量名') {
+  function emptyVariableNote() {
     return {
-      text: '空变量项指：只有变量名，里面没有内容的变量。例如：',
-      example: `{{setvar::${text(variableName) || '变量名'}:: }}`,
+      text: '空变量项指：只有变量名，里面无内容的变量。如：{{setvar::变量名:: }}',
     };
   }
 
@@ -5002,7 +5001,7 @@ async function ce(){
       const intro = hint || note?.text
         ? `<div class="pmm-variable-intro">
             ${hint ? `<p class="pmm-variable-hint">${escapeHtml(hint)}</p>` : ''}
-            ${note?.text ? `<p class="pmm-variable-note"><em>${escapeHtml(note.text)}</em>${note.example ? ` <code>${escapeHtml(note.example)}</code>` : ''}</p>` : ''}
+            ${note?.text ? `<p class="pmm-variable-note">${escapeHtml(note.text)}</p>` : ''}
           </div>`
         : '';
       overlay.innerHTML = `
@@ -5242,7 +5241,7 @@ async function ce(){
         },
       ],
       `预览：${oldName} → ${newName}。执行后可以直接使用工坊的撤销按钮恢复。`,
-      emptyVariableNote(oldName),
+      emptyVariableNote(),
     );
     if (!gAction) return;
 
@@ -5362,7 +5361,6 @@ async function ce(){
     const canCleanRelated = cleanableNames.length > 0
       && (preview.cleanableGetOccurrences > 0 || preview.cleanableEmptySetOccurrences > 0);
     const skippedHint = preview.skippedEntries > 0 ? `，另有 ${preview.skippedEntries} 条因不是完整 S 包裹而跳过` : '';
-    const noteVariableName = cleanableNames[0] || retainedNames[0] || '变量名';
     let cleanDescription;
     if (canCleanRelated) {
       cleanDescription = `去除 ${preview.unwrappedEntries} 条变量包装，并清理已失效变量“${cleanableNames.join('、')}”的 ${preview.cleanableGetOccurrences} 处 G 和 ${preview.cleanableEmptySetOccurrences} 处同名空变量项。`;
@@ -5390,7 +5388,7 @@ async function ce(){
         },
       ],
       '只会拆除完整包住整条正文的 setvar；条目标题、开关、位置和排序不变。执行后可用工坊撤销恢复。',
-      emptyVariableNote(noteVariableName),
+      emptyVariableNote(),
     );
     if (!action) return;
 
@@ -5554,7 +5552,6 @@ async function ce(){
       .pmm-variable-intro{display:flex;flex-direction:column;gap:4px}
       .pmm-variable-hint{margin:0;color:var(--pmm-var-muted,#aab3c2);font-size:11px;line-height:1.55}
       .pmm-variable-note{margin:0;color:var(--pmm-var-muted,#aab3c2);font-size:9px;line-height:1.45;font-style:italic;opacity:.82}
-      .pmm-variable-note code{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:9px;font-style:normal;color:var(--pmm-var-text,#f4f6fa);overflow-wrap:anywhere}
       .pmm-variable-menu{display:flex;flex-direction:column;gap:8px;overflow:auto}
       .pmm-variable-menu-btn{display:flex;flex-direction:column;align-items:flex-start;gap:3px;padding:11px 12px;border:1px solid var(--pmm-var-border,rgba(127,127,127,.35));border-radius:10px;background:var(--pmm-var-bg,rgba(127,127,127,.1));color:var(--pmm-var-text,#f4f6fa);text-align:left;cursor:pointer}
       .pmm-variable-menu-btn span{color:var(--pmm-var-muted,#aab3c2);font-size:10px;line-height:1.45}
@@ -5598,6 +5595,7 @@ async function ce(){
   console.info('[预设工坊] test.19 已加载：变量弹窗已完成第一轮空变量说明统一。');
   console.info('[预设工坊] test.20 已加载：变量弹窗统一使用“同名空变量项”，并以大白话说明改名结果。');
   console.info('[预设工坊] test.22 已加载：空变量项改为顶部小字示例，选项说明不再重复括号解释。');
+  console.info('[预设工坊] test.23 已加载：三处空变量说明统一为固定变量名示例，整行使用同一种小字样式。');
 })();
 
 ;(()=>{
