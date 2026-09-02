@@ -10,7 +10,7 @@ for (const marker of [
   'addedEmptySetOccurrences',
   'renamedEmptySetOccurrences',
   "smartLabel = '保留旧项，并新增新变量'",
-  "smartLabel = '同步改名 G 与空变量'",
+  "smartLabel = '同步改名 G 与同名空变量项'",
   'test.17 已加载：空 setvar 登记不参与正文 S 判断',
 ]) {
   assert.ok(source.includes(marker), `test.17 空变量登记缺少实现：${marker}`);

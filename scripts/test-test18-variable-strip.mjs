@@ -13,7 +13,7 @@ for (const marker of [
   'transform:rotate(45deg)',
   "label: '只变成普通条目'",
   "label: '同时清理失效变量'",
-  '其他条目仍在使用变量“${retainedNames.join(\'、\')}”，因此暂不能清理对应的 G 和“获取变量”中的空变量登记',
+  '其他条目仍在使用变量“${retainedNames.join(\'、\')}”，因此暂不能清理对应的 G 和同名空变量项（只有变量名，无内容）',
   'test.18 已加载：S 斜线按钮可还原普通条目',
 ]) {
   assert.ok(source.includes(marker), `test.18 去除变量格式缺少实现：${marker}`);

@@ -9,14 +9,14 @@ assert.ok(renameStart >= 0 && stripStart > renameStart && stripEnd > stripStart,
 
 const uiCopy = source.slice(renameStart, stripEnd);
 for (const wording of [
-  '所有 G 和“获取变量”中的空变量登记不变',
-  '可智能保留或同步 G 与“获取变量”中的空变量登记',
-  '其他条目仍在使用变量“${retainedNames.join(\'、\')}”，因此暂不能清理对应的 G 和“获取变量”中的空变量登记',
-  'G 与“获取变量”中的空变量登记保持不变',
+  '所有 G 和同名空变量项（只有变量名，无内容）都不变',
+  '可智能保留或同步 G 与同名空变量项（只有变量名，无内容）',
+  '其他条目仍在使用变量“${retainedNames.join(\'、\')}”，因此暂不能清理对应的 G 和同名空变量项（只有变量名，无内容）',
+  'G 与同名空变量项保持不变',
 ]) {
   assert.ok(uiCopy.includes(wording), `变量弹窗缺少统一文案：${wording}`);
 }
 assert.ok(!uiCopy.includes('空 setvar 登记'), '用户可见弹窗不应继续显示“空 setvar 登记”技术说法');
-assert.ok(source.includes('test.19 已加载：变量弹窗统一使用“获取变量”中的空变量登记说明'), '缺少 test.19 运行标记');
+assert.ok(source.includes('test.19 已加载：变量弹窗已完成第一轮空变量说明统一'), '缺少 test.19 运行标记');
 
-console.log('test.19 回归通过：重命名与去除格式弹窗统一使用“获取变量”中的空变量登记，并说明其他条目仍在使用。');
+console.log('test.19 回归通过：重命名与去除格式弹窗统一说明同名空变量项，并说明其他条目仍在使用。');

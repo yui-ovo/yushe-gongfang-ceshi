@@ -11,7 +11,7 @@ for (const marker of [
   'batchVariableRecord:le',
   "label: '批量重命名变量'",
   "smartLabel = '保留旧项，并新增新变量'",
-  "smartLabel = '同步改名 G 与空变量'",
+  "smartLabel = '同步改名 G 与同名空变量项'",
   "label: '只改已选 S'",
   'test.16 已加载：多选 S 支持批量重命名',
 ]) {
