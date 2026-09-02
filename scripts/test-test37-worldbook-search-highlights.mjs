@@ -20,6 +20,11 @@ for (const marker of [
   '.pmm-wb-kind-switch--toolbar button.is-active>i',
   '-webkit-text-fill-color:#fff!important',
   'button[data-wb-kind="world"].is-active>i{filter:drop-shadow',
+  'function syncWorldSearchHighlightTheme()',
+  "data-pmm-wb-search-theme', 'light'",
+  '[data-pmm-wb-search-theme="light"] .pmm-wb-search-highlight',
+  'background:rgba(147,197,253,.54)!important',
+  'background:#2563eb!important',
 ]) {
   assert.ok(source.includes(marker), `test.37 缺少世界书搜索高亮实现：${marker}`);
 }
@@ -48,4 +53,9 @@ assert.deepEqual(body.map(hit => hit.current), [false, true], '正文当前命�
 const title = render('你看着你', '你', { field: 'content', start: 3, end: 4 }, 'title');
 assert.deepEqual(title.map(hit => hit.current), [false, false], '正文当前命中不应误加强标题');
 
-console.log('test.37 回归通过：世界书正文高亮、当前命中强化、主题强调色、正文滚动定位与选中世界书图标的高对比显示均已覆盖。');
+const dayThemeAttribute = mode => mode === 'light' ? 'light' : '';
+assert.equal(dayThemeAttribute('light'), 'light', '日间模式必须启用独立浅蓝高亮');
+assert.equal(dayThemeAttribute('dark'), '', '夜间模式不应套用日间浅蓝高亮');
+assert.equal(dayThemeAttribute('auto'), '', '魔法棒模式不应套用日间浅蓝高亮');
+
+console.log('test.37 回归通过：世界书正文高亮、当前命中强化、日间浅蓝、夜间／魔法棒主题色、正文滚动定位与选中世界书图标的高对比显示均已覆盖。');
