@@ -5212,10 +5212,10 @@ async function ce(){
     let smartDescription;
     if (preview.mode === 'split') {
       smartLabel = '保留旧项，并新增新变量';
-      smartDescription = `改名后仍有 ${preview.remainingOldSet} 处正文 S 使用“${oldName}”；保留旧 G 与旧的空 setvar 登记，并为“${newName}”新增对应项。当前找到 ${preview.oldGetOccurrences} 处 G、${preview.oldEmptySetOccurrences} 处空登记。${mergeHint}`;
+      smartDescription = `改名后仍有 ${preview.remainingOldSet} 处正文 S 使用“${oldName}”；保留旧 G 与“获取变量”中的旧空变量登记，并为“${newName}”新增对应项。当前找到 ${preview.oldGetOccurrences} 处 G、“获取变量”中 ${preview.oldEmptySetOccurrences} 处空变量登记。${mergeHint}`;
     } else {
       smartLabel = '同步改名 G 与空变量';
-      smartDescription = `改名后已没有正文 S 使用“${oldName}”；将 ${preview.oldGetOccurrences} 处 G 与 ${preview.oldEmptySetOccurrences} 处空 setvar 登记同步改成“${newName}”。${mergeHint}`;
+      smartDescription = `改名后已没有正文 S 使用“${oldName}”；将 ${preview.oldGetOccurrences} 处 G 与“获取变量”中 ${preview.oldEmptySetOccurrences} 处空变量登记同步改成“${newName}”。${mergeHint}`;
     }
     const gAction = await showMenu(
       ctx.panel,
@@ -5225,7 +5225,7 @@ async function ce(){
         {
           value: 'set-only',
           label: '只改已选 S',
-          description: `把已选 ${preview.selectedEntries} 条里的 ${preview.renamedSetOccurrences} 处“${oldName}”改成“${newName}”，所有 G 与空 setvar 登记保持原样。${mergeHint}`,
+          description: `把已选 ${preview.selectedEntries} 条里的 ${preview.renamedSetOccurrences} 处“${oldName}”改成“${newName}”，所有 G 与“获取变量”中的空变量登记保持原样。${mergeHint}`,
         },
       ],
       `预览：${oldName} → ${newName}。执行后可以直接使用工坊的撤销按钮恢复。`,
@@ -5237,22 +5237,22 @@ async function ce(){
     addVariables(ctx.panel, [newName], { quiet: true });
 
     if (gAction === 'set-only') {
-      toast('success', `已将 ${plan.selectedEntries} 条中的 ${plan.renamedSetOccurrences} 处 S 改为“${newName}”，G 与空变量登记未修改`);
+      toast('success', `已将 ${plan.selectedEntries} 条中的 ${plan.renamedSetOccurrences} 处 S 改为“${newName}”，G 与“获取变量”中的空变量登记未修改`);
     } else if (plan.mode === 'split') {
       const additions = [];
       if (plan.addedGetOccurrences > 0) additions.push(`${plan.addedGetOccurrences} 处 G`);
-      if (plan.addedEmptySetOccurrences > 0) additions.push(`${plan.addedEmptySetOccurrences} 处空变量登记`);
+      if (plan.addedEmptySetOccurrences > 0) additions.push(`“获取变量”中 ${plan.addedEmptySetOccurrences} 处空变量登记`);
       const detail = additions.length
         ? `，新增 ${additions.join('、')}`
         : (plan.existingNewGet > 0 || plan.existingNewEmptySet > 0)
-          ? '；新 G 或空变量登记已经存在，未重复新增'
-          : `；未找到可同步的 G 或空变量登记，“${newName}”已加入 G 的变量列表`;
+          ? '；新 G 或“获取变量”中的空变量登记已经存在，未重复新增'
+          : `；未找到可同步的 G 或“获取变量”中的空变量登记，“${newName}”已加入 G 的变量列表`;
       toast('success', `已拆分变量：改名 ${plan.renamedSetOccurrences} 处正文 S，并保留旧项${detail}`);
     } else {
       const synced = [];
       if (plan.renamedGetOccurrences > 0) synced.push(`${plan.renamedGetOccurrences} 处 G`);
-      if (plan.renamedEmptySetOccurrences > 0) synced.push(`${plan.renamedEmptySetOccurrences} 处空变量登记`);
-      const detail = synced.length ? `，同步处理 ${synced.join('、')}` : '；没有需要同步的 G 或空变量登记';
+      if (plan.renamedEmptySetOccurrences > 0) synced.push(`“获取变量”中 ${plan.renamedEmptySetOccurrences} 处空变量登记`);
+      const detail = synced.length ? `，同步处理 ${synced.join('、')}` : '；没有需要同步的 G 或“获取变量”中的空变量登记';
       toast('success', `已完整改名 ${plan.renamedSetOccurrences} 处正文 S${detail}`);
     }
     queueBasketReconcile();
@@ -5280,7 +5280,7 @@ async function ce(){
             value: 'rename',
             label: '批量重命名变量',
             description: summary.variables.length > 0
-              ? `只修改已选条目中的变量名；已识别 ${summary.variables.length} 个变量名，可智能保留或同步 G 与空变量登记。`
+              ? `只修改已选条目中的变量名；已识别 ${summary.variables.length} 个变量名，可智能保留或同步 G 与“获取变量”中的空变量登记。`
               : '已选条目中没有 S 变量。',
             disabled: summary.variables.length === 0,
           },
@@ -5338,7 +5338,7 @@ async function ce(){
     const preview = buildVariableStripPlan(batch, selectedIds, false);
     if (!preview.unwrappedEntries) {
       return toast('info', preview.skippedEntries > 0
-        ? '所选条目没有完整包裹正文的 S 变量格式；空变量登记和正文中的局部 S 不会被误拆'
+        ? '所选条目没有完整包裹正文的 S 变量格式；“获取变量”中的空变量登记和正文中的局部 S 不会被误拆'
         : '没有找到可去除的变量格式');
     }
 
@@ -5349,12 +5349,12 @@ async function ce(){
     const skippedHint = preview.skippedEntries > 0 ? `，另有 ${preview.skippedEntries} 条因不是完整 S 包裹而跳过` : '';
     let cleanDescription;
     if (canCleanRelated) {
-      cleanDescription = `去除 ${preview.unwrappedEntries} 条 S 包装，并清理已失效变量“${cleanableNames.join('、')}”的 ${preview.cleanableGetOccurrences} 处 G 与 ${preview.cleanableEmptySetOccurrences} 处空 setvar 登记。`;
+      cleanDescription = `去除 ${preview.unwrappedEntries} 条 S 包装，并清理已失效变量“${cleanableNames.join('、')}”的 ${preview.cleanableGetOccurrences} 处 G 与“获取变量”中 ${preview.cleanableEmptySetOccurrences} 处空变量登记。`;
       if (retainedNames.length) cleanDescription += ` “${retainedNames.join('、')}”仍有正文 S，相关项会保留。`;
     } else if (cleanableNames.length) {
-      cleanDescription = `“${cleanableNames.join('、')}”已无正文 S，但当前没有找到对应 G 或空 setvar 登记。`;
+      cleanDescription = `“${cleanableNames.join('、')}”已无正文 S，但当前没有找到对应的 G 或“获取变量”中的空变量登记。`;
     } else {
-      cleanDescription = `“${retainedNames.join('、')}”仍有其他正文 S，不能安全清理同名 G 与空 setvar 登记。`;
+      cleanDescription = `其他条目仍在使用变量“${retainedNames.join('、')}”，因此暂不能清理对应的 G 和“获取变量”中的空变量登记。`;
     }
 
     const action = await showMenu(
@@ -5364,7 +5364,7 @@ async function ce(){
         {
           value: 'unwrap-only',
           label: '只变成普通条目',
-          description: `去掉 ${preview.unwrappedEntries} 条的外层 setvar，完整保留变量正文；所有 G 和空 setvar 登记不变${skippedHint}。`,
+          description: `去掉 ${preview.unwrappedEntries} 条的外层 setvar，完整保留变量正文；所有 G 和“获取变量”中的空变量登记不变${skippedHint}。`,
         },
         {
           value: 'clean-related',
@@ -5382,13 +5382,13 @@ async function ce(){
     if (action === 'clean-related') {
       const cleaned = [];
       if (plan.removedGetOccurrences > 0) cleaned.push(`${plan.removedGetOccurrences} 处 G`);
-      if (plan.removedEmptySetOccurrences > 0) cleaned.push(`${plan.removedEmptySetOccurrences} 处空变量登记`);
+      if (plan.removedEmptySetOccurrences > 0) cleaned.push(`“获取变量”中 ${plan.removedEmptySetOccurrences} 处空变量登记`);
       const retained = plan.retainedVariables.length
         ? `；仍在使用的“${plan.retainedVariables.map(item => item.name).join('、')}”相关项已保留`
         : '';
       toast('success', `已将 ${plan.unwrappedEntries} 条变成普通条目，并清理 ${cleaned.join('、')}${retained}`);
     } else {
-      toast('success', `已将 ${plan.unwrappedEntries} 条变成普通条目，G 与空变量登记保持不变`);
+      toast('success', `已将 ${plan.unwrappedEntries} 条变成普通条目，G 与“获取变量”中的空变量登记保持不变`);
     }
     queueBasketReconcile();
   }
@@ -5575,6 +5575,7 @@ async function ce(){
   console.info('[预设工坊] test.16 已加载：多选 S 支持批量重命名，部分拆分保留旧 G，完整改名同步旧 G。');
   console.info('[预设工坊] test.17 已加载：空 setvar 登记不参与正文 S 判断，并随拆分新增或随完整改名同步。');
   console.info('[预设工坊] test.18 已加载：S 斜线按钮可还原普通条目，并按剩余正文 S 安全清理失效 G 与空登记。');
+  console.info('[预设工坊] test.19 已加载：变量弹窗统一使用“获取变量”中的空变量登记说明。');
 })();
 
 ;(()=>{
