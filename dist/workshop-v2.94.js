@@ -2032,13 +2032,13 @@ async function ce(){
           autoButton.setAttribute('aria-label', '跟随酒馆美化');
         }
 
-        const stale = Array.from(card.querySelectorAll('.pmm-runtime-theme-btn'))
+        const stale = Array.from(root.querySelectorAll('.pmm-runtime-theme-btn'))
           .filter(button => button.__pmmFabRuntimeToken !== FAB_RUNTIME_TOKEN);
         stale.forEach(button => { try { button.remove(); } catch (_) {} });
 
         if (!isMobile()) {
           [lightButton, darkButton, autoButton].filter(Boolean).forEach(button => button.style.removeProperty('display'));
-          Array.from(card.querySelectorAll('.pmm-runtime-theme-btn')).forEach(button => button.remove());
+          Array.from(root.querySelectorAll('.pmm-runtime-theme-btn')).forEach(button => button.remove());
           return;
         }
 
@@ -2046,7 +2046,12 @@ async function ce(){
           button.style.setProperty('display', 'none', 'important');
         });
 
-        let themeToggle = card.querySelector('.pmm-mobile-theme-toggle');
+        /*
+         * 世界书双卡片会把这个同一枚三态主题按钮移到顶部工具栏。
+         * 必须从整个工坊根节点查找；若仍只查 theme-switch-card，下一轮扫描
+         * 会误以为按钮消失并重复创建一枚。
+         */
+        let themeToggle = root.querySelector('.pmm-mobile-theme-toggle');
         if (!themeToggle) {
           themeToggle = doc.createElement('button');
           themeToggle.type = 'button';
@@ -2084,7 +2089,20 @@ async function ce(){
                 ? '日间模式（点击切换跟随美化）'
                 : '点击切换主题',
           true,
+          );
+
+        const worldTopSlot = root.querySelector(
+          '[data-pmm-wb-panel="top"] [data-pmm-theme-toolbar-slot]'
         );
+        const nativeTopSlot = root.querySelector(
+          '.pm-main-wrapper > .preset-panel:not(.pmm-wb-native-hidden) [data-pmm-theme-toolbar-slot]'
+        );
+        const themeToolbarSlot = worldTopSlot || nativeTopSlot;
+        if (themeToolbarSlot && themeToggle.parentElement !== themeToolbarSlot) {
+          themeToolbarSlot.appendChild(themeToggle);
+        } else if (!themeToolbarSlot && themeToggle.parentElement !== card) {
+          card.appendChild(themeToggle);
+        }
 
         let fabToggle = card.querySelector('.pmm-mobile-fab-toggle');
         if (!fabToggle) {

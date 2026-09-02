@@ -771,6 +771,10 @@
     </span>`;
   }
 
+  function themeToolbarSlotMarkup() {
+    return '<span class="pmm-wb-theme-slot" data-pmm-theme-toolbar-slot></span>';
+  }
+
   function sourceOptions(side) {
     return state.worldNames.map(name => `<option value="${h(name)}"${name === side.name ? ' selected' : ''}>${h(name)}</option>`).join('');
   }
@@ -792,9 +796,10 @@
             </span>
           </div>
           <div class="pmm-wb-header-right">
-            <span class="pmm-wb-status">${h(state.status)}</span>
-            ${sideName === 'top' ? typeSwitchMarkup() : ''}
-            ${toolbarButton('multi', side.multi ? '退出多选' : '多选', 'fa-check-double', `data-wb-side="${sideName}"`)}
+             <span class="pmm-wb-status">${h(state.status)}</span>
+             ${sideName === 'top' ? typeSwitchMarkup() : ''}
+             ${sideName === 'top' ? themeToolbarSlotMarkup() : ''}
+             ${toolbarButton('multi', side.multi ? '退出多选' : '多选', 'fa-check-double', `data-wb-side="${sideName}"`)}
             ${toolbarButton('undo', side.history.length ? `撤销：${side.history[side.history.length - 1].label}` : '暂无可撤销操作', 'fa-rotate-left', `data-wb-side="${sideName}" ${side.history.length ? '' : 'disabled'}`)}
             ${toolbarButton('entry-search', '搜索条目', 'fa-magnifying-glass', `data-wb-side="${sideName}"`)}
             ${side.multi ? toolbarButton('batch-delete', '删除所选', 'fa-trash', `data-wb-side="${sideName}" ${side.selected.size ? '' : 'disabled'}`) : ''}
@@ -851,12 +856,30 @@
         button.classList.toggle('is-active', button.dataset.wbKind === state.topType);
       });
     }
+    if (switcher) {
+      let themeSlot = panel.querySelector('[data-pmm-theme-toolbar-slot]');
+      if (!themeSlot) {
+        themeSlot = DOC.createElement('span');
+        themeSlot.className = 'pmm-wb-theme-slot';
+        themeSlot.setAttribute('data-pmm-theme-toolbar-slot', '');
+      }
+      if (switcher.nextElementSibling !== themeSlot) switcher.after(themeSlot);
+    }
     panel.querySelector('[data-pmm-wb-native-transfer]')?.remove();
+  }
+
+  function placeThemeToolbarButton(themeToggle = state.host?.querySelector?.('.pmm-mobile-theme-toggle')) {
+    if (!themeToggle) return;
+    const target = state.topType === 'world'
+      ? state.topCard?.querySelector?.('[data-pmm-theme-toolbar-slot]')
+      : state.nativeTop?.querySelector?.('[data-pmm-theme-toolbar-slot]');
+    if (target && themeToggle.parentElement !== target) target.append(themeToggle);
   }
 
   function renderPanels() {
     if (!state.open || !state.host?.isConnected) return;
     saveScrolls();
+    const themeToggle = state.host.querySelector('.pmm-mobile-theme-toggle');
     state.topCard?.remove();
     state.bottomCard?.remove();
     state.topCard = null;
@@ -868,6 +891,7 @@
     }
     state.bottomCard = createCard('bottom', state.bottom);
     state.container.append(state.bottomCard);
+    placeThemeToolbarButton(themeToggle);
     markWorldbookButton();
     restoreScrolls();
   }
@@ -877,6 +901,7 @@
     renderFrame = TOP.requestAnimationFrame(() => {
       renderFrame = 0;
       decorateNativeTop();
+      placeThemeToolbarButton();
       markWorldbookButton();
     });
   }
@@ -1217,6 +1242,10 @@
 #preset-manager-main-panel.pmm-worldbook-mode .pm-panel-container--merge-mode button[title="取消当前预设全部分组"]{display:none!important}
 #preset-manager-main-panel.pmm-worldbook-mode .pm-main-wrapper>.preset-panel .theme-switch-card{display:none!important}
 #preset-manager-main-panel .pmm-wb-native-hidden{display:none!important}
+#preset-manager-main-panel .pmm-wb-theme-slot{display:inline-flex;align-items:center;justify-content:center;flex:0 0 auto}
+#preset-manager-main-panel .pmm-wb-theme-slot:empty{display:none}
+#preset-manager-main-panel .pmm-wb-theme-slot .pmm-mobile-theme-toggle{width:27px!important;min-width:27px!important;height:27px!important;padding:0!important;margin:0!important;border-radius:5px!important;box-shadow:none!important}
+#preset-manager-main-panel .pmm-wb-theme-slot .pmm-mobile-theme-toggle i{font-size:10px!important}
 #preset-manager-main-panel .pmm-wb-inline-panel{min-width:0!important;min-height:0!important;width:100%!important;height:100%!important;display:flex!important;overflow:hidden!important;border:1px solid var(--pm-border,rgba(127,127,127,.17))!important;border-radius:12px!important;background:var(--pm-panel-bg,var(--pm-card-bg,rgba(255,255,255,.96)))!important;color:var(--pm-text-primary,inherit)!important;box-shadow:0 4px 18px rgba(0,0,0,.10)!important}
 .pmm-wb-main-content{width:100%;height:100%;min-height:0;display:flex;flex-direction:column;overflow:hidden}
 .pmm-wb-header{height:46px;min-height:46px;display:flex;align-items:center;justify-content:space-between;gap:5px;padding:5px 7px;border-bottom:1px solid var(--pm-border,rgba(127,127,127,.12));background:var(--pm-toolbar-bg,transparent)}
@@ -1316,11 +1345,15 @@
     if (!state.open) return;
     if (renderFrame) TOP.cancelAnimationFrame(renderFrame);
     renderFrame = 0;
+    const themeToggle = state.host?.querySelector?.('.pmm-mobile-theme-toggle');
+    const themeCard = state.nativeTop?.querySelector?.('.theme-switch-card');
+    if (themeToggle && themeCard) themeCard.append(themeToggle);
     state.topCard?.remove();
     state.bottomCard?.remove();
     state.host?.querySelector('.pmm-wb-editor-overlay')?.remove();
     state.nativeTop?.classList.remove('pmm-wb-native-hidden');
     state.nativeTop?.querySelector('[data-pmm-wb-kind-switch]')?.remove();
+    state.nativeTop?.querySelector('[data-pmm-theme-toolbar-slot]')?.remove();
     state.nativeTop?.querySelector('[data-pmm-wb-native-transfer]')?.remove();
     state.container?.classList.remove('pm-panel-container--merge-mode', 'pmm-worldbook-layout');
     state.host?.classList.remove('pmm-worldbook-mode');
@@ -1362,4 +1395,5 @@
   TOP[API_KEY] = { open, close, cleanup, state };
   console.info('[预设工坊测试版] test.3 世界书已接入原生双卡片布局。');
   console.info('[预设工坊测试版] test.29 已加载：世界书条目按蓝色落点线插入目标位置。');
+  console.info('[预设工坊测试版] test.30 已加载：手机三态主题按钮已移入世界书顶部工具栏。');
 })();
