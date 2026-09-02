@@ -1,14 +1,26 @@
-/* ===== PMM_TAURI_EDITOR_OVERFLOW_TEST26：Tauri iOS 展开编辑器防溢出 ===== */
+/* ===== PMM_TAURI_EDITOR_OVERFLOW_TEST27：Tauri iOS 展开编辑器防溢出 ===== */
 ;(() => {
   'use strict';
 
   const TOP = (() => { try { return window.top || window; } catch (_) { return window; } })();
   const DOC = (() => { try { return TOP.document || document; } catch (_) { return document; } })();
-  const tauriHost = (() => { try { return TOP.__TAURITAVERN__ || null; } catch (_) { return null; } })();
+  function hasTauriRuntime() {
+    for (const scope of [TOP, window]) {
+      try {
+        if (
+          scope?.__TAURI_RUNNING__ === true
+          || scope?.__TAURITAVERN__
+          || scope?.__TAURI_INTERNALS__
+        ) return true;
+      } catch (_) {}
+    }
+    return false;
+  }
   const ua = String(TOP.navigator?.userAgent || '');
   const platform = String(TOP.navigator?.userAgentData?.platform || TOP.navigator?.platform || '');
   const isIOS = /iPad|iPhone|iPod/i.test(ua) || (/Mac/i.test(platform) && Number(TOP.navigator?.maxTouchPoints || 0) > 1);
-  if (!tauriHost || !isIOS) return;
+  const tauriDetected = hasTauriRuntime();
+  if (!tauriDetected || !isIOS) return;
 
   const API_KEY = '__PMM_TAURI_EDITOR_OVERFLOW_TEST26__';
   const STYLE_ID = 'pmm-tauri-editor-overflow-test26';
@@ -212,5 +224,5 @@ html.${ROOT_CLASS} ${PANEL_SELECTOR} .${COMPACT_CLASS} > .prompt-editor__expand-
   scan();
 
   TOP[API_KEY] = { cleanup, scan, needsCompactLayout, isIOS: true };
-  console.info('[预设工坊] test.26 已加载：TauriTavern iOS 展开编辑框已启用防裁切与按需工具栏换行。');
+  console.info('[预设工坊] test.27 已加载：已通过 Tauri 早期标记启用 iOS 展开编辑框防裁切与按需工具栏换行。');
 })();

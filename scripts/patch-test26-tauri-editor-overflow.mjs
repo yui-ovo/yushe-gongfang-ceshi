@@ -7,10 +7,10 @@ const bundlePath = path.join(root, 'dist', 'workshop-v2.94.js');
 const runtimePath = path.join(root, 'patches', 'test26-tauri-editor-overflow.js');
 let source = fs.readFileSync(bundlePath, 'utf8');
 
-if (source.includes('PMM_TAURI_EDITOR_OVERFLOW_TEST26')) {
-  throw new Error('test.26 patch is already installed');
+if (source.includes('PMM_TAURI_EDITOR_OVERFLOW_TEST27')) {
+  throw new Error('test.27 patch is already installed');
 }
 
 source += `\n\n${fs.readFileSync(runtimePath, 'utf8').trim()}\n`;
 fs.writeFileSync(bundlePath, source, 'utf8');
-console.log('Applied test.26 Tauri iOS editor overflow patch.');
+console.log('Applied test.27 Tauri iOS editor overflow patch.');
