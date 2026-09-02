@@ -12687,7 +12687,14 @@ html.pmm-tauri-dnd-active #preset-manager-main-panel { user-select: none !import
   }
 
   function multiSelectActive(group) {
-    return Boolean(panelFor(group)?.querySelector('button[title="多选模式"].action-btn--active'));
+    // 以条目真正进入多选布局为准。部分手机端主题虽然已经显示复选框，
+    // 顶部按钮却不会保留 action-btn--active，不能只依赖按钮样式判断。
+    if (group?.querySelector?.('.prompt-item--multi-select')) return true;
+    const panel = panelFor(group);
+    return Boolean(
+      panel?.querySelector?.('.prompt-item--multi-select')
+      || panel?.querySelector?.('button[title="多选模式"].action-btn--active'),
+    );
   }
 
   function childMap(allGroups) {

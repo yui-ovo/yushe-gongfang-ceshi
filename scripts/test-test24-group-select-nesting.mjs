@@ -37,6 +37,7 @@ for (const marker of [
 }
 
 assert.ok(runtime.includes('if (!multiSelectActive(group))'), '组内全选按钮必须只在多选模式显示');
+assert.ok(runtime.includes("group?.querySelector?.('.prompt-item--multi-select')"), '手机端必须按条目的真实多选布局识别组内全选');
 assert.ok(runtime.includes('for (const item of collapsed) clickHeader(item)'), '折叠分组应能临时展开后完成全选');
 assert.ok(runtime.includes('for (const item of collapsed.reverse())'), '全选后应恢复原折叠状态');
 assert.ok(runtime.includes('isNativeGroup(group) ? `${enabled}/${total}` : String(total)'), '外层主预设分组计数应包含子组');
