@@ -42,6 +42,7 @@
     status: '已同步',
     topType: 'preset',
     worldNames: [],
+    worldBindings: new Map(),
     top: emptyWorldSide(),
     bottom: emptyWorldSide(),
     host: null,
@@ -187,6 +188,59 @@
     if (!state.top.name || !state.worldNames.includes(state.top.name)) {
       state.top.name = state.worldNames.find(name => name !== state.bottom.name) || state.worldNames[0] || '';
     }
+    refreshCharacterWorldBindings();
+  }
+
+  function helperFunction(name) {
+    const candidates = [
+      [SELF, SELF?.[name]],
+      [SELF?.TavernHelper, SELF?.TavernHelper?.[name]],
+      [TOP?.TavernHelper, TOP?.TavernHelper?.[name]],
+    ];
+    const match = candidates.find(([, fn]) => typeof fn === 'function');
+    return match ? match[1].bind(match[0]) : null;
+  }
+
+  function refreshCharacterWorldBindings() {
+    const byNormalizedName = new Map(
+      state.worldNames.map(name => [name.toLocaleLowerCase(), name]),
+    );
+    const bindings = new Map(state.worldNames.map(name => [name, new Set()]));
+    const addBinding = (worldName, characterName) => {
+      const actualName = byNormalizedName.get(String(worldName || '').trim().toLocaleLowerCase());
+      const visibleCharacterName = String(characterName || '').trim();
+      if (!actualName || !visibleCharacterName) return;
+      bindings.get(actualName)?.add(visibleCharacterName);
+    };
+
+    /* 主绑定的兼容兜底：酒馆当前上下文通常已经带有全部角色摘要。 */
+    for (const character of context?.characters || []) {
+      addBinding(character?.data?.extensions?.world, character?.name);
+    }
+
+    /* 酒馆助手会同时返回主要绑定和额外绑定。读取失败的单个角色不会影响列表。 */
+    const getCharacterNames = helperFunction('getCharacterNames');
+    const getCharWorldbookNames = helperFunction('getCharWorldbookNames');
+    if (getCharacterNames && getCharWorldbookNames) {
+      let characterNames = [];
+      try { characterNames = getCharacterNames() || []; } catch (_) {}
+      for (const characterName of characterNames) {
+        try {
+          const linked = getCharWorldbookNames(characterName) || {};
+          addBinding(linked.primary, characterName);
+          for (const extraName of linked.additional || []) addBinding(extraName, characterName);
+        } catch (error) {
+          console.warn(`[世界书缝合] 读取角色“${characterName}”的世界书绑定失败`, error);
+        }
+      }
+    }
+
+    state.worldBindings = bindings;
+  }
+
+  function boundCharacterNames(worldName) {
+    return [...(state.worldBindings.get(worldName) || [])]
+      .sort((left, right) => left.localeCompare(right, undefined, { numeric: true }));
   }
 
   function resetSide(side, keepName = true) {
@@ -958,18 +1012,28 @@
 
   function openSourcePicker(sideName) {
     const side = state[sideName];
+    refreshCharacterWorldBindings();
     state.host.querySelector('.pmm-wb-source-picker')?.remove();
     const overlay = DOC.createElement('div');
     overlay.className = 'pmm-wb-source-picker';
-    overlay.innerHTML = `<div class="pmm-wb-picker-dialog"><div class="pmm-wb-picker-head"><input type="search" placeholder="搜索世界书" autocomplete="off"><button type="button"><i class="fa-solid fa-xmark"></i></button></div><div class="pmm-wb-picker-list"></div></div>`;
+    overlay.innerHTML = `<div class="pmm-wb-picker-dialog"><div class="pmm-wb-picker-head"><input type="search" placeholder="搜索世界书或角色名" autocomplete="off"><button type="button"><i class="fa-solid fa-xmark"></i></button></div><div class="pmm-wb-picker-list"></div></div>`;
     const input = overlay.querySelector('input');
     const list = overlay.querySelector('.pmm-wb-picker-list');
+    const rowMarkup = ({ name, characters }) => `<button type="button" data-wb-picker-name="${h(name)}" class="${name === side.name ? 'is-current' : ''}"><span class="pmm-wb-picker-name">${h(name)}</span>${characters.length ? `<small>绑定角色：${h(characters.join('、'))}</small>` : ''}</button>`;
+    const sectionMarkup = (title, icon, rows) => rows.length ? `<section class="pmm-wb-picker-section"><div class="pmm-wb-picker-section-title"><span><i class="fa-solid ${icon}"></i>${title}</span><small>${rows.length}</small></div>${rows.map(rowMarkup).join('')}</section>` : '';
     const draw = () => {
       const query = input.value.trim().toLocaleLowerCase();
-      const names = query ? state.worldNames.filter(name => name.toLocaleLowerCase().includes(query)) : state.worldNames;
-      list.innerHTML = names.length
-        ? names.map(name => `<button type="button" data-wb-picker-name="${h(name)}" class="${name === side.name ? 'is-current' : ''}">${h(name)}</button>`).join('')
-        : '<div class="pmm-wb-empty">没有找到这本世界书</div>';
+      const rows = state.worldNames
+        .map(name => ({ name, characters: boundCharacterNames(name) }))
+        .filter(row => !query
+          || row.name.toLocaleLowerCase().includes(query)
+          || row.characters.some(name => name.toLocaleLowerCase().includes(query)));
+      const boundRows = rows.filter(row => row.characters.length > 0);
+      const unboundRows = rows.filter(row => row.characters.length === 0);
+      list.innerHTML = rows.length
+        ? sectionMarkup('角色绑定世界书', 'fa-user-group', boundRows)
+          + sectionMarkup('未绑定角色的世界书', 'fa-book', unboundRows)
+        : '<div class="pmm-wb-empty">没有找到对应的世界书或角色</div>';
     };
     input.addEventListener('input', draw);
     overlay.querySelector('.pmm-wb-picker-head button').addEventListener('click', () => overlay.remove());
@@ -1259,7 +1323,7 @@
 .pmm-wb-dot{width:7px;height:7px;border-radius:50%;flex:none;box-shadow:0 0 6px currentColor}.pmm-wb-dot.is-blue{color:#3485f6;background:#3485f6}.pmm-wb-dot.is-green{color:#19bf72;background:#19bf72}.pmm-wb-toggle{width:25px!important;height:14px!important;min-width:25px!important;border-radius:8px!important;padding:1.5px!important;background:#9ba3ad!important;flex:none}.pmm-wb-toggle span{display:block;width:11px;height:11px;border-radius:50%;background:#fff;transition:transform .15s}.pmm-wb-toggle.is-on{background:var(--pm-quote-color,#2878ed)!important}.pmm-wb-toggle.is-on span{transform:translateX(11px)}
 .pmm-wb-details{padding:7px 9px 9px;border-top:1px solid var(--pm-border,rgba(127,127,127,.10));display:flex;flex-direction:column;gap:6px;font-size:10px!important;line-height:1.35}.pmm-wb-details label,.pmm-wb-wide-field{display:flex;flex-direction:column;gap:2px;min-width:0}.pmm-wb-details label>span,.pmm-wb-field-head>span:first-child{font-size:8.5px!important;line-height:1.2;opacity:.62}.pmm-wb-details input,.pmm-wb-details select,.pmm-wb-details textarea{width:100%;min-height:26px!important;border:1px solid var(--pm-border,rgba(127,127,127,.17));border-radius:6px;background:var(--pm-card-bg,rgba(127,127,127,.05));color:inherit;padding:4px 6px!important;font-size:10.5px!important;line-height:1.35!important}.pmm-wb-details textarea{min-height:132px!important;resize:vertical}.pmm-wb-detail-row{display:flex;align-items:flex-end;gap:6px}.pmm-wb-detail-row label:first-child{flex:1}.pmm-wb-title-row .pmm-wb-strategy{align-self:flex-end;height:26px!important;min-width:50px!important;padding:0 6px!important;border:1px solid currentColor;border-radius:7px;background:transparent;font-size:9px!important;line-height:1!important}.pmm-wb-strategy span{display:inline-block;width:6px;height:6px;margin-right:3px;border-radius:50%;background:currentColor}.pmm-wb-strategy.is-blue{color:#3485f6}.pmm-wb-strategy.is-green{color:#19bf72}.pmm-wb-meta-grid{display:grid;grid-template-columns:minmax(130px,2fr) minmax(58px,.65fr);gap:6px}.pmm-wb-meta-grid.has-depth{grid-template-columns:minmax(120px,2fr) repeat(2,minmax(52px,.6fr))}.pmm-wb-meta-grid .is-outlet{grid-column:1/-1}.pmm-wb-field-head{min-height:19px;display:flex;align-items:center;justify-content:space-between;gap:6px}.pmm-wb-content-tools{display:flex;align-items:center;gap:5px}.pmm-wb-content-tools small{font-size:8.5px;opacity:.58}.pmm-wb-content-tools button{width:22px;height:20px;padding:0;border:0;border-radius:5px;background:transparent;color:inherit;opacity:.7}.pmm-wb-content-tools button:active{transform:scale(.94)}.pmm-wb-more{flex:none;border:1px dashed var(--pm-border,rgba(127,127,127,.22));border-radius:8px;background:transparent;color:inherit;padding:8px;opacity:.65}.pmm-wb-empty{margin:auto;padding:24px;text-align:center;opacity:.52}
 .pmm-wb-editor-overlay{position:absolute;inset:0;z-index:16000;display:flex;align-items:center;justify-content:center;padding:max(12px,env(safe-area-inset-top)) 12px max(12px,env(safe-area-inset-bottom));background:rgba(0,0,0,.43);backdrop-filter:blur(5px);-webkit-backdrop-filter:blur(5px);color:var(--pmm-wb-editor-text,#222)}.pmm-wb-editor-dialog{width:min(92%,660px);height:min(82%,680px);max-height:calc(100dvh - 28px);min-height:250px;display:flex;flex-direction:column;overflow:hidden;border:1px solid var(--pmm-wb-editor-border,rgba(127,127,127,.22));border-radius:13px;background-color:var(--pmm-wb-editor-bg,#fff);background-image:var(--pmm-wb-editor-bg-image,none);color:var(--pmm-wb-editor-text,#222);box-shadow:0 18px 52px rgba(0,0,0,.36)}.pmm-wb-editor-dialog header{min-height:42px;display:flex;align-items:center;gap:7px;padding:6px 8px;border-bottom:1px solid var(--pmm-wb-editor-border,rgba(127,127,127,.14))}.pmm-wb-editor-dialog header strong{min-width:0;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px}.pmm-wb-editor-dialog header span{font-size:9px;opacity:.58;white-space:nowrap}.pmm-wb-editor-dialog header button{width:28px;height:28px;padding:0;border:0;border-radius:7px;background:color-mix(in srgb,var(--pmm-wb-editor-text,#222) 8%,transparent);color:inherit}.pmm-wb-editor-dialog header button:disabled{opacity:.28}.pmm-wb-editor-dialog header button[data-wb-editor-save]{color:var(--pmm-wb-editor-accent,#3485f6)}.pmm-wb-editor-dialog textarea{flex:1;min-height:0;width:auto;margin:8px;padding:10px;border:1px solid var(--pmm-wb-editor-border,rgba(127,127,127,.18));border-radius:9px;background:var(--pmm-wb-editor-field-bg,rgba(127,127,127,.05));color:var(--pmm-wb-editor-text,#222);font-size:12px!important;line-height:1.55!important;resize:none}
-.pmm-wb-source-picker{position:absolute;inset:0;z-index:14000;display:flex;align-items:flex-start;justify-content:center;padding:max(12px,env(safe-area-inset-top)) 10px;background:rgba(0,0,0,.42);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px)}.pmm-wb-picker-dialog{width:min(94%,430px);max-height:min(78%,620px);margin-top:7vh;display:flex;flex-direction:column;overflow:hidden;border:1px solid var(--pm-border,rgba(127,127,127,.22));border-radius:13px;background:var(--pm-panel-bg,var(--pm-card-bg,#fff));color:var(--pm-text-primary,inherit);box-shadow:0 18px 50px rgba(0,0,0,.35)}.pmm-wb-picker-head{display:grid;grid-template-columns:minmax(0,1fr) 34px;gap:6px;padding:8px;border-bottom:1px solid var(--pm-border,rgba(127,127,127,.14))}.pmm-wb-picker-head input{height:34px;min-width:0;padding:0 9px;border:1px solid var(--pm-border,rgba(127,127,127,.2));border-radius:8px;background:var(--pm-card-bg,rgba(127,127,127,.05));color:inherit}.pmm-wb-picker-head button{border:0;border-radius:8px;background:rgba(127,127,127,.08);color:inherit}.pmm-wb-picker-list{min-height:0;overflow:auto;padding:6px}.pmm-wb-picker-list button{width:100%;min-height:38px;margin-bottom:3px;padding:7px 9px;border:1px solid transparent;border-radius:8px;background:transparent;color:inherit;text-align:left}.pmm-wb-picker-list button.is-current{border-color:var(--pm-quote-color,#3b82f6);background:color-mix(in srgb,var(--pm-quote-color,#3b82f6) 11%,transparent)}
+.pmm-wb-source-picker{position:absolute;inset:0;z-index:14000;display:flex;align-items:flex-start;justify-content:center;padding:max(12px,env(safe-area-inset-top)) 10px;background:rgba(0,0,0,.42);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px)}.pmm-wb-picker-dialog{width:min(94%,430px);max-height:min(78%,620px);margin-top:7vh;display:flex;flex-direction:column;overflow:hidden;border:1px solid var(--pm-border,rgba(127,127,127,.22));border-radius:13px;background:var(--pm-panel-bg,var(--pm-card-bg,#fff));color:var(--pm-text-primary,inherit);box-shadow:0 18px 50px rgba(0,0,0,.35)}.pmm-wb-picker-head{display:grid;grid-template-columns:minmax(0,1fr) 34px;gap:6px;padding:8px;border-bottom:1px solid var(--pm-border,rgba(127,127,127,.14))}.pmm-wb-picker-head input{height:34px;min-width:0;padding:0 9px;border:1px solid var(--pm-border,rgba(127,127,127,.2));border-radius:8px;background:var(--pm-card-bg,rgba(127,127,127,.05));color:inherit}.pmm-wb-picker-head button{border:0;border-radius:8px;background:rgba(127,127,127,.08);color:inherit}.pmm-wb-picker-list{min-height:0;overflow:auto;padding:6px}.pmm-wb-picker-section+.pmm-wb-picker-section{margin-top:8px}.pmm-wb-picker-section-title{position:sticky;top:-6px;z-index:2;min-height:29px;display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 8px;background:var(--pm-panel-bg,var(--pm-card-bg,#fff));border-bottom:1px solid var(--pm-border,rgba(127,127,127,.13));font-size:10px;font-weight:650;color:var(--pm-text-secondary,currentColor)}.pmm-wb-picker-section-title span{display:flex;align-items:center;gap:6px}.pmm-wb-picker-section-title i{width:13px;text-align:center;color:var(--pm-quote-color,#3485f6)}.pmm-wb-picker-section-title small{font-size:9px;opacity:.58}.pmm-wb-picker-list button{width:100%;min-height:38px;margin-bottom:3px;padding:7px 9px;border:1px solid transparent;border-radius:8px;background:transparent;color:inherit;text-align:left;display:flex;flex-direction:column;justify-content:center;gap:2px}.pmm-wb-picker-name{width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.pmm-wb-picker-list button small{width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:9px;opacity:.56}.pmm-wb-picker-list button.is-current{border-color:var(--pm-quote-color,#3b82f6);background:color-mix(in srgb,var(--pm-quote-color,#3b82f6) 11%,transparent)}
 @media(max-width:768px){.pmm-wb-header{height:42px;min-height:42px;padding:4px}.pmm-wb-source-select{max-width:145px!important}.pmm-wb-status{display:none}.pmm-wb-tool{width:24px;height:25px;min-width:24px}.pmm-wb-kind-switch button{width:22px}.pmm-wb-list{padding:5px}.pmm-wb-entry-head{min-height:var(--pmm-user-item-height,39px);padding:2px 6px}.pmm-wb-details{padding:6px 7px 8px;gap:5px}.pmm-wb-meta-grid,.pmm-wb-meta-grid.has-depth{grid-template-columns:minmax(0,1.7fr) minmax(52px,.58fr) minmax(52px,.58fr)}.pmm-wb-details textarea{min-height:118px!important}.pmm-wb-editor-dialog{width:94%;height:82%;max-height:calc(100dvh - 24px);border-radius:12px}.pmm-wb-editor-dialog textarea{margin:6px;padding:8px;font-size:11px!important}}
 `;
     DOC.head.append(style);
@@ -1396,4 +1460,5 @@
   console.info('[预设工坊测试版] test.3 世界书已接入原生双卡片布局。');
   console.info('[预设工坊测试版] test.29 已加载：世界书条目按蓝色落点线插入目标位置。');
   console.info('[预设工坊测试版] test.30 已加载：手机三态主题按钮已移入世界书顶部工具栏。');
+  console.info('[预设工坊测试版] test.31 已加载：世界书可按角色名搜索并按角色绑定状态分组。');
 })();
