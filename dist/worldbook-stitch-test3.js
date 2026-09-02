@@ -201,13 +201,22 @@
     return match ? match[1].bind(match[0]) : null;
   }
 
+  function normalizeWorldBindingName(value) {
+    return String(value ?? '').normalize('NFC').trim().toLocaleLowerCase();
+  }
+
   function refreshCharacterWorldBindings() {
-    const byNormalizedName = new Map(
-      state.worldNames.map(name => [name.toLocaleLowerCase(), name]),
-    );
+    const byExactName = new Map(state.worldNames.map(name => [String(name), name]));
+    const byNormalizedName = new Map();
+    for (const name of state.worldNames) {
+      const normalizedName = normalizeWorldBindingName(name);
+      if (normalizedName && !byNormalizedName.has(normalizedName)) byNormalizedName.set(normalizedName, name);
+    }
     const bindings = new Map(state.worldNames.map(name => [name, new Set()]));
     const addBinding = (worldName, characterName) => {
-      const actualName = byNormalizedName.get(String(worldName || '').trim().toLocaleLowerCase());
+      const rawWorldName = String(worldName ?? '');
+      const actualName = byExactName.get(rawWorldName)
+        || byNormalizedName.get(normalizeWorldBindingName(rawWorldName));
       const visibleCharacterName = String(characterName || '').trim();
       if (!actualName || !visibleCharacterName) return;
       bindings.get(actualName)?.add(visibleCharacterName);
@@ -1537,4 +1546,5 @@
   console.info('[预设工坊测试版] test.30 已加载：手机三态主题按钮已移入世界书顶部工具栏。');
   console.info('[预设工坊测试版] test.31 已加载：世界书可按角色名搜索并按角色绑定状态分组。');
   console.info('[预设工坊测试版] test.32 已加载：世界书搜索跟随主题，分类默认折叠并可展开。');
+  console.info('[预设工坊测试版] test.33 已加载：角色绑定世界书兼容名称末尾空格与 Unicode 差异。');
 })();
