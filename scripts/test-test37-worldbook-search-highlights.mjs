@@ -35,6 +35,13 @@ for (const marker of [
   "DOC.addEventListener('focusin', onDocumentFocusIn, true)",
   "side.multi\n              ? toolbarButton('batch-delete', '删除所选'",
   ": toolbarButton('undo', side.history.length ? `撤销：${side.history[side.history.length - 1].label}`",
+  'function selectedWorldEntryKeys(side)',
+  'function toggleWorldSelectAll(sideName)',
+  'data-wb-action="select-all"',
+  '拖动任一已选条目可整体拖动',
+  'pmm-wb-entry--selected',
+  '.pmm-wb-multi-bar',
+  'side.selected.has(key) ? selectedWorldEntryKeys(side) : [key]',
 ]) {
   assert.ok(source.includes(marker), `test.37 缺少世界书搜索高亮实现：${marker}`);
 }
@@ -76,4 +83,10 @@ const sharedToolbarAction = multi => multi ? 'batch-delete' : 'undo';
 assert.equal(sharedToolbarAction(false), 'undo', '普通状态应在固定工具位显示撤销');
 assert.equal(sharedToolbarAction(true), 'batch-delete', '多选状态应在相同工具位显示删除所选');
 
-console.log('test.37 回归通过：世界书正文高亮、键盘避让、替换撤销、日间按钮柔化、撤销／删除共用工具位与主题色均已覆盖。');
+const orderedSelectedKeys = (entries, selected) => entries.filter(entry => selected.has(entry.id)).map(entry => entry.id);
+assert.deepEqual(orderedSelectedKeys([{ id: '1' }, { id: '2' }, { id: '3' }], new Set(['3', '1'])), ['1', '3'], '多选拖动必须按世界书原顺序携带条目');
+const nextAllSelection = (keys, selected) => keys.every(key => selected.has(key)) ? new Set() : new Set(keys);
+assert.deepEqual([...nextAllSelection(['a', 'b'], new Set())], ['a', 'b'], '全选必须一次勾选全部候选条目');
+assert.deepEqual([...nextAllSelection(['a', 'b'], new Set(['a', 'b']))], [], '再次点击全选必须取消全部候选条目');
+
+console.log('test.37 回归通过：世界书正文高亮、键盘避让、替换撤销、全选、多选拖动、工具位与主题色均已覆盖。');
