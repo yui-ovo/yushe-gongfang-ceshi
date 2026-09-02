@@ -12,7 +12,7 @@ for (const marker of [
   'function worldSearchScope(value)',
   "['all', 'title', 'content'].includes(value)",
   'function collectWorldSearch(side)',
-  'function highlightedWorldSearchText(value, query)',
+  'function highlightedWorldSearchText(value, query, currentMatch = null, fieldName = \'\')',
   'data-wb-action="search-previous"',
   'data-wb-action="search-next"',
   'data-wb-action="search-scope"',
