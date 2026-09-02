@@ -17,6 +17,9 @@ for (const marker of [
   '.pmm-wb-search-highlight.is-current',
   'activeHighlight.scrollIntoView?.({ block: \'center\', behavior: \'smooth\' });',
   'var(--pm-quote-color,#3485f6)',
+  '.pmm-wb-kind-switch--toolbar button.is-active>i',
+  '-webkit-text-fill-color:#fff!important',
+  'button[data-wb-kind="world"].is-active>i{filter:drop-shadow',
 ]) {
   assert.ok(source.includes(marker), `test.37 缺少世界书搜索高亮实现：${marker}`);
 }
@@ -45,4 +48,4 @@ assert.deepEqual(body.map(hit => hit.current), [false, true], '正文当前命�
 const title = render('你看着你', '你', { field: 'content', start: 3, end: 4 }, 'title');
 assert.deepEqual(title.map(hit => hit.current), [false, false], '正文当前命中不应误加强标题');
 
-console.log('test.37 回归通过：世界书正文高亮、当前命中强化、主题强调色与正文滚动定位均已覆盖。');
+console.log('test.37 回归通过：世界书正文高亮、当前命中强化、主题强调色、正文滚动定位与选中世界书图标的高对比显示均已覆盖。');
