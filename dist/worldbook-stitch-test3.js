@@ -137,11 +137,11 @@
     return { ...clone(entry), uid: freeWorldUid(data) };
   }
 
-  function maxWorldDisplayIndex(data) {
-    return Object.values(data?.entries || {}).reduce((max, entry) => {
-      const value = Number(entry?.displayIndex);
-      return Number.isFinite(value) ? Math.max(max, value) : max;
-    }, -1);
+  function worldInsertionIndex(entries, placement = null) {
+    if (!placement?.targetKey) return entries.length;
+    const targetIndex = entries.findIndex(entry => entryKey(entry) === String(placement.targetKey));
+    if (targetIndex < 0) return entries.length;
+    return targetIndex + (placement.position === 'after' ? 1 : 0);
   }
 
   function setStatus(text) {
@@ -272,19 +272,24 @@
     side.entries = entriesFromWorld(side.data);
   }
 
-  function appendWorldEntries(target, sourceKind, entries) {
+  function insertWorldEntries(target, sourceKind, entries, placement = null) {
     target.data.entries ||= {};
-    let displayIndex = maxWorldDisplayIndex(target.data);
+    const ordered = entriesFromWorld(target.data);
+    const insertionIndex = worldInsertionIndex(ordered, placement);
     const added = [];
     for (const entry of entries) {
       const addition = sourceKind === 'world'
         ? worldToWorld(entry, target.data)
         : presetToWorld(entry, target.data);
-      addition.displayIndex = ++displayIndex;
       target.data.entries[addition.uid] = addition;
       added.push(addition);
     }
-    target.entries = entriesFromWorld(target.data);
+    ordered.splice(insertionIndex, 0, ...added);
+    ordered.forEach((entry, index) => {
+      entry.displayIndex = index;
+      target.data.entries[String(entry.uid)] = entry;
+    });
+    target.entries = ordered;
     return added;
   }
 
@@ -440,7 +445,7 @@
     return next;
   }
 
-  async function transferFromNativeTop(move, forcedIds = null) {
+  async function transferFromNativeTop(move, forcedIds = null, placement = null) {
     const source = nativePresetSnapshot();
     const ids = forcedIds?.length ? forcedIds.map(String) : [...source.selected];
     if (!ids.length) return notify('warning', '请先在上方预设勾选需要缝合的条目');
@@ -452,7 +457,7 @@
         worldSides:[state.bottom],
         presetSnapshots:move ? [source] : [],
       });
-      appendWorldEntries(state.bottom, 'preset', entries);
+      insertWorldEntries(state.bottom, 'preset', entries, placement);
       await saveWorldSide(state.bottom);
       if (move) {
         await savePresetEntries(source.name, source.prompts.filter(prompt => !wanted.has(String(prompt.id))));
@@ -499,7 +504,7 @@
     });
   }
 
-  async function transferWorldToWorld(fromName, move, forcedKeys = null) {
+  async function transferWorldToWorld(fromName, move, forcedKeys = null, placement = null) {
     const source = state[fromName];
     const target = state[fromName === 'top' ? 'bottom' : 'top'];
     const keys = forcedKeys?.length ? forcedKeys.map(String) : [...source.selected];
@@ -511,12 +516,13 @@
       const latestTarget = sameBook ? latestSource : await loadWorldInfoFresh(target.name);
       applyWorldData(source, latestSource);
       applyWorldData(target, latestTarget);
-      const entries = keys.map(key => findEntry(source, key)).filter(Boolean).map(clone);
+      const wanted = new Set(keys);
+      const entries = source.entries.filter(entry => wanted.has(entryKey(entry))).map(clone);
       if (!entries.length) throw new Error('没有从来源世界书读取到所选条目');
       pushUndo(source, move ? '在世界书之间移动条目' : '在世界书之间拖入条目', {
         worldSides:move ? [source, target] : [target],
       });
-      const additions = appendWorldEntries(target, 'world', entries);
+      const additions = insertWorldEntries(target, 'world', entries, placement);
       const addedUids = additions.map(entry => String(entry.uid));
       await saveWorldSide(target);
       if (move) {
@@ -543,12 +549,12 @@
 
   async function transfer(fromName, move, forcedKeys = null, placement = null) {
     if (fromName === 'top' && state.topType === 'preset') {
-      return transferFromNativeTop(move, forcedKeys);
+      return transferFromNativeTop(move, forcedKeys, placement);
     }
     if (fromName === 'bottom' && state.topType === 'preset') {
       return transferToNativeTop(move, forcedKeys, placement);
     }
-    return transferWorldToWorld(fromName, move, forcedKeys);
+    return transferWorldToWorld(fromName, move, forcedKeys, placement);
   }
 
   function positionRoleOptions(entry) {
@@ -1046,6 +1052,29 @@
     };
   }
 
+  function worldDropPlacement(event, sideName) {
+    const list = event.target?.closest?.(`[data-wb-list="${sideName}"]`);
+    if (!list) return null;
+    const cards = Array.from(list.children).filter(node => node.matches?.('.pmm-wb-entry[data-wb-entry]'));
+    if (!cards.length) return { targetKey:'', position:'after' };
+    const directCard = event.target?.closest?.('.pmm-wb-entry[data-wb-entry]');
+    if (directCard && directCard.parentElement === list) {
+      const rect = directCard.getBoundingClientRect();
+      return {
+        targetKey: decodeId(directCard.dataset.wbEntry),
+        position: Number(event.clientY) < rect.top + rect.height / 2 ? 'before' : 'after',
+      };
+    }
+    const y = Number(event.clientY);
+    for (const card of cards) {
+      const rect = card.getBoundingClientRect();
+      if (y < rect.top + rect.height / 2) {
+        return { targetKey:decodeId(card.dataset.wbEntry), position:'before' };
+      }
+    }
+    return { targetKey:decodeId(cards[cards.length - 1].dataset.wbEntry), position:'after' };
+  }
+
   function clearNativeDropIndicators() {
     state.nativeTop?.querySelectorAll('.prompt-item--drop-before,.prompt-item--drop-after,.prompt-card--drop-before,.prompt-card--drop-after,.prompt-panel__list--drop-target').forEach(node => {
       node.classList.remove('prompt-item--drop-before', 'prompt-item--drop-after', 'prompt-card--drop-before', 'prompt-card--drop-after', 'prompt-panel__list--drop-target');
@@ -1053,17 +1082,24 @@
   }
 
   function clearWorldDropIndicators() {
-    state.host?.querySelectorAll?.('.pmm-wb-list--drop-target,.pmm-wb-panel--drop-target').forEach(node => {
-      node.classList.remove('pmm-wb-list--drop-target', 'pmm-wb-panel--drop-target');
+    state.host?.querySelectorAll?.('.pmm-wb-entry--drop-before,.pmm-wb-entry--drop-after,.pmm-wb-list--drop-empty,.pmm-wb-list--drop-target,.pmm-wb-panel--drop-target').forEach(node => {
+      node.classList.remove('pmm-wb-entry--drop-before', 'pmm-wb-entry--drop-after', 'pmm-wb-list--drop-empty', 'pmm-wb-list--drop-target', 'pmm-wb-panel--drop-target');
     });
   }
 
-  function showWorldDropIndicator(sideName) {
-    const panel = state.host?.querySelector?.(`[data-pmm-wb-panel="${sideName}"]`);
-    const list = panel?.querySelector?.('[data-wb-list]');
+  function showWorldDropIndicator(sideName, placement) {
+    const list = state.host?.querySelector?.(`[data-wb-list="${sideName}"]`);
     clearWorldDropIndicators();
-    panel?.classList.add('pmm-wb-panel--drop-target');
-    list?.classList.add('pmm-wb-list--drop-target');
+    if (!list) return;
+    const card = Array.from(list.children).find(node => (
+      node.matches?.('.pmm-wb-entry[data-wb-entry]')
+      && decodeId(node.dataset.wbEntry) === String(placement?.targetKey || '')
+    ));
+    if (!card) {
+      list.classList.add('pmm-wb-list--drop-empty');
+      return;
+    }
+    card.classList.add(placement?.position === 'before' ? 'pmm-wb-entry--drop-before' : 'pmm-wb-entry--drop-after');
   }
 
   function onDragStart(event) {
@@ -1101,7 +1137,7 @@
     event.preventDefault();
     if (event.dataTransfer) event.dataTransfer.dropEffect = 'copy';
     if (nativeList) clearWorldDropIndicators();
-    else showWorldDropIndicator(targetSide);
+    else showWorldDropIndicator(targetSide, worldDropPlacement(event, targetSide));
   }
 
   function onDrop(event) {
@@ -1113,7 +1149,7 @@
     if (!targetSide || targetSide === dragPayload.from) return;
     event.preventDefault();
     event.stopPropagation();
-    const placement = nativeList ? nativeDropPlacement(event) : null;
+    const placement = nativeList ? nativeDropPlacement(event) : worldDropPlacement(event, targetSide);
     const payload = dragPayload;
     dragPayload = null;
     clearNativeDropIndicators();
@@ -1190,8 +1226,7 @@
 .pmm-wb-tool{width:27px;height:27px;min-width:27px;padding:0;border:0;border-radius:5px;background:transparent;color:var(--pm-text-secondary,currentColor);display:inline-flex;align-items:center;justify-content:center;opacity:.72}.pmm-wb-tool:active:not(:disabled){transform:scale(.94)}.pmm-wb-tool:disabled{opacity:.22}.pmm-wb-tool i{font-size:10px}.pmm-wb-status{font-size:9px;opacity:.5;white-space:nowrap}
 .pmm-wb-search-bar{min-height:38px;display:flex;align-items:center;gap:7px;padding:5px 9px;border-bottom:1px solid var(--pm-border,rgba(127,127,127,.12))}.pmm-wb-search-bar input{flex:1;min-width:0;height:28px;padding:0 8px;border:1px solid var(--pm-border,rgba(127,127,127,.16));border-radius:7px;background:var(--pm-card-bg,rgba(127,127,127,.05));color:inherit}.pmm-wb-search-bar span{font-size:10px;opacity:.55}
 .pmm-wb-content{flex:1;min-height:0;overflow:hidden}.pmm-wb-list{height:100%;min-height:0;overflow:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;padding:7px;display:flex;flex-direction:column;gap:var(--pmm-user-item-gap,5px)}
-#preset-manager-main-panel .pmm-wb-inline-panel.pmm-wb-panel--drop-target{border-color:var(--pm-quote-color,#3485f6)!important;box-shadow:0 0 0 1px var(--pm-quote-color,#3485f6),0 4px 18px rgba(0,0,0,.10)!important}.pmm-wb-list.pmm-wb-list--drop-target{box-shadow:inset 0 3px 0 var(--pm-quote-color,#3485f6)!important}
-.pmm-wb-entry{flex:none;border:1px solid var(--pm-border,rgba(127,127,127,.14));border-radius:10px;background:var(--pm-card-bg,rgba(255,255,255,.68));overflow:hidden}.pmm-wb-entry.is-expanded{border-color:color-mix(in srgb,var(--pm-quote-color,#3485f6) 58%,transparent)}.pmm-wb-entry-head{min-height:var(--pmm-user-item-height,43px);display:flex;align-items:center;gap:6px;padding:3px 8px}.pmm-wb-entry-head button{border:0;background:transparent;color:inherit}.pmm-wb-check,.pmm-wb-expand{width:27px;height:29px;padding:0;opacity:.68}.pmm-wb-check.is-selected{color:var(--pm-quote-color,#3485f6);opacity:1}.pmm-wb-entry-title{min-width:0;flex:1;text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:var(--pmm-user-item-font,12px)}
+.pmm-wb-entry{position:relative;flex:none;border:1px solid var(--pm-border,rgba(127,127,127,.14));border-radius:10px;background:var(--pm-card-bg,rgba(255,255,255,.68));overflow:hidden}.pmm-wb-entry.is-expanded{border-color:color-mix(in srgb,var(--pm-quote-color,#3485f6) 58%,transparent)}.pmm-wb-entry.pmm-wb-entry--drop-before,.pmm-wb-entry.pmm-wb-entry--drop-after{overflow:visible}.pmm-wb-entry--drop-before::before,.pmm-wb-entry--drop-after::after{content:"";position:absolute;left:8px;right:8px;height:2px;border-radius:2px;background:var(--pm-quote-color,#3485f6);box-shadow:0 0 5px color-mix(in srgb,var(--pm-quote-color,#3485f6) 70%,transparent);z-index:30;pointer-events:none}.pmm-wb-entry--drop-before::before{top:-4px}.pmm-wb-entry--drop-after::after{bottom:-4px}.pmm-wb-list.pmm-wb-list--drop-empty{position:relative}.pmm-wb-list.pmm-wb-list--drop-empty::before{content:"";position:absolute;top:7px;left:15px;right:15px;height:2px;border-radius:2px;background:var(--pm-quote-color,#3485f6);box-shadow:0 0 5px color-mix(in srgb,var(--pm-quote-color,#3485f6) 70%,transparent);z-index:30;pointer-events:none}.pmm-wb-entry-head{min-height:var(--pmm-user-item-height,43px);display:flex;align-items:center;gap:6px;padding:3px 8px}.pmm-wb-entry-head button{border:0;background:transparent;color:inherit}.pmm-wb-check,.pmm-wb-expand{width:27px;height:29px;padding:0;opacity:.68}.pmm-wb-check.is-selected{color:var(--pm-quote-color,#3485f6);opacity:1}.pmm-wb-entry-title{min-width:0;flex:1;text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:var(--pmm-user-item-font,12px)}
 .pmm-wb-dot{width:7px;height:7px;border-radius:50%;flex:none;box-shadow:0 0 6px currentColor}.pmm-wb-dot.is-blue{color:#3485f6;background:#3485f6}.pmm-wb-dot.is-green{color:#19bf72;background:#19bf72}.pmm-wb-toggle{width:25px!important;height:14px!important;min-width:25px!important;border-radius:8px!important;padding:1.5px!important;background:#9ba3ad!important;flex:none}.pmm-wb-toggle span{display:block;width:11px;height:11px;border-radius:50%;background:#fff;transition:transform .15s}.pmm-wb-toggle.is-on{background:var(--pm-quote-color,#2878ed)!important}.pmm-wb-toggle.is-on span{transform:translateX(11px)}
 .pmm-wb-details{padding:7px 9px 9px;border-top:1px solid var(--pm-border,rgba(127,127,127,.10));display:flex;flex-direction:column;gap:6px;font-size:10px!important;line-height:1.35}.pmm-wb-details label,.pmm-wb-wide-field{display:flex;flex-direction:column;gap:2px;min-width:0}.pmm-wb-details label>span,.pmm-wb-field-head>span:first-child{font-size:8.5px!important;line-height:1.2;opacity:.62}.pmm-wb-details input,.pmm-wb-details select,.pmm-wb-details textarea{width:100%;min-height:26px!important;border:1px solid var(--pm-border,rgba(127,127,127,.17));border-radius:6px;background:var(--pm-card-bg,rgba(127,127,127,.05));color:inherit;padding:4px 6px!important;font-size:10.5px!important;line-height:1.35!important}.pmm-wb-details textarea{min-height:132px!important;resize:vertical}.pmm-wb-detail-row{display:flex;align-items:flex-end;gap:6px}.pmm-wb-detail-row label:first-child{flex:1}.pmm-wb-title-row .pmm-wb-strategy{align-self:flex-end;height:26px!important;min-width:50px!important;padding:0 6px!important;border:1px solid currentColor;border-radius:7px;background:transparent;font-size:9px!important;line-height:1!important}.pmm-wb-strategy span{display:inline-block;width:6px;height:6px;margin-right:3px;border-radius:50%;background:currentColor}.pmm-wb-strategy.is-blue{color:#3485f6}.pmm-wb-strategy.is-green{color:#19bf72}.pmm-wb-meta-grid{display:grid;grid-template-columns:minmax(130px,2fr) minmax(58px,.65fr);gap:6px}.pmm-wb-meta-grid.has-depth{grid-template-columns:minmax(120px,2fr) repeat(2,minmax(52px,.6fr))}.pmm-wb-meta-grid .is-outlet{grid-column:1/-1}.pmm-wb-field-head{min-height:19px;display:flex;align-items:center;justify-content:space-between;gap:6px}.pmm-wb-content-tools{display:flex;align-items:center;gap:5px}.pmm-wb-content-tools small{font-size:8.5px;opacity:.58}.pmm-wb-content-tools button{width:22px;height:20px;padding:0;border:0;border-radius:5px;background:transparent;color:inherit;opacity:.7}.pmm-wb-content-tools button:active{transform:scale(.94)}.pmm-wb-more{flex:none;border:1px dashed var(--pm-border,rgba(127,127,127,.22));border-radius:8px;background:transparent;color:inherit;padding:8px;opacity:.65}.pmm-wb-empty{margin:auto;padding:24px;text-align:center;opacity:.52}
 .pmm-wb-editor-overlay{position:absolute;inset:0;z-index:16000;display:flex;align-items:center;justify-content:center;padding:max(12px,env(safe-area-inset-top)) 12px max(12px,env(safe-area-inset-bottom));background:rgba(0,0,0,.43);backdrop-filter:blur(5px);-webkit-backdrop-filter:blur(5px);color:var(--pmm-wb-editor-text,#222)}.pmm-wb-editor-dialog{width:min(92%,660px);height:min(82%,680px);max-height:calc(100dvh - 28px);min-height:250px;display:flex;flex-direction:column;overflow:hidden;border:1px solid var(--pmm-wb-editor-border,rgba(127,127,127,.22));border-radius:13px;background-color:var(--pmm-wb-editor-bg,#fff);background-image:var(--pmm-wb-editor-bg-image,none);color:var(--pmm-wb-editor-text,#222);box-shadow:0 18px 52px rgba(0,0,0,.36)}.pmm-wb-editor-dialog header{min-height:42px;display:flex;align-items:center;gap:7px;padding:6px 8px;border-bottom:1px solid var(--pmm-wb-editor-border,rgba(127,127,127,.14))}.pmm-wb-editor-dialog header strong{min-width:0;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px}.pmm-wb-editor-dialog header span{font-size:9px;opacity:.58;white-space:nowrap}.pmm-wb-editor-dialog header button{width:28px;height:28px;padding:0;border:0;border-radius:7px;background:color-mix(in srgb,var(--pmm-wb-editor-text,#222) 8%,transparent);color:inherit}.pmm-wb-editor-dialog header button:disabled{opacity:.28}.pmm-wb-editor-dialog header button[data-wb-editor-save]{color:var(--pmm-wb-editor-accent,#3485f6)}.pmm-wb-editor-dialog textarea{flex:1;min-height:0;width:auto;margin:8px;padding:10px;border:1px solid var(--pmm-wb-editor-border,rgba(127,127,127,.18));border-radius:9px;background:var(--pmm-wb-editor-field-bg,rgba(127,127,127,.05));color:var(--pmm-wb-editor-text,#222);font-size:12px!important;line-height:1.55!important;resize:none}
@@ -1326,4 +1361,5 @@
   DOC.addEventListener('dragend', clearDrag, true);
   TOP[API_KEY] = { open, close, cleanup, state };
   console.info('[预设工坊测试版] test.3 世界书已接入原生双卡片布局。');
+  console.info('[预设工坊测试版] test.29 已加载：世界书条目按蓝色落点线插入目标位置。');
 })();

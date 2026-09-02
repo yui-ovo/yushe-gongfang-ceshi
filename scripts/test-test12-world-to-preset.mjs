@@ -16,7 +16,7 @@ for (const marker of [
   'function insertPresetEntries(prompts, additions, placement = null)',
   "placement.position === 'after' ? 1 : 0",
   'function nativeDropPlacement(event)',
-  'const placement = nativeList ? nativeDropPlacement(event) : null;',
+  'const placement = nativeList ? nativeDropPlacement(event) : worldDropPlacement(event, targetSide);',
   'clearNativeDropIndicators();',
 ]) {
   assert.ok(source.includes(marker), `test.12 世界书拖入预设缺少实现：${marker}`);
