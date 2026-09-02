@@ -986,6 +986,43 @@
     const textarea = panel?.querySelector?.(`[data-wb-key="${safeId(key)}"][data-wb-field="content"]`);
     textarea?.closest?.('.pmm-wb-content-search-wrap')?.classList?.add('is-editing');
     textarea?.focus?.({ preventScroll: true });
+    keepWorldContentEditorVisible(textarea);
+  }
+
+  function clearWorldContentEditorShift(textarea) {
+    const card = textarea?.closest?.('.pmm-wb-inline-panel');
+    if (!card) return;
+    card.removeAttribute('data-pmm-wb-keyboard-shift');
+    card.style.removeProperty('--pmm-wb-keyboard-shift');
+  }
+
+  function shiftWorldContentEditorAboveKeyboard(textarea) {
+    const card = textarea?.closest?.('.pmm-wb-inline-panel');
+    if (!card || !textarea?.isConnected) return;
+    clearWorldContentEditorShift(textarea);
+    const viewport = TOP.visualViewport;
+    const viewportTop = Number(viewport?.offsetTop) || 0;
+    const viewportHeight = Number(viewport?.height) || Number(TOP.innerHeight) || 0;
+    if (!viewportHeight) return;
+    const rect = textarea.getBoundingClientRect();
+    const visibleBottom = viewportTop + viewportHeight - 18;
+    if (rect.top >= viewportTop + 12 && rect.bottom <= visibleBottom) return;
+    const desiredTop = viewportTop + Math.max(70, Math.min(viewportHeight * .4, (viewportHeight - Math.min(rect.height, 180)) / 2));
+    const shift = Math.round(desiredTop - rect.top);
+    if (shift >= 0) return;
+    card.style.setProperty('--pmm-wb-keyboard-shift', `${shift}px`);
+    card.setAttribute('data-pmm-wb-keyboard-shift', '');
+    textarea.scrollIntoView?.({ block: 'nearest', inline: 'nearest', behavior: 'auto' });
+  }
+
+  function keepWorldContentEditorVisible(textarea) {
+    if (!textarea) return;
+    const adjust = () => {
+      if (!state.open || !textarea.isConnected || DOC.activeElement !== textarea) return;
+      shiftWorldContentEditorAboveKeyboard(textarea);
+    };
+    adjust();
+    for (const delay of [80, 240, 520]) TOP.setTimeout(adjust, delay);
   }
 
   function openPresetContentEditor(button) {
@@ -1406,11 +1443,24 @@
   function refreshAfterWorldReplacement(sideName) {
     const side = state[sideName];
     if (!side) return;
+    syncWorldUndoButton(sideName);
     if (selectedWorldSearchMatch(side).match) revealWorldSearchMatch(sideName, false);
     else refreshWorldSearchResults(sideName);
     const otherName = sideName === 'top' ? 'bottom' : 'top';
     const other = state[otherName];
     if (state.topType === 'world' && other?.name === side.name) refreshWorldSearchResults(otherName);
+  }
+
+  function syncWorldUndoButton(sideName) {
+    const side = state[sideName];
+    const button = state.host?.querySelector?.(`[data-pmm-wb-panel="${sideName}"] [data-wb-action="undo"]`);
+    if (!side || !button) return false;
+    const snapshot = side.history[side.history.length - 1];
+    const available = Boolean(snapshot);
+    button.disabled = !available;
+    button.setAttribute('aria-disabled', String(!available));
+    button.title = available ? `撤销：${snapshot.label}` : '暂无可撤销操作';
+    return true;
   }
 
   async function replaceCurrentWorldSearch(sideName) {
@@ -1791,11 +1841,17 @@
 
   function onDocumentFocusOut(event) {
     if (!state.open || !event.target.matches?.('[data-wb-field="content"]')) return;
+    const textarea = event.target;
     const wrapper = event.target.closest?.('.pmm-wb-content-search-wrap');
-    if (!wrapper) return;
     TOP.setTimeout(() => {
-      if (!wrapper.contains(DOC.activeElement)) wrapper.classList.remove('is-editing');
+      if (DOC.activeElement !== textarea) clearWorldContentEditorShift(textarea);
+      if (wrapper && !wrapper.contains(DOC.activeElement)) wrapper.classList.remove('is-editing');
     }, 0);
+  }
+
+  function onDocumentFocusIn(event) {
+    if (!state.open || !event.target.matches?.('[data-wb-field="content"]')) return;
+    keepWorldContentEditorVisible(event.target);
   }
 
   function installStyle() {
@@ -1814,6 +1870,7 @@
 #preset-manager-main-panel .pmm-wb-theme-slot .pmm-mobile-theme-toggle{width:27px!important;min-width:27px!important;height:27px!important;padding:0!important;margin:0!important;border-radius:5px!important;box-shadow:none!important}
 #preset-manager-main-panel .pmm-wb-theme-slot .pmm-mobile-theme-toggle i{font-size:10px!important}
 #preset-manager-main-panel .pmm-wb-inline-panel{min-width:0!important;min-height:0!important;width:100%!important;height:100%!important;display:flex!important;overflow:hidden!important;border:1px solid var(--pm-border,rgba(127,127,127,.17))!important;border-radius:12px!important;background:var(--pm-panel-bg,var(--pm-card-bg,rgba(255,255,255,.96)))!important;color:var(--pm-text-primary,inherit)!important;box-shadow:0 4px 18px rgba(0,0,0,.10)!important}
+#preset-manager-main-panel .pmm-wb-inline-panel[data-pmm-wb-keyboard-shift]{transform:translateY(var(--pmm-wb-keyboard-shift,0px))!important;transition:transform .16s ease!important;z-index:16010!important}
 .pmm-wb-main-content{width:100%;height:100%;min-height:0;display:flex;flex-direction:column;overflow:hidden}
 .pmm-wb-header{height:46px;min-height:46px;display:flex;align-items:center;justify-content:space-between;gap:5px;padding:5px 7px;border-bottom:1px solid var(--pm-border,rgba(127,127,127,.12));background:var(--pm-toolbar-bg,transparent)}
 .pmm-wb-header-left,.pmm-wb-header-right,.pmm-wb-title-row{display:flex;align-items:center;gap:3px;min-width:0}.pmm-wb-header-left{flex:1}.pmm-wb-header-right{flex:0 0 auto}
@@ -1821,6 +1878,7 @@
 .pmm-wb-kind-switch button{width:25px;height:23px;padding:0;border:0;border-radius:5px;background:transparent;color:var(--pm-text-secondary,currentColor);opacity:.62;display:inline-flex;align-items:center;justify-content:center}.pmm-wb-kind-switch button.is-active{background:var(--pm-quote-color,#3b82f6);color:#fff;opacity:1}.pmm-wb-kind-switch button:active{transform:scale(.94)}.pmm-wb-kind-switch i{font-size:10px}
 #preset-manager-main-panel .pmm-wb-kind-switch--toolbar button.is-active,#preset-manager-main-panel .pmm-wb-kind-switch--toolbar button.is-active>i,#preset-manager-main-panel .pmm-wb-kind-switch--toolbar button.is-active>i::before{color:#fff!important;opacity:1!important;-webkit-text-fill-color:#fff!important}#preset-manager-main-panel .pmm-wb-kind-switch--toolbar button[data-wb-kind="world"].is-active>i{filter:drop-shadow(0 1px 1px rgba(0,0,0,.26))}
 #preset-manager-main-panel[data-pmm-wb-search-theme="light"] .pmm-wb-search-highlight{border-color:transparent!important;background:#d6eefc!important;color:#183f5c!important;-webkit-text-fill-color:#183f5c!important}#preset-manager-main-panel[data-pmm-wb-search-theme="light"] .pmm-wb-search-highlight.is-current{border-color:transparent!important;background:#75bee8!important;color:#163d59!important;-webkit-text-fill-color:#163d59!important;box-shadow:none!important}
+#preset-manager-main-panel[data-pmm-wb-search-theme="light"] .pmm-wb-replace-row:focus-within .pmm-wb-replace-action{background:color-mix(in srgb,var(--pm-text-primary,#1f2937) 48%,var(--pm-panel-bg,#fff))!important;color:var(--pm-text-primary,#1f2937)!important;-webkit-text-fill-color:var(--pm-text-primary,#1f2937)!important;opacity:.9!important}
 .pmm-wb-tool{width:27px;height:27px;min-width:27px;padding:0;border:0;border-radius:5px;background:transparent;color:var(--pm-text-secondary,currentColor);display:inline-flex;align-items:center;justify-content:center;opacity:.72}.pmm-wb-tool:active:not(:disabled){transform:scale(.94)}.pmm-wb-tool:disabled{opacity:.22}.pmm-wb-tool i{font-size:10px}.pmm-wb-status{font-size:9px;opacity:.5;white-space:nowrap}
 .pmm-wb-search-bar{display:flex;flex-direction:column;gap:4px;padding:4px 7px;border-bottom:1px solid var(--pm-border,rgba(127,127,127,.12))}.pmm-wb-search-primary{min-height:26px;display:flex;align-items:center;gap:4px;min-width:0}.pmm-wb-search-primary>i{width:13px;flex:none;font-size:10px;opacity:.62;text-align:center}.pmm-wb-search-input-wrap{position:relative;min-width:48px;flex:1;display:block}.pmm-wb-search-input-wrap input{box-sizing:border-box;width:100%;height:26px;padding:0 37px 0 6px;border:1px solid var(--pm-border,rgba(127,127,127,.16));border-radius:6px;background:var(--pm-card-bg,rgba(127,127,127,.05));color:inherit;font-size:11px}.pmm-wb-search-count{position:absolute;right:6px;top:50%;transform:translateY(-50%);min-width:27px;font-size:9px;line-height:1;opacity:.58;text-align:right;white-space:nowrap;pointer-events:none}.pmm-wb-replace-toggle{width:22px;height:23px;min-width:22px;padding:0;border:0;border-radius:4px;background:transparent;color:inherit;opacity:.34}.pmm-wb-replace-toggle i{font-size:9px}.pmm-wb-replace-toggle.is-active{background:color-mix(in srgb,currentColor 10%,transparent);opacity:.9}.pmm-wb-search-nav{width:19px;height:23px;min-width:19px;padding:0;border:0;border-radius:4px;background:transparent;color:inherit;opacity:.68}.pmm-wb-search-nav:disabled{opacity:.22}.pmm-wb-search-nav i{font-size:8px}.pmm-wb-search-scope{flex:none;display:inline-flex;align-items:center;overflow:hidden;border-left:1px solid var(--pm-border,rgba(127,127,127,.16));border-radius:6px;background:color-mix(in srgb,currentColor 5%,transparent)}.pmm-wb-search-scope button{height:25px;padding:0 5px;border:0;border-right:1px solid var(--pm-border,rgba(127,127,127,.12));background:transparent;color:inherit;font-size:9px;white-space:nowrap;opacity:.66}.pmm-wb-search-scope button:last-child{border-right:0}.pmm-wb-search-scope button.is-active{background:var(--pm-quote-color,#3485f6);color:#fff;opacity:1}.pmm-wb-replace-row{display:none;align-items:center;gap:4px;min-width:0}.pmm-wb-replace-row.is-open{display:flex}.pmm-wb-replace-row input{box-sizing:border-box;min-width:0;flex:1;height:26px;padding:0 6px;border:1px solid var(--pm-border,rgba(127,127,127,.16));border-radius:6px;background:var(--pm-card-bg,rgba(127,127,127,.05));color:inherit;font-size:11px}.pmm-wb-replace-action{height:26px;min-width:42px;padding:0 7px;border:0;border-radius:6px;background:color-mix(in srgb,currentColor 9%,transparent);color:inherit;font-size:9px;opacity:.38;white-space:nowrap}.pmm-wb-replace-action:last-child{min-width:57px}.pmm-wb-replace-row:focus-within .pmm-wb-replace-action{background:var(--pm-text-primary,currentColor);color:var(--pm-panel-bg,#fff);opacity:.93}.pmm-wb-search-highlight{padding:0 1px;border:1px solid color-mix(in srgb,var(--pm-quote-color,#3485f6) 55%,transparent);border-radius:2px;background:color-mix(in srgb,var(--pm-quote-color,#3485f6) 38%,transparent);color:inherit}.pmm-wb-search-highlight.is-current{border-color:var(--pm-quote-color,#3485f6);background:color-mix(in srgb,var(--pm-quote-color,#3485f6) 82%,transparent);box-shadow:0 0 0 1px color-mix(in srgb,var(--pm-quote-color,#3485f6) 80%,transparent),0 0 9px color-mix(in srgb,var(--pm-quote-color,#3485f6) 72%,transparent);font-weight:750}.pmm-wb-search-hit{flex:none;min-width:14px;padding:1px 3px;border-radius:5px;background:color-mix(in srgb,var(--pm-quote-color,#3485f6) 13%,transparent);color:var(--pm-quote-color,#3485f6);font-size:8px;text-align:center}.pmm-wb-entry--search-current{border-color:var(--pm-quote-color,#3485f6)!important;box-shadow:0 0 0 1px color-mix(in srgb,var(--pm-quote-color,#3485f6) 28%,transparent)}
 .pmm-wb-content{flex:1;min-height:0;overflow:hidden}.pmm-wb-list{height:100%;min-height:0;overflow:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;padding:7px;display:flex;flex-direction:column;gap:var(--pmm-user-item-gap,5px)}
@@ -1939,6 +1997,7 @@
     DOC.removeEventListener('click', onDocumentClick, true);
     DOC.removeEventListener('change', onDocumentChange, true);
     DOC.removeEventListener('input', onDocumentInput, true);
+    DOC.removeEventListener('focusin', onDocumentFocusIn, true);
     DOC.removeEventListener('focusout', onDocumentFocusOut, true);
     DOC.removeEventListener('dragstart', onDragStart, true);
     DOC.removeEventListener('dragover', onDragOver, true);
@@ -1959,6 +2018,7 @@
   DOC.addEventListener('click', onDocumentClick, true);
   DOC.addEventListener('change', onDocumentChange, true);
   DOC.addEventListener('input', onDocumentInput, true);
+  DOC.addEventListener('focusin', onDocumentFocusIn, true);
   DOC.addEventListener('focusout', onDocumentFocusOut, true);
   DOC.addEventListener('dragstart', onDragStart, true);
   DOC.addEventListener('dragover', onDragOver, true);

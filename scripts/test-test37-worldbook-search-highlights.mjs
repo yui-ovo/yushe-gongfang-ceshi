@@ -26,6 +26,13 @@ for (const marker of [
   'background:#d6eefc!important',
   'background:#75bee8!important',
   'box-shadow:none!important',
+  'function keepWorldContentEditorVisible(textarea)',
+  'function shiftWorldContentEditorAboveKeyboard(textarea)',
+  'data-pmm-wb-keyboard-shift',
+  'function syncWorldUndoButton(sideName)',
+  'syncWorldUndoButton(sideName);',
+  '48%,var(--pm-panel-bg,#fff)',
+  "DOC.addEventListener('focusin', onDocumentFocusIn, true)",
 ]) {
   assert.ok(source.includes(marker), `test.37 缺少世界书搜索高亮实现：${marker}`);
 }
@@ -59,4 +66,8 @@ assert.equal(dayThemeAttribute('light'), 'light', '日间模式必须启用独�
 assert.equal(dayThemeAttribute('dark'), '', '夜间模式不应套用日间浅蓝高亮');
 assert.equal(dayThemeAttribute('auto'), '', '魔法棒模式不应套用日间浅蓝高亮');
 
-console.log('test.37 回归通过：世界书正文高亮、当前命中强化、日间冰蓝／天蓝、夜间／魔法棒主题色、正文滚动定位与选中世界书图标的高对比显示均已覆盖。');
+const undoAvailability = history => Boolean(history.at(-1));
+assert.equal(undoAvailability([{ label: '删除 1 处匹配文字' }]), true, '删除后必须立即提供撤销');
+assert.equal(undoAvailability([]), false, '没有历史时撤销仍应禁用');
+
+console.log('test.37 回归通过：世界书正文高亮、键盘避让、替换撤销、日间按钮柔化、主题色与选中世界书图标的高对比显示均已覆盖。');
