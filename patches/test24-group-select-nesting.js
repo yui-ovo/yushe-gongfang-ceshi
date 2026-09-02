@@ -105,9 +105,7 @@
     const selected = aggregate(group, children, 'selectedCount');
     const all = total > 0 && selected >= total;
     const partial = selected > 0 && !all;
-    button.querySelector('i').className = all
-      ? 'fa-solid fa-square-check'
-      : partial ? 'fa-solid fa-square-minus' : 'fa-regular fa-square';
+    button.querySelector('i').className = 'fa-solid fa-check-double';
     button.classList.toggle('pmm-section-select-all--checked', all);
     button.classList.toggle('pmm-section-select-all--partial', partial);
     button.title = all
@@ -120,7 +118,7 @@
     const button = DOC.createElement('button');
     button.type = 'button';
     button.className = `section-action ${SELECT_CLASS}`;
-    button.innerHTML = '<i class="fa-regular fa-square"></i>';
+    button.innerHTML = '<i class="fa-solid fa-check-double"></i>';
     button.addEventListener('click', event => {
       event.preventDefault();
       event.stopPropagation();
@@ -304,8 +302,14 @@
     style.textContent = `
 ${PANEL_SELECTOR} .section-header__actions > button[hidden] { display: none !important; }
 ${PANEL_SELECTOR} .${SELECT_CLASS} { flex: 0 0 26px; }
-${PANEL_SELECTOR} .${SELECT_CLASS} .fa-square-check { color: var(--pm-quote-color, var(--pm-accent)); }
-${PANEL_SELECTOR} .${SELECT_CLASS} .fa-square-minus { color: var(--pm-quote-color, var(--pm-accent)); opacity: .86; }
+${PANEL_SELECTOR} .${SELECT_CLASS} i { transition: color .18s ease, opacity .18s ease, transform .18s ease; }
+${PANEL_SELECTOR} .${SELECT_CLASS}.${SELECT_CLASS}--partial i { color: var(--pm-quote-color, var(--pm-accent)); opacity: .76; }
+${PANEL_SELECTOR} .${SELECT_CLASS}.${SELECT_CLASS}--checked {
+  color: var(--pm-quote-color, var(--pm-accent)) !important;
+  border-color: color-mix(in srgb, var(--pm-quote-color, var(--pm-accent)) 48%, transparent) !important;
+  background: color-mix(in srgb, var(--pm-quote-color, var(--pm-accent)) 15%, transparent) !important;
+}
+${PANEL_SELECTOR} .${SELECT_CLASS}.${SELECT_CLASS}--checked i { color: var(--pm-quote-color, var(--pm-accent)); opacity: 1; transform: scale(1.04); }
 ${PANEL_SELECTOR} .pmm-nested-section-layout { position: relative !important; }
 ${PANEL_SELECTOR} .${SLOT_CLASS} { box-sizing: border-box; width: 100%; flex: 0 0 auto; pointer-events: none; }
 ${PANEL_SELECTOR} .section-group.pmm-nested-section--visual {

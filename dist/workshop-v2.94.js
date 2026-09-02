@@ -12753,9 +12753,7 @@ html.pmm-tauri-dnd-active #preset-manager-main-panel { user-select: none !import
     const selected = aggregate(group, children, 'selectedCount');
     const all = total > 0 && selected >= total;
     const partial = selected > 0 && !all;
-    button.querySelector('i').className = all
-      ? 'fa-solid fa-square-check'
-      : partial ? 'fa-solid fa-square-minus' : 'fa-regular fa-square';
+    button.querySelector('i').className = 'fa-solid fa-check-double';
     button.classList.toggle('pmm-section-select-all--checked', all);
     button.classList.toggle('pmm-section-select-all--partial', partial);
     button.title = all
@@ -12768,7 +12766,7 @@ html.pmm-tauri-dnd-active #preset-manager-main-panel { user-select: none !import
     const button = DOC.createElement('button');
     button.type = 'button';
     button.className = `section-action ${SELECT_CLASS}`;
-    button.innerHTML = '<i class="fa-regular fa-square"></i>';
+    button.innerHTML = '<i class="fa-solid fa-check-double"></i>';
     button.addEventListener('click', event => {
       event.preventDefault();
       event.stopPropagation();
@@ -12952,8 +12950,14 @@ html.pmm-tauri-dnd-active #preset-manager-main-panel { user-select: none !import
     style.textContent = `
 ${PANEL_SELECTOR} .section-header__actions > button[hidden] { display: none !important; }
 ${PANEL_SELECTOR} .${SELECT_CLASS} { flex: 0 0 26px; }
-${PANEL_SELECTOR} .${SELECT_CLASS} .fa-square-check { color: var(--pm-quote-color, var(--pm-accent)); }
-${PANEL_SELECTOR} .${SELECT_CLASS} .fa-square-minus { color: var(--pm-quote-color, var(--pm-accent)); opacity: .86; }
+${PANEL_SELECTOR} .${SELECT_CLASS} i { transition: color .18s ease, opacity .18s ease, transform .18s ease; }
+${PANEL_SELECTOR} .${SELECT_CLASS}.${SELECT_CLASS}--partial i { color: var(--pm-quote-color, var(--pm-accent)); opacity: .76; }
+${PANEL_SELECTOR} .${SELECT_CLASS}.${SELECT_CLASS}--checked {
+  color: var(--pm-quote-color, var(--pm-accent)) !important;
+  border-color: color-mix(in srgb, var(--pm-quote-color, var(--pm-accent)) 48%, transparent) !important;
+  background: color-mix(in srgb, var(--pm-quote-color, var(--pm-accent)) 15%, transparent) !important;
+}
+${PANEL_SELECTOR} .${SELECT_CLASS}.${SELECT_CLASS}--checked i { color: var(--pm-quote-color, var(--pm-accent)); opacity: 1; transform: scale(1.04); }
 ${PANEL_SELECTOR} .pmm-nested-section-layout { position: relative !important; }
 ${PANEL_SELECTOR} .${SLOT_CLASS} { box-sizing: border-box; width: 100%; flex: 0 0 auto; pointer-events: none; }
 ${PANEL_SELECTOR} .section-group.pmm-nested-section--visual {
@@ -13021,4 +13025,222 @@ ${PANEL_SELECTOR} .section-group.pmm-nested-section--hidden { display: none !imp
   TOP[API_KEY] = { cleanup, scan, toggleGroupSelection };
   schedule();
   console.info('[预设工坊] test.24 已加载：多选模式支持组内全选，同组连续条目可原位建立一层工坊子分组。');
+})();
+
+
+/* ===== PMM_TAURI_EDITOR_OVERFLOW_TEST26：Tauri iOS 展开编辑器防溢出 ===== */
+;(() => {
+  'use strict';
+
+  const TOP = (() => { try { return window.top || window; } catch (_) { return window; } })();
+  const DOC = (() => { try { return TOP.document || document; } catch (_) { return document; } })();
+  const tauriHost = (() => { try { return TOP.__TAURITAVERN__ || null; } catch (_) { return null; } })();
+  const ua = String(TOP.navigator?.userAgent || '');
+  const platform = String(TOP.navigator?.userAgentData?.platform || TOP.navigator?.platform || '');
+  const isIOS = /iPad|iPhone|iPod/i.test(ua) || (/Mac/i.test(platform) && Number(TOP.navigator?.maxTouchPoints || 0) > 1);
+  if (!tauriHost || !isIOS) return;
+
+  const API_KEY = '__PMM_TAURI_EDITOR_OVERFLOW_TEST26__';
+  const STYLE_ID = 'pmm-tauri-editor-overflow-test26';
+  const ROOT_CLASS = 'pmm-tauri-ios-editor-fix';
+  const COMPACT_CLASS = 'pmm-content-header--compact';
+  const PANEL_SELECTOR = '#preset-manager-main-panel';
+  const HEADER_SELECTOR = `${PANEL_SELECTOR} .prompt-editor__content-header`;
+
+  try { TOP[API_KEY]?.cleanup?.(); } catch (_) {}
+
+  const win = DOC.defaultView || TOP;
+  let mutationObserver = null;
+  let resizeObserver = null;
+  let scheduledFrame = 0;
+  const observedHeaders = new Set();
+
+  function installStyle() {
+    DOC.getElementById(STYLE_ID)?.remove();
+    const style = DOC.createElement('style');
+    style.id = STYLE_ID;
+    style.textContent = `
+html.${ROOT_CLASS} ${PANEL_SELECTOR} .prompt-editor {
+  box-sizing: border-box !important;
+  width: calc(100% - 20px) !important;
+  max-width: calc(100% - 20px) !important;
+  min-width: 0 !important;
+  align-self: flex-start !important;
+  margin-left: 0 !important;
+  margin-right: 20px !important;
+  overflow: hidden !important;
+}
+html.${ROOT_CLASS} ${PANEL_SELECTOR} .prompt-editor__header-row,
+html.${ROOT_CLASS} ${PANEL_SELECTOR} .prompt-editor__name-group,
+html.${ROOT_CLASS} ${PANEL_SELECTOR} .prompt-editor__position-group,
+html.${ROOT_CLASS} ${PANEL_SELECTOR} .prompt-editor__content-section,
+html.${ROOT_CLASS} ${PANEL_SELECTOR} .prompt-editor__content-header,
+html.${ROOT_CLASS} ${PANEL_SELECTOR} .inline-editor-container,
+html.${ROOT_CLASS} ${PANEL_SELECTOR} .inline-editor-container__inner {
+  box-sizing: border-box !important;
+  min-width: 0 !important;
+  max-width: 100% !important;
+}
+html.${ROOT_CLASS} ${PANEL_SELECTOR} .prompt-editor__header-row {
+  width: 100% !important;
+  overflow-x: hidden !important;
+}
+html.${ROOT_CLASS} ${PANEL_SELECTOR} .prompt-editor__name-group {
+  flex: 1 1 100% !important;
+  width: 100% !important;
+}
+html.${ROOT_CLASS} ${PANEL_SELECTOR} .prompt-editor__position-group {
+  flex: 0 1 auto !important;
+  width: auto !important;
+  flex-wrap: wrap !important;
+}
+html.${ROOT_CLASS} ${PANEL_SELECTOR} .prompt-editor__name-input {
+  box-sizing: border-box !important;
+  flex: 1 1 0 !important;
+  width: auto !important;
+  min-width: 0 !important;
+  max-width: 100% !important;
+}
+html.${ROOT_CLASS} ${PANEL_SELECTOR} .prompt-editor__content-section,
+html.${ROOT_CLASS} ${PANEL_SELECTOR} .prompt-editor__content-header {
+  width: 100% !important;
+  overflow-x: hidden !important;
+}
+html.${ROOT_CLASS} ${PANEL_SELECTOR} .prompt-editor__textarea {
+  box-sizing: border-box !important;
+  display: block !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  min-width: 0 !important;
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+  white-space: pre-wrap !important;
+  overflow-wrap: anywhere !important;
+  word-break: break-word !important;
+  overflow-x: hidden !important;
+}
+html.${ROOT_CLASS} ${PANEL_SELECTOR} .${COMPACT_CLASS} {
+  display: grid !important;
+  grid-template-columns: auto auto minmax(0, 1fr) auto !important;
+  grid-template-areas:
+    "label-icon label tools tools"
+    ". . count expand" !important;
+  align-items: center !important;
+  column-gap: 5px !important;
+  row-gap: 3px !important;
+}
+html.${ROOT_CLASS} ${PANEL_SELECTOR} .${COMPACT_CLASS} > .prompt-editor__label-icon { grid-area: label-icon; }
+html.${ROOT_CLASS} ${PANEL_SELECTOR} .${COMPACT_CLASS} > .prompt-editor__label { grid-area: label; }
+html.${ROOT_CLASS} ${PANEL_SELECTOR} .${COMPACT_CLASS} > .pmm-variable-tools {
+  grid-area: tools;
+  justify-self: start;
+  margin-left: 0 !important;
+  min-width: 0 !important;
+}
+html.${ROOT_CLASS} ${PANEL_SELECTOR} .${COMPACT_CLASS} > .prompt-editor__char-count {
+  grid-area: count;
+  justify-self: end;
+  margin-left: 0 !important;
+  min-width: 0 !important;
+  white-space: nowrap !important;
+}
+html.${ROOT_CLASS} ${PANEL_SELECTOR} .${COMPACT_CLASS} > .prompt-editor__expand-btn {
+  grid-area: expand;
+  justify-self: end;
+  flex: 0 0 24px !important;
+}
+`;
+    (DOC.head || DOC.documentElement).appendChild(style);
+  }
+
+  function pixels(value) {
+    const parsed = Number.parseFloat(value);
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+
+  function intrinsicWidth(element) {
+    const style = win.getComputedStyle(element);
+    const rectWidth = element.getBoundingClientRect?.().width || 0;
+    return Math.max(element.scrollWidth || 0, rectWidth)
+      + pixels(style.marginLeft)
+      + pixels(style.marginRight);
+  }
+
+  function needsCompactLayout(header) {
+    const children = Array.from(header.children || []).filter(element => {
+      const style = win.getComputedStyle(element);
+      return style.display !== 'none' && style.visibility !== 'hidden';
+    });
+    if (!children.length) return false;
+
+    const style = win.getComputedStyle(header);
+    const originalGap = 8;
+    const requiredWidth = children.reduce((sum, element) => sum + intrinsicWidth(element), 0)
+      + originalGap * Math.max(0, children.length - 1)
+      + pixels(style.paddingLeft)
+      + pixels(style.paddingRight);
+    return requiredWidth > header.clientWidth + 1;
+  }
+
+  function updateHeader(header) {
+    if (!header?.isConnected) return;
+    header.classList.toggle(COMPACT_CLASS, needsCompactLayout(header));
+  }
+
+  function scan() {
+    scheduledFrame = 0;
+    const headers = Array.from(DOC.querySelectorAll(HEADER_SELECTOR));
+    for (const header of headers) {
+      if (!observedHeaders.has(header)) {
+        observedHeaders.add(header);
+        resizeObserver?.observe?.(header);
+      }
+      for (const child of header.children || []) resizeObserver?.observe?.(child);
+      updateHeader(header);
+    }
+    for (const header of Array.from(observedHeaders)) {
+      if (header.isConnected) continue;
+      resizeObserver?.unobserve?.(header);
+      observedHeaders.delete(header);
+    }
+  }
+
+  function schedule() {
+    if (scheduledFrame) return;
+    scheduledFrame = win.requestAnimationFrame(scan);
+  }
+
+  function onResize() {
+    schedule();
+  }
+
+  function cleanup() {
+    if (scheduledFrame) win.cancelAnimationFrame(scheduledFrame);
+    scheduledFrame = 0;
+    mutationObserver?.disconnect?.();
+    resizeObserver?.disconnect?.();
+    mutationObserver = null;
+    resizeObserver = null;
+    observedHeaders.clear();
+    TOP.removeEventListener?.('resize', onResize);
+    TOP.removeEventListener?.('orientationchange', onResize);
+    DOC.querySelectorAll(`.${COMPACT_CLASS}`).forEach(element => element.classList.remove(COMPACT_CLASS));
+    DOC.documentElement.classList.remove(ROOT_CLASS);
+    DOC.getElementById(STYLE_ID)?.remove();
+    try { if (TOP[API_KEY]?.cleanup === cleanup) delete TOP[API_KEY]; } catch (_) {}
+  }
+
+  DOC.documentElement.classList.add(ROOT_CLASS);
+  installStyle();
+  resizeObserver = typeof win.ResizeObserver === 'function'
+    ? new win.ResizeObserver(schedule)
+    : null;
+  mutationObserver = new win.MutationObserver(schedule);
+  mutationObserver.observe(DOC.documentElement, { childList: true, subtree: true, characterData: true });
+  TOP.addEventListener?.('resize', onResize);
+  TOP.addEventListener?.('orientationchange', onResize);
+  scan();
+
+  TOP[API_KEY] = { cleanup, scan, needsCompactLayout, isIOS: true };
+  console.info('[预设工坊] test.26 已加载：TauriTavern iOS 展开编辑框已启用防裁切与按需工具栏换行。');
 })();
