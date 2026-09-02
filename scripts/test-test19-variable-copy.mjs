@@ -9,9 +9,9 @@ assert.ok(renameStart >= 0 && stripStart > renameStart && stripEnd > stripStart,
 
 const uiCopy = source.slice(renameStart, stripEnd);
 for (const wording of [
-  '所有 G 和同名空变量项（只有变量名，无内容）都不变',
-  '可智能保留或同步 G 与同名空变量项（只有变量名，无内容）',
-  '其他条目仍在使用变量“${retainedNames.join(\'、\')}”，因此暂不能清理对应的 G 和同名空变量项（只有变量名，无内容）',
+  '所有 G 和同名空变量项都不变',
+  '可智能保留或同步 G 与同名空变量项',
+  '其他条目仍在使用变量“${retainedNames.join(\'、\')}”，因此暂不能清理对应的 G 和同名空变量项',
   'G 与同名空变量项保持不变',
 ]) {
   assert.ok(uiCopy.includes(wording), `变量弹窗缺少统一文案：${wording}`);

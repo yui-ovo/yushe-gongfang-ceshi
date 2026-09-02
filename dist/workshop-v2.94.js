@@ -4988,14 +4988,27 @@ async function ce(){
     position();
   }
 
-  function showMenu(panel, title, options, hint = '') {
+  function emptyVariableNote(variableName = '变量名') {
+    return {
+      text: '空变量项指：只有变量名，里面没有内容的变量。例如：',
+      example: `{{setvar::${text(variableName) || '变量名'}:: }}`,
+    };
+  }
+
+  function showMenu(panel, title, options, hint = '', note = null) {
     return new Promise(resolve => {
       const overlay = DOC.createElement('div');
       overlay.className = 'pmm-variable-overlay';
+      const intro = hint || note?.text
+        ? `<div class="pmm-variable-intro">
+            ${hint ? `<p class="pmm-variable-hint">${escapeHtml(hint)}</p>` : ''}
+            ${note?.text ? `<p class="pmm-variable-note"><em>${escapeHtml(note.text)}</em>${note.example ? ` <code>${escapeHtml(note.example)}</code>` : ''}</p>` : ''}
+          </div>`
+        : '';
       overlay.innerHTML = `
         <section class="pmm-variable-dialog" role="dialog" aria-modal="true" aria-label="${escapeHtml(title)}">
           <header><strong>${escapeHtml(title)}</strong><button type="button" class="pmm-variable-close" aria-label="关闭">×</button></header>
-          ${hint ? `<p class="pmm-variable-hint">${escapeHtml(hint)}</p>` : ''}
+          ${intro}
           <div class="pmm-variable-menu"></div>
         </section>`;
       applyTheme(overlay, panel);
@@ -5212,10 +5225,10 @@ async function ce(){
     let smartDescription;
     if (preview.mode === 'split') {
       smartLabel = '保留旧项，并新增新变量';
-      smartDescription = `改名后，还有 ${preview.remainingOldSet} 个有内容的变量项叫“${oldName}”。所以旧 G 和旧的同名空变量项会继续保留，并为“${newName}”新增对应项。当前找到 ${preview.oldGetOccurrences} 处 G、${preview.oldEmptySetOccurrences} 处同名空变量项（只有变量名，无内容）。${mergeHint}`;
+      smartDescription = `改名后，还有 ${preview.remainingOldSet} 个有内容的变量项叫“${oldName}”。所以旧 G（已找到 ${preview.oldGetOccurrences} 处）和旧的同名空变量项（已找到 ${preview.oldEmptySetOccurrences} 处）会继续保留，并为“${newName}”新增对应项。${mergeHint}`;
     } else {
       smartLabel = '同步改名 G 与同名空变量项';
-      smartDescription = `改名后，已经没有叫“${oldName}”的有内容变量项。所以会把对应的 G 和同名空变量项一起改成“${newName}”。当前找到 ${preview.oldGetOccurrences} 处 G、${preview.oldEmptySetOccurrences} 处同名空变量项（只有变量名，无内容）。${mergeHint}`;
+      smartDescription = `改名后，已经没有叫“${oldName}”的有内容变量项。所以 G（已找到 ${preview.oldGetOccurrences} 处）和同名空变量项（已找到 ${preview.oldEmptySetOccurrences} 处）都会一起改成“${newName}”。${mergeHint}`;
     }
     const gAction = await showMenu(
       ctx.panel,
@@ -5229,6 +5242,7 @@ async function ce(){
         },
       ],
       `预览：${oldName} → ${newName}。执行后可以直接使用工坊的撤销按钮恢复。`,
+      emptyVariableNote(oldName),
     );
     if (!gAction) return;
 
@@ -5280,12 +5294,13 @@ async function ce(){
             value: 'rename',
             label: '批量重命名变量',
             description: summary.variables.length > 0
-              ? `只修改已选条目中的变量名；已识别 ${summary.variables.length} 个变量名，可智能保留或同步 G 与同名空变量项（只有变量名，无内容）。`
+              ? `只修改已选条目中的变量名；已识别 ${summary.variables.length} 个变量名，可智能保留或同步 G 与同名空变量项。`
               : '已选条目中没有可重命名的有内容变量项。',
             disabled: summary.variables.length === 0,
           },
         ],
         '条目名称、变量正文、开关、位置与排序都不会改变。',
+        emptyVariableNote(),
       );
       if (action === 'variableize') await batchVariableizeSelected(ctx, selectedBatch);
       if (action === 'rename') await batchRenameSelectedVariables(ctx, selectedBatch, summary);
@@ -5338,7 +5353,7 @@ async function ce(){
     const preview = buildVariableStripPlan(batch, selectedIds, false);
     if (!preview.unwrappedEntries) {
       return toast('info', preview.skippedEntries > 0
-        ? '所选条目没有完整包裹正文的变量格式；同名空变量项（只有变量名，无内容）和正文中的局部变量格式不会被误拆'
+        ? '所选条目没有完整包裹正文的变量格式；只有变量名、没有内容的空变量项和正文中的局部变量格式不会被误拆'
         : '没有找到可去除的变量格式');
     }
 
@@ -5347,14 +5362,15 @@ async function ce(){
     const canCleanRelated = cleanableNames.length > 0
       && (preview.cleanableGetOccurrences > 0 || preview.cleanableEmptySetOccurrences > 0);
     const skippedHint = preview.skippedEntries > 0 ? `，另有 ${preview.skippedEntries} 条因不是完整 S 包裹而跳过` : '';
+    const noteVariableName = cleanableNames[0] || retainedNames[0] || '变量名';
     let cleanDescription;
     if (canCleanRelated) {
-      cleanDescription = `去除 ${preview.unwrappedEntries} 条变量包装，并清理已失效变量“${cleanableNames.join('、')}”的 ${preview.cleanableGetOccurrences} 处 G 和 ${preview.cleanableEmptySetOccurrences} 处同名空变量项（只有变量名，无内容）。`;
+      cleanDescription = `去除 ${preview.unwrappedEntries} 条变量包装，并清理已失效变量“${cleanableNames.join('、')}”的 ${preview.cleanableGetOccurrences} 处 G 和 ${preview.cleanableEmptySetOccurrences} 处同名空变量项。`;
       if (retainedNames.length) cleanDescription += ` 其他条目仍有叫“${retainedNames.join('、')}”的有内容变量项，相关项会保留。`;
     } else if (cleanableNames.length) {
-      cleanDescription = `已经没有叫“${cleanableNames.join('、')}”的有内容变量项，但当前没有找到对应的 G 或同名空变量项（只有变量名，无内容）。`;
+      cleanDescription = `已经没有叫“${cleanableNames.join('、')}”的有内容变量项，但当前没有找到对应的 G 或同名空变量项。`;
     } else {
-      cleanDescription = `其他条目仍在使用变量“${retainedNames.join('、')}”，因此暂不能清理对应的 G 和同名空变量项（只有变量名，无内容）。`;
+      cleanDescription = `其他条目仍在使用变量“${retainedNames.join('、')}”，因此暂不能清理对应的 G 和同名空变量项。`;
     }
 
     const action = await showMenu(
@@ -5364,7 +5380,7 @@ async function ce(){
         {
           value: 'unwrap-only',
           label: '只变成普通条目',
-          description: `去掉 ${preview.unwrappedEntries} 条的外层 setvar，完整保留变量正文；所有 G 和同名空变量项（只有变量名，无内容）都不变${skippedHint}。`,
+          description: `去掉 ${preview.unwrappedEntries} 条的外层 setvar，完整保留变量正文；所有 G 和同名空变量项都不变${skippedHint}。`,
         },
         {
           value: 'clean-related',
@@ -5374,6 +5390,7 @@ async function ce(){
         },
       ],
       '只会拆除完整包住整条正文的 setvar；条目标题、开关、位置和排序不变。执行后可用工坊撤销恢复。',
+      emptyVariableNote(noteVariableName),
     );
     if (!action) return;
 
@@ -5534,7 +5551,10 @@ async function ce(){
       .pmm-variable-dialog{width:min(430px,calc(100vw - 30px));max-height:min(78vh,650px);display:flex;flex-direction:column;gap:12px;padding:16px;border:1px solid var(--pmm-var-border,rgba(127,127,127,.4));border-radius:16px;background:var(--pmm-var-panel,var(--pmm-var-bg,#172132));color:var(--pmm-var-text,#f4f6fa);box-shadow:0 20px 60px rgba(0,0,0,.38);box-sizing:border-box}
       .pmm-variable-dialog header{display:flex;align-items:center;justify-content:space-between;gap:10px;font-size:15px}
       .pmm-variable-close{border:0;background:transparent;color:var(--pmm-var-muted,#aab3c2);font-size:24px;line-height:1;cursor:pointer}
+      .pmm-variable-intro{display:flex;flex-direction:column;gap:4px}
       .pmm-variable-hint{margin:0;color:var(--pmm-var-muted,#aab3c2);font-size:11px;line-height:1.55}
+      .pmm-variable-note{margin:0;color:var(--pmm-var-muted,#aab3c2);font-size:9px;line-height:1.45;font-style:italic;opacity:.82}
+      .pmm-variable-note code{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:9px;font-style:normal;color:var(--pmm-var-text,#f4f6fa);overflow-wrap:anywhere}
       .pmm-variable-menu{display:flex;flex-direction:column;gap:8px;overflow:auto}
       .pmm-variable-menu-btn{display:flex;flex-direction:column;align-items:flex-start;gap:3px;padding:11px 12px;border:1px solid var(--pmm-var-border,rgba(127,127,127,.35));border-radius:10px;background:var(--pmm-var-bg,rgba(127,127,127,.1));color:var(--pmm-var-text,#f4f6fa);text-align:left;cursor:pointer}
       .pmm-variable-menu-btn span{color:var(--pmm-var-muted,#aab3c2);font-size:10px;line-height:1.45}
@@ -5577,6 +5597,7 @@ async function ce(){
   console.info('[预设工坊] test.18 已加载：S 斜线按钮可还原普通条目，并按剩余正文 S 安全清理失效 G 与空登记。');
   console.info('[预设工坊] test.19 已加载：变量弹窗已完成第一轮空变量说明统一。');
   console.info('[预设工坊] test.20 已加载：变量弹窗统一使用“同名空变量项”，并以大白话说明改名结果。');
+  console.info('[预设工坊] test.22 已加载：空变量项改为顶部小字示例，选项说明不再重复括号解释。');
 })();
 
 ;(()=>{
