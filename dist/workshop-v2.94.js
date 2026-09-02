@@ -13028,7 +13028,7 @@ ${PANEL_SELECTOR} .section-group.pmm-nested-section--hidden { display: none !imp
 })();
 
 
-/* ===== PMM_TAURI_EDITOR_OVERFLOW_TEST27：Tauri iOS 展开编辑器防溢出 ===== */
+/* ===== PMM_TAURI_EDITOR_OVERFLOW_TEST28：Tauri iOS 展开编辑器防溢出 ===== */
 ;(() => {
   'use strict';
 
@@ -13088,7 +13088,10 @@ html.${ROOT_CLASS} ${PANEL_SELECTOR} .prompt-editor__position-group,
 html.${ROOT_CLASS} ${PANEL_SELECTOR} .prompt-editor__content-section,
 html.${ROOT_CLASS} ${PANEL_SELECTOR} .prompt-editor__content-header,
 html.${ROOT_CLASS} ${PANEL_SELECTOR} .inline-editor-container,
-html.${ROOT_CLASS} ${PANEL_SELECTOR} .inline-editor-container__inner {
+html.${ROOT_CLASS} ${PANEL_SELECTOR} .inline-editor-inner,
+html.${ROOT_CLASS} ${PANEL_SELECTOR} .prompt-item--expanded,
+html.${ROOT_CLASS} ${PANEL_SELECTOR} .prompt-item--expanded .prompt-item__main,
+html.${ROOT_CLASS} ${PANEL_SELECTOR} .prompt-item--expanded .prompt-card {
   box-sizing: border-box !important;
   min-width: 0 !important;
   max-width: 100% !important;
@@ -13129,6 +13132,11 @@ html.${ROOT_CLASS} ${PANEL_SELECTOR} .prompt-editor__textarea {
   white-space: pre-wrap !important;
   overflow-wrap: anywhere !important;
   word-break: break-word !important;
+  overflow-x: hidden !important;
+}
+html.${ROOT_CLASS} ${PANEL_SELECTOR} .inline-editor-container,
+html.${ROOT_CLASS} ${PANEL_SELECTOR} .inline-editor-inner {
+  width: 100% !important;
   overflow-x: hidden !important;
 }
 html.${ROOT_CLASS} ${PANEL_SELECTOR} .${COMPACT_CLASS} {
@@ -13254,5 +13262,5 @@ html.${ROOT_CLASS} ${PANEL_SELECTOR} .${COMPACT_CLASS} > .prompt-editor__expand-
   scan();
 
   TOP[API_KEY] = { cleanup, scan, needsCompactLayout, isIOS: true };
-  console.info('[预设工坊] test.27 已加载：已通过 Tauri 早期标记启用 iOS 展开编辑框防裁切与按需工具栏换行。');
+  console.info('[预设工坊] test.28 已加载：Tauri iOS 展开条目的真实过渡容器已纳入防裁切与按需工具栏换行。');
 })();

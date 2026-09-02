@@ -4,8 +4,8 @@ import { readFile } from 'node:fs/promises';
 const source = await readFile(new URL('../dist/workshop-v2.94.js', import.meta.url), 'utf8');
 const runtime = await readFile(new URL('../patches/test26-tauri-editor-overflow.js', import.meta.url), 'utf8');
 
-assert.ok(source.includes(runtime.trim()), 'test.27 Tauri iOS 防溢出补丁没有进入业务入口');
-assert.ok(runtime.includes('PMM_TAURI_EDITOR_OVERFLOW_TEST27'), '缺少 test.27 运行标记');
+assert.ok(source.includes(runtime.trim()), 'test.28 Tauri iOS 防溢出补丁没有进入业务入口');
+assert.ok(runtime.includes('PMM_TAURI_EDITOR_OVERFLOW_TEST28'), '缺少 test.28 运行标记');
 
 const tauriRead = runtime.indexOf('scope?.__TAURI_RUNNING__ === true');
 const hardGuard = runtime.indexOf('if (!tauriDetected || !isIOS) return;');
@@ -23,6 +23,9 @@ for (const marker of [
   'overflow-wrap: anywhere !important',
   'word-break: break-word !important',
   'overflow-x: hidden !important',
+  '.inline-editor-inner',
+  '.prompt-item--expanded .prompt-item__main',
+  '.prompt-item--expanded .prompt-card',
   'grid-template-areas:',
   '"label-icon label tools tools"',
   '". . count expand" !important',
@@ -31,11 +34,11 @@ for (const marker of [
   'new win.ResizeObserver(schedule)',
   'new win.MutationObserver(schedule)',
 ]) {
-  assert.ok(runtime.includes(marker), `test.27 缺少实现：${marker}`);
+  assert.ok(runtime.includes(marker), `test.28 缺少实现：${marker}`);
 }
 
 assert.ok(runtime.includes("header.classList.toggle(COMPACT_CLASS, needsCompactLayout(header))"), '字符数与全屏键必须只在真实放不下时换行');
 assert.ok(runtime.includes("DOC.documentElement.classList.remove(ROOT_CLASS)"), '清理时必须移除 Tauri iOS 专用根样式');
-assert.ok(runtime.includes('test.27 已加载：已通过 Tauri 早期标记'), '缺少 test.27 加载标记');
+assert.ok(runtime.includes('test.28 已加载：Tauri iOS 展开条目的真实过渡容器'), '缺少 test.28 加载标记');
 
-console.log('test.27 回归通过：早期 Tauri 标记可启动 iOS 防裁切，普通浏览器保持硬隔离。');
+console.log('test.28 回归通过：早期 Tauri 标记可启动补丁，真实展开过渡容器不再把编辑器撑出可见区域。');
