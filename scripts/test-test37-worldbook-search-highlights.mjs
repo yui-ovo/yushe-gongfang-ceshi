@@ -38,7 +38,9 @@ for (const marker of [
   'function selectedWorldEntryKeys(side)',
   'function toggleWorldSelectAll(sideName)',
   'data-wb-action="select-all"',
-  '拖动任一已选条目可整体拖动',
+  'function setWorldMultiDragImage(event, count)',
+  'title.textContent = `拖动 ${count} 条`;',
+  'transfer.setDragImage(preview, 28, 24)',
   'pmm-wb-entry--selected',
   '.pmm-wb-multi-bar',
   'side.selected.has(key) ? selectedWorldEntryKeys(side) : [key]',
@@ -89,4 +91,12 @@ const nextAllSelection = (keys, selected) => keys.every(key => selected.has(key)
 assert.deepEqual([...nextAllSelection(['a', 'b'], new Set())], ['a', 'b'], '全选必须一次勾选全部候选条目');
 assert.deepEqual([...nextAllSelection(['a', 'b'], new Set(['a', 'b']))], [], '再次点击全选必须取消全部候选条目');
 
-console.log('test.37 回归通过：世界书正文高亮、键盘避让、替换撤销、全选、多选拖动、工具位与主题色均已覆盖。');
+const multiDragPreviewLabel = count => count > 1 ? `拖动 ${count} 条` : '';
+assert.equal(multiDragPreviewLabel(3), '拖动 3 条', '多选拖动预览必须明确显示条目数量');
+assert.equal(multiDragPreviewLabel(1), '', '单条拖动不应显示多选数量预览');
+const customDragStart = source.slice(source.indexOf('if (custom) {'), source.indexOf("if (state.topType === 'preset')"));
+assert.ok(customDragStart.includes('setWorldMultiDragImage(event, keys.length);'), '世界书多选拖动必须生成数量预览');
+const presetDragStart = source.slice(source.indexOf("if (state.topType === 'preset')"), source.indexOf('function onDragOver(event)'));
+assert.ok(!presetDragStart.includes('setWorldMultiDragImage'), '原生预设拖动必须保留自己的预览，不能重复显示世界书预览');
+
+console.log('test.37 回归通过：世界书正文高亮、键盘避让、替换撤销、全选、多选拖动预览、工具位与主题色均已覆盖。');

@@ -1074,7 +1074,7 @@
     const keys = candidates.map(entryKey);
     const allSelected = keys.length > 0 && keys.every(key => side.selected.has(key));
     const scope = String(side.query || '').trim() ? `搜索结果 ${keys.length}` : `全部 ${keys.length}`;
-    return `<div class="pmm-wb-multi-bar"><button type="button" data-wb-action="select-all" data-wb-side="${sideName}" ${keys.length ? '' : 'disabled'} title="${allSelected ? '取消全选' : '全选'}${scope}"><i class="fa-${allSelected ? 'solid' : 'regular'} fa-square${allSelected ? '-check' : ''}"></i>${allSelected ? '取消全选' : '全选'}</button><span>已选 ${side.selected.size}/${side.entries.length} · 拖动任一已选条目可整体拖动</span></div>`;
+    return `<div class="pmm-wb-multi-bar"><button type="button" data-wb-action="select-all" data-wb-side="${sideName}" ${keys.length ? '' : 'disabled'} title="${allSelected ? '取消全选' : '全选'}${scope}"><i class="fa-${allSelected ? 'solid' : 'regular'} fa-square${allSelected ? '-check' : ''}"></i>${allSelected ? '取消全选' : '全选'}</button><span>已选 ${side.selected.size}/${side.entries.length}</span></div>`;
   }
 
   function toggleWorldSelectAll(sideName) {
@@ -1753,6 +1753,34 @@
     });
   }
 
+  function setWorldMultiDragImage(event, count) {
+    const transfer = event.dataTransfer;
+    if (!transfer || typeof transfer.setDragImage !== 'function' || !Number.isFinite(count) || count < 2) return;
+    const preview = DOC.createElement('div');
+    preview.setAttribute('aria-hidden', 'true');
+    preview.style.cssText = 'position:fixed;left:-9999px;top:-9999px;width:190px;height:64px;pointer-events:none;z-index:2147483647;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;';
+    const back = DOC.createElement('div');
+    back.style.cssText = 'position:absolute;left:12px;top:10px;width:166px;height:46px;border-radius:11px;background:rgba(35,46,64,.55);border:1px solid rgba(255,255,255,.12);transform:rotate(3deg);';
+    const middle = DOC.createElement('div');
+    middle.style.cssText = 'position:absolute;left:7px;top:6px;width:172px;height:48px;border-radius:11px;background:rgba(35,46,64,.72);border:1px solid rgba(255,255,255,.14);transform:rotate(1.5deg);';
+    const front = DOC.createElement('div');
+    front.style.cssText = 'position:absolute;left:0;top:0;width:176px;height:50px;box-sizing:border-box;display:flex;align-items:center;gap:9px;padding:0 10px;border-radius:11px;background:rgba(27,38,55,.97);border:1px solid rgba(89,156,255,.8);box-shadow:0 8px 24px rgba(0,0,0,.38),0 0 0 1px rgba(89,156,255,.16);color:#f3f6fb;';
+    const icon = DOC.createElement('span');
+    icon.textContent = '↕';
+    icon.style.cssText = 'font-size:18px;color:#6aa7ff;font-weight:700;';
+    const title = DOC.createElement('span');
+    title.textContent = `拖动 ${count} 条`;
+    title.style.cssText = 'flex:1;font-size:13px;font-weight:700;letter-spacing:.02em;white-space:nowrap;';
+    const badge = DOC.createElement('span');
+    badge.textContent = String(count);
+    badge.style.cssText = 'min-width:27px;height:27px;padding:0 6px;box-sizing:border-box;border-radius:999px;display:flex;align-items:center;justify-content:center;background:#3b82f6;color:white;font-size:12px;font-weight:800;box-shadow:0 2px 8px rgba(59,130,246,.4);';
+    front.append(icon, title, badge);
+    preview.append(back, middle, front);
+    DOC.body.append(preview);
+    try { transfer.setDragImage(preview, 28, 24); } catch (_) {}
+    TOP.setTimeout(() => preview.remove(), 120);
+  }
+
   function showWorldDropIndicator(sideName, placement) {
     const list = state.host?.querySelector?.(`[data-wb-list="${sideName}"]`);
     clearWorldDropIndicators();
@@ -1779,6 +1807,7 @@
       dragPayload = { from: sideName, keys };
       event.dataTransfer?.setData('text/plain', 'pmm-worldbook-entry');
       if (event.dataTransfer) event.dataTransfer.effectAllowed = 'copyMove';
+      setWorldMultiDragImage(event, keys.length);
       return;
     }
     if (state.topType === 'preset') {
