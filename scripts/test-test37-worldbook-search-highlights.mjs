@@ -23,8 +23,9 @@ for (const marker of [
   'function syncWorldSearchHighlightTheme()',
   "data-pmm-wb-search-theme', 'light'",
   '[data-pmm-wb-search-theme="light"] .pmm-wb-search-highlight',
-  'background:rgba(147,197,253,.54)!important',
-  'background:#2563eb!important',
+  'background:#d6eefc!important',
+  'background:#75bee8!important',
+  'box-shadow:none!important',
 ]) {
   assert.ok(source.includes(marker), `test.37 缺少世界书搜索高亮实现：${marker}`);
 }
@@ -58,4 +59,4 @@ assert.equal(dayThemeAttribute('light'), 'light', '日间模式必须启用独�
 assert.equal(dayThemeAttribute('dark'), '', '夜间模式不应套用日间浅蓝高亮');
 assert.equal(dayThemeAttribute('auto'), '', '魔法棒模式不应套用日间浅蓝高亮');
 
-console.log('test.37 回归通过：世界书正文高亮、当前命中强化、日间浅蓝、夜间／魔法棒主题色、正文滚动定位与选中世界书图标的高对比显示均已覆盖。');
+console.log('test.37 回归通过：世界书正文高亮、当前命中强化、日间冰蓝／天蓝、夜间／魔法棒主题色、正文滚动定位与选中世界书图标的高对比显示均已覆盖。');
