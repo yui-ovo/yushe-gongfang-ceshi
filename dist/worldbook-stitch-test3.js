@@ -972,7 +972,7 @@
     return `<button type="button" class="${worldSearchScope(side.searchScope) === scope ? 'is-active' : ''}" data-wb-action="search-scope" data-wb-side="${sideName}" data-wb-search-scope="${scope}" title="${label}">${label}</button>`;
   }
 
-  function renderWorldCard(sideName, side) {
+  function worldSearchView(side) {
     const search = collectWorldSearch(side);
     const resultIndex = search.matches.length ? Math.min(Math.max(Number(side.searchIndex) || 0, 0), search.matches.length - 1) : -1;
     side.searchIndex = resultIndex < 0 ? 0 : resultIndex;
@@ -981,6 +981,20 @@
     const visible = filtered.slice(0, side.limit);
     const remaining = filtered.length - visible.length;
     const searchSummary = search.query ? `${search.matches.length ? resultIndex + 1 : 0}/${search.matches.length}` : `${side.entries.length}/${side.entries.length}`;
+    return { search, visible, remaining, searchSummary };
+  }
+
+  function renderWorldListMarkup(sideName, side, view) {
+    return `${side.name
+      ? (view.visible.length
+        ? view.visible.map(entry => renderEntry(sideName, side, entry, view.search)).join('')
+        : '<div class="pmm-wb-empty">没有找到匹配条目</div>')
+      : '<div class="pmm-wb-empty">暂无可用世界书</div>'}
+      ${view.remaining > 0 ? `<button class="pmm-wb-more" data-wb-action="more" data-wb-side="${sideName}">继续显示 ${Math.min(PAGE_SIZE, view.remaining)} 条（剩余 ${view.remaining}）</button>` : ''}`;
+  }
+
+  function renderWorldCard(sideName, side) {
+    const view = worldSearchView(side);
     return `<section class="preset-panel pmm-wb-inline-panel" data-pmm-wb-panel="${sideName}">
       <div class="pmm-wb-main-content">
         <header class="pmm-wb-header">
@@ -1003,19 +1017,31 @@
             ${toolbarButton(sideName === 'top' ? 'close-main' : 'exit', '关闭', 'fa-xmark')}
           </div>
         </header>
-        ${side.searchOpen ? `<div class="pmm-wb-search-bar"><i class="fa-solid fa-magnifying-glass"></i><input type="search" value="${h(side.query)}" data-wb-action="search-input" data-wb-side="${sideName}" placeholder="搜索条目" autocomplete="off"><span class="pmm-wb-search-count">${searchSummary}</span><button type="button" class="pmm-wb-search-nav" data-wb-action="search-previous" data-wb-side="${sideName}" title="上一个结果" ${search.matches.length ? '' : 'disabled'}><i class="fa-solid fa-chevron-up"></i></button><button type="button" class="pmm-wb-search-nav" data-wb-action="search-next" data-wb-side="${sideName}" title="下一个结果" ${search.matches.length ? '' : 'disabled'}><i class="fa-solid fa-chevron-down"></i></button><span class="pmm-wb-search-scope" role="group" aria-label="搜索范围">${searchScopeButton(sideName, side, 'all', '全')}${searchScopeButton(sideName, side, 'title', '仅标题')}${searchScopeButton(sideName, side, 'content', '仅内容')}</span></div>` : ''}
+        ${side.searchOpen ? `<div class="pmm-wb-search-bar"><i class="fa-solid fa-magnifying-glass"></i><input type="search" value="${h(side.query)}" data-wb-action="search-input" data-wb-side="${sideName}" placeholder="搜索条目" autocomplete="off"><span class="pmm-wb-search-count">${view.searchSummary}</span><button type="button" class="pmm-wb-search-nav" data-wb-action="search-previous" data-wb-side="${sideName}" title="上一个结果" ${view.search.matches.length ? '' : 'disabled'}><i class="fa-solid fa-chevron-up"></i></button><button type="button" class="pmm-wb-search-nav" data-wb-action="search-next" data-wb-side="${sideName}" title="下一个结果" ${view.search.matches.length ? '' : 'disabled'}><i class="fa-solid fa-chevron-down"></i></button><span class="pmm-wb-search-scope" role="group" aria-label="搜索范围">${searchScopeButton(sideName, side, 'all', '全')}${searchScopeButton(sideName, side, 'title', '仅标题')}${searchScopeButton(sideName, side, 'content', '仅内容')}</span></div>` : ''}
         <div class="pmm-wb-content">
           <div class="pmm-wb-list" data-wb-list="${sideName}">
-            ${side.name
-              ? (visible.length
-                ? visible.map(entry => renderEntry(sideName, side, entry, search)).join('')
-                : '<div class="pmm-wb-empty">没有找到匹配条目</div>')
-              : '<div class="pmm-wb-empty">暂无可用世界书</div>'}
-            ${remaining > 0 ? `<button class="pmm-wb-more" data-wb-action="more" data-wb-side="${sideName}">继续显示 ${Math.min(PAGE_SIZE, remaining)} 条（剩余 ${remaining}）</button>` : ''}
+            ${renderWorldListMarkup(sideName, side, view)}
           </div>
         </div>
       </div>
     </section>`;
+  }
+
+  function refreshWorldSearchResults(sideName) {
+    const side = state[sideName];
+    const panel = state.host?.querySelector?.(`[data-pmm-wb-panel="${sideName}"]`);
+    const list = panel?.querySelector?.(`[data-wb-list="${sideName}"]`);
+    if (!side || !panel || !list) return renderPanels();
+    const view = worldSearchView(side);
+    list.innerHTML = renderWorldListMarkup(sideName, side, view);
+    const count = panel.querySelector('.pmm-wb-search-count');
+    if (count) count.textContent = view.searchSummary;
+    for (const button of panel.querySelectorAll('[data-wb-action="search-previous"],[data-wb-action="search-next"]')) {
+      button.disabled = !view.search.matches.length;
+    }
+    for (const button of panel.querySelectorAll('[data-wb-action="search-scope"]')) {
+      button.classList.toggle('is-active', button.dataset.wbSearchScope === worldSearchScope(side.searchScope));
+    }
   }
 
   function createCard(sideName, side) {
@@ -1210,7 +1236,7 @@
     const { match } = selectedWorldSearchMatch(side);
     if (!match) return;
     side.expanded.add(match.key);
-    renderPanels();
+    refreshWorldSearchResults(sideName);
     TOP.setTimeout(() => {
       const panel = state.host?.querySelector?.(`[data-pmm-wb-panel="${sideName}"]`);
       const card = panel?.querySelector?.(`[data-wb-entry="${safeId(match.key)}"]`);
@@ -1233,7 +1259,7 @@
     if (currentList) currentList.scrollTop = 0;
     const { match } = selectedWorldSearchMatch(side);
     if (match?.field === 'content') side.expanded.add(match.key);
-    renderPanels();
+    refreshWorldSearchResults(sideName);
     if (options.refocus) {
       TOP.setTimeout(() => {
         const input = state.host?.querySelector?.(`[data-pmm-wb-panel="${sideName}"] [data-wb-action="search-input"]`);
@@ -1561,7 +1587,7 @@
     const side = state[input.dataset.wbSide];
     side.query = input.value;
     side.scrollTop = 0;
-    resetWorldSearch(input.dataset.wbSide, { refocus: true });
+    resetWorldSearch(input.dataset.wbSide);
   }
 
   function installStyle() {
@@ -1734,4 +1760,5 @@
   console.info('[预设工坊测试版] test.32 已加载：世界书搜索跟随主题，分类默认折叠并可展开。');
   console.info('[预设工坊测试版] test.33 已加载：角色绑定世界书兼容名称末尾空格与 Unicode 差异。');
   console.info('[预设工坊测试版] test.34 已加载：世界书支持原生重命名入口和范围关键词搜索。');
+  console.info('[预设工坊测试版] test.35 已加载：世界书搜索输入不会重建输入框，兼容 iOS 中文输入法。');
 })();
