@@ -935,7 +935,7 @@
     </div>`;
   }
 
-  function openTextEditor({ host, title, original, sourceField, themeNodes, ariaLabel, onSave }) {
+  function openTextEditor({ host, title, original, sourceField, themeNodes, ariaLabel, onSave, searchable = false }) {
     if (!host || !sourceField) return;
     installStyle();
     host.querySelector('.pmm-wb-editor-overlay')?.remove();
@@ -961,19 +961,107 @@
     overlay.style.setProperty('--pmm-wb-editor-border', sourceField ? TOP.getComputedStyle(sourceField).borderColor : pickStyle('borderColor', 'rgba(127,127,127,.22)', true));
     overlay.style.setProperty('--pmm-wb-editor-accent', styles.map(style => style.getPropertyValue('--pm-quote-color').trim()).find(Boolean) || pickStyle('color', '#3485f6', true));
     overlay.innerHTML = `<section class="pmm-wb-editor-dialog" role="dialog" aria-modal="true" aria-label="${h(ariaLabel || '放大编辑正文')}">
-      <header><strong>${h(title)}</strong><span data-wb-editor-count>${text.length} 字符</span><button type="button" data-wb-editor-undo title="暂无可撤销输入" aria-label="撤销本次编辑" disabled><i class="fa-solid fa-rotate-left"></i></button><button type="button" data-wb-editor-cancel title="取消"><i class="fa-solid fa-xmark"></i></button><button type="button" data-wb-editor-save title="完成"><i class="fa-solid fa-check"></i></button></header>
-      <textarea spellcheck="false">${h(text)}</textarea>
+      <header><strong>${h(title)}</strong><span data-wb-editor-count>${text.length} 字符</span>${searchable ? '<button type="button" data-wb-editor-search-toggle title="搜索和替换此条正文" aria-label="搜索和替换此条正文" aria-expanded="false"><i class="fa-solid fa-magnifying-glass"></i></button>' : ''}<button type="button" data-wb-editor-undo title="暂无可撤销输入" aria-label="撤销本次编辑" disabled><i class="fa-solid fa-rotate-left"></i></button><button type="button" data-wb-editor-cancel title="取消"><i class="fa-solid fa-xmark"></i></button><button type="button" data-wb-editor-save title="完成"><i class="fa-solid fa-check"></i></button></header>
+      ${searchable ? `<div class="pmm-wb-editor-search" data-wb-editor-search hidden><div class="pmm-wb-editor-search-primary"><i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i><span class="pmm-wb-editor-search-input-wrap"><input type="search" data-wb-editor-search-input placeholder="搜索此条正文" autocomplete="off" enterkeyhint="next"><span data-wb-editor-search-count>0/0</span></span><button type="button" data-wb-editor-replace-toggle title="展开替换" aria-label="展开替换" aria-expanded="false"><i class="fa-solid fa-repeat"></i></button><button type="button" data-wb-editor-search-previous title="上一个结果" aria-label="上一个结果" disabled><i class="fa-solid fa-chevron-up"></i></button><button type="button" data-wb-editor-search-next title="下一个结果" aria-label="下一个结果" disabled><i class="fa-solid fa-chevron-down"></i></button></div><div class="pmm-wb-editor-replace-row" data-wb-editor-replace-row aria-hidden="true"><input type="text" data-wb-editor-replace-input placeholder="要替换的内容" autocomplete="off"><button type="button" data-wb-editor-replace-current title="替换当前命中">替换</button><button type="button" data-wb-editor-replace-all title="替换此条正文中的全部命中">替换全部</button></div></div>` : ''}
+      <div class="pmm-wb-editor-body">${searchable ? '<div class="pmm-wb-editor-search-preview" aria-hidden="true"></div>' : ''}<textarea spellcheck="false">${h(text)}</textarea></div>
     </section>`;
     const textarea = overlay.querySelector('textarea');
     const counter = overlay.querySelector('[data-wb-editor-count]');
     const undoButton = overlay.querySelector('[data-wb-editor-undo]');
+    const searchToggle = overlay.querySelector('[data-wb-editor-search-toggle]');
+    const searchBar = overlay.querySelector('[data-wb-editor-search]');
+    const searchInput = overlay.querySelector('[data-wb-editor-search-input]');
+    const searchCount = overlay.querySelector('[data-wb-editor-search-count]');
+    const searchPrevious = overlay.querySelector('[data-wb-editor-search-previous]');
+    const searchNext = overlay.querySelector('[data-wb-editor-search-next]');
+    const replaceToggle = overlay.querySelector('[data-wb-editor-replace-toggle]');
+    const replaceRow = overlay.querySelector('[data-wb-editor-replace-row]');
+    const replaceInput = overlay.querySelector('[data-wb-editor-replace-input]');
+    const replaceCurrent = overlay.querySelector('[data-wb-editor-replace-current]');
+    const replaceAll = overlay.querySelector('[data-wb-editor-replace-all]');
+    const editorBody = overlay.querySelector('.pmm-wb-editor-body');
+    const searchPreview = overlay.querySelector('.pmm-wb-editor-search-preview');
     const undoStack = [];
     let previousValue = text;
     let lastInputAt = 0;
+    let editorSearchOpen = false;
+    let editorReplaceOpen = false;
+    let editorSearchIndex = 0;
     const updateUndoButton = () => {
       const available = undoStack.length > 0;
       undoButton.disabled = !available;
       undoButton.title = available ? '撤销本次编辑' : '暂无可撤销输入';
+    };
+    const selectedEditorSearchMatch = () => {
+      const query = String(searchInput?.value || '').trim();
+      const matches = query ? worldSearchMatches(textarea.value, query) : [];
+      if (!matches.length) editorSearchIndex = 0;
+      else editorSearchIndex = Math.min(Math.max(editorSearchIndex, 0), matches.length - 1);
+      const match = matches.length ? { ...matches[editorSearchIndex], field: 'content' } : null;
+      return { query, matches, match };
+    };
+    const syncEditorSearch = ({ reveal = false } = {}) => {
+      if (!searchable) return { query: '', matches: [], match: null };
+      const result = selectedEditorSearchMatch();
+      if (searchBar) searchBar.hidden = !editorSearchOpen;
+      if (searchToggle) {
+        searchToggle.classList.toggle('is-active', editorSearchOpen);
+        searchToggle.setAttribute('aria-expanded', String(editorSearchOpen));
+        searchToggle.title = editorSearchOpen ? '收起搜索和替换' : '搜索和替换此条正文';
+      }
+      if (searchCount) searchCount.textContent = result.query ? `${result.matches.length ? editorSearchIndex + 1 : 0}/${result.matches.length}` : '0/0';
+      for (const button of [searchPrevious, searchNext]) {
+        if (button) button.disabled = !result.matches.length;
+      }
+      if (replaceRow) {
+        replaceRow.classList.toggle('is-open', editorReplaceOpen);
+        replaceRow.setAttribute('aria-hidden', String(!editorReplaceOpen));
+      }
+      if (replaceToggle) {
+        replaceToggle.classList.toggle('is-active', editorReplaceOpen);
+        replaceToggle.setAttribute('aria-expanded', String(editorReplaceOpen));
+        replaceToggle.title = editorReplaceOpen ? '收起替换' : '展开替换';
+      }
+      const showPreview = editorSearchOpen && Boolean(result.query);
+      editorBody?.classList.toggle('is-search-active', showPreview);
+      if (searchPreview) {
+        searchPreview.innerHTML = result.query
+          ? highlightedWorldSearchText(textarea.value, result.query, result.match, 'content')
+          : h(textarea.value);
+        searchPreview.scrollTop = textarea.scrollTop;
+        searchPreview.scrollLeft = textarea.scrollLeft;
+      }
+      if (reveal && result.match && searchPreview) {
+        const revealMatch = () => {
+          const mark = searchPreview.querySelector('.pmm-wb-search-highlight.is-current');
+          mark?.scrollIntoView?.({ block: 'center', inline: 'nearest' });
+          textarea.scrollTop = searchPreview.scrollTop;
+          textarea.scrollLeft = searchPreview.scrollLeft;
+        };
+        if (typeof TOP.requestAnimationFrame === 'function') TOP.requestAnimationFrame(revealMatch);
+        else TOP.setTimeout(revealMatch, 0);
+      }
+      return result;
+    };
+    const syncEditorValue = () => {
+      counter.textContent = `${textarea.value.length} 字符`;
+      updateUndoButton();
+      syncEditorSearch();
+    };
+    const setEditorValue = (next, selectionStart = null, selectionEnd = selectionStart) => {
+      const value = String(next ?? '');
+      if (value === textarea.value) return false;
+      undoStack.push(textarea.value);
+      textarea.value = value;
+      previousValue = value;
+      lastInputAt = 0;
+      syncEditorValue();
+      if (Number.isFinite(selectionStart)) {
+        const start = Math.min(Math.max(0, selectionStart), value.length);
+        const end = Math.min(Math.max(start, Number.isFinite(selectionEnd) ? selectionEnd : start), value.length);
+        textarea.setSelectionRange(start, end);
+      }
+      return true;
     };
     const closeEditor = () => overlay.remove();
     const saveEditor = () => {
@@ -986,26 +1074,97 @@
       if (!undoStack.length || now - lastInputAt > 450) undoStack.push(previousValue);
       previousValue = textarea.value;
       lastInputAt = now;
-      counter.textContent = `${textarea.value.length} 字符`;
-      updateUndoButton();
+      syncEditorValue();
     });
+    textarea.addEventListener('scroll', () => {
+      if (!searchPreview) return;
+      searchPreview.scrollTop = textarea.scrollTop;
+      searchPreview.scrollLeft = textarea.scrollLeft;
+    }, { passive: true });
     undoButton.addEventListener('click', () => {
       if (!undoStack.length) return;
       const start = textarea.selectionStart;
       textarea.value = undoStack.pop();
       previousValue = textarea.value;
       lastInputAt = 0;
-      counter.textContent = `${textarea.value.length} 字符`;
-      updateUndoButton();
+      syncEditorValue();
       textarea.focus();
       const cursor = Math.min(Number.isFinite(start) ? start : textarea.value.length, textarea.value.length);
       textarea.setSelectionRange(cursor, cursor);
+    });
+    searchToggle?.addEventListener('click', () => {
+      editorSearchOpen = !editorSearchOpen;
+      if (!editorSearchOpen) editorReplaceOpen = false;
+      syncEditorSearch();
+      if (editorSearchOpen) TOP.setTimeout(() => searchInput?.focus(), 0);
+      else textarea.focus();
+    });
+    searchInput?.addEventListener('input', () => {
+      editorSearchIndex = 0;
+      syncEditorSearch({ reveal: true });
+    });
+    searchInput?.addEventListener('keydown', event => {
+      if (event.key !== 'Enter') return;
+      event.preventDefault();
+      const result = selectedEditorSearchMatch();
+      if (!result.matches.length) return;
+      editorSearchIndex = (editorSearchIndex + (event.shiftKey ? -1 : 1) + result.matches.length) % result.matches.length;
+      syncEditorSearch({ reveal: true });
+    });
+    searchPrevious?.addEventListener('click', () => {
+      const result = selectedEditorSearchMatch();
+      if (!result.matches.length) return;
+      editorSearchIndex = (editorSearchIndex - 1 + result.matches.length) % result.matches.length;
+      syncEditorSearch({ reveal: true });
+    });
+    searchNext?.addEventListener('click', () => {
+      const result = selectedEditorSearchMatch();
+      if (!result.matches.length) return;
+      editorSearchIndex = (editorSearchIndex + 1) % result.matches.length;
+      syncEditorSearch({ reveal: true });
+    });
+    replaceToggle?.addEventListener('click', () => {
+      editorReplaceOpen = !editorReplaceOpen;
+      syncEditorSearch();
+      if (editorReplaceOpen) TOP.setTimeout(() => replaceInput?.focus(), 0);
+    });
+    replaceCurrent?.addEventListener('click', () => {
+      const { query, match } = selectedEditorSearchMatch();
+      if (!query) return notify('warning', '请先输入要查找的文字');
+      if (!match) return notify('info', '此条正文中没有可替换的命中');
+      const replacement = String(replaceInput?.value ?? '');
+      const result = replaceOneWorldSearchText(textarea.value, match, replacement);
+      if (!result.count) return notify('info', '当前命中已变化，请重新查找');
+      const cursor = match.start + replacement.length;
+      setEditorValue(result.value, cursor, cursor);
+      syncEditorSearch({ reveal: true });
+      notify('success', replacement ? '已替换 1 处' : '已删除 1 处匹配文字');
+    });
+    replaceAll?.addEventListener('click', () => {
+      const { query, matches } = selectedEditorSearchMatch();
+      if (!query) return notify('warning', '请先输入要查找的文字');
+      if (!matches.length) return notify('info', '此条正文中没有可替换的命中');
+      const replacement = String(replaceInput?.value ?? '');
+      if (!replacement && typeof TOP.confirm === 'function' && !TOP.confirm(`将在此条正文中删除 ${matches.length} 处“${query}”，确定继续吗？`)) return;
+      const result = replaceWorldSearchText(textarea.value, query, replacement);
+      if (!result.count) return notify('info', '当前命中已变化，请重新查找');
+      editorSearchIndex = 0;
+      setEditorValue(result.value, 0, 0);
+      syncEditorSearch();
+      notify('success', replacement ? `已替换 ${result.count} 处` : `已删除 ${result.count} 处匹配文字`);
     });
     overlay.querySelector('[data-wb-editor-cancel]').addEventListener('click', closeEditor);
     overlay.querySelector('[data-wb-editor-save]').addEventListener('click', saveEditor);
     overlay.addEventListener('keydown', event => {
       if (event.key === 'Escape') {
         event.preventDefault();
+        if (editorSearchOpen) {
+          editorSearchOpen = false;
+          editorReplaceOpen = false;
+          syncEditorSearch();
+          textarea.focus();
+          return;
+        }
         closeEditor();
       }
     });
@@ -1027,6 +1186,7 @@
       sourceField,
       themeNodes: [panel, sourceEntry],
       ariaLabel: '放大编辑世界书正文',
+      searchable: true,
       onSave(next) {
         pushUndo(side, '编辑世界书正文', { worldSides:[side] });
         entry.content = next;
@@ -2067,6 +2227,14 @@
 .pmm-wb-editor-overlay{position:absolute;inset:0;z-index:16000;display:flex;align-items:center;justify-content:center;padding:max(12px,env(safe-area-inset-top)) 12px max(12px,env(safe-area-inset-bottom));background:rgba(0,0,0,.43);backdrop-filter:blur(5px);-webkit-backdrop-filter:blur(5px);color:var(--pmm-wb-editor-text,#222)}.pmm-wb-editor-dialog{width:min(92%,660px);height:min(82%,680px);max-height:calc(100dvh - 28px);min-height:250px;display:flex;flex-direction:column;overflow:hidden;border:1px solid var(--pmm-wb-editor-border,rgba(127,127,127,.22));border-radius:13px;background-color:var(--pmm-wb-editor-bg,#fff);background-image:var(--pmm-wb-editor-bg-image,none);color:var(--pmm-wb-editor-text,#222);box-shadow:0 18px 52px rgba(0,0,0,.36)}.pmm-wb-editor-dialog header{min-height:42px;display:flex;align-items:center;gap:7px;padding:6px 8px;border-bottom:1px solid var(--pmm-wb-editor-border,rgba(127,127,127,.14))}.pmm-wb-editor-dialog header strong{min-width:0;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px}.pmm-wb-editor-dialog header span{font-size:9px;opacity:.58;white-space:nowrap}.pmm-wb-editor-dialog header button{width:28px;height:28px;padding:0;border:0;border-radius:7px;background:color-mix(in srgb,var(--pmm-wb-editor-text,#222) 8%,transparent);color:inherit}.pmm-wb-editor-dialog header button:disabled{opacity:.28}.pmm-wb-editor-dialog header button[data-wb-editor-save]{color:var(--pmm-wb-editor-accent,#3485f6)}.pmm-wb-editor-dialog textarea{flex:1;min-height:0;width:auto;margin:8px;padding:10px;border:1px solid var(--pmm-wb-editor-border,rgba(127,127,127,.18));border-radius:9px;background:var(--pmm-wb-editor-field-bg,rgba(127,127,127,.05));color:var(--pmm-wb-editor-text,#222);font-size:12px!important;line-height:1.55!important;resize:none}
 .pmm-wb-source-picker{position:absolute;inset:0;z-index:14000;display:flex;align-items:flex-start;justify-content:center;padding:max(12px,env(safe-area-inset-top)) 10px;background:rgba(0,0,0,.42);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px)}.pmm-wb-picker-dialog{width:min(94%,430px);max-height:min(78%,620px);margin-top:7vh;display:flex;flex-direction:column;overflow:hidden;border:1px solid var(--pm-border,rgba(127,127,127,.22));border-radius:13px;background:var(--pm-panel-bg,var(--pm-card-bg,#fff));color:var(--pm-text-primary,inherit);box-shadow:0 18px 50px rgba(0,0,0,.35)}.pmm-wb-picker-head{display:grid;grid-template-columns:minmax(0,1fr) 34px;gap:6px;padding:8px;border-bottom:1px solid var(--pm-border,rgba(127,127,127,.14))}.pmm-wb-picker-head input{height:34px;min-width:0;padding:0 9px;border:1px solid var(--pm-border,rgba(127,127,127,.2));border-radius:8px;background:var(--pm-card-bg,rgba(127,127,127,.05));color:inherit}.pmm-wb-picker-head button{border:0;border-radius:8px;background:rgba(127,127,127,.08);color:inherit}.pmm-wb-picker-list{min-height:0;overflow:auto;padding:6px}.pmm-wb-picker-section+.pmm-wb-picker-section{margin-top:6px}.pmm-wb-picker-section-title{position:sticky;top:-6px;z-index:2;width:100%;min-height:34px;margin:0;padding:6px 8px;border:1px solid var(--pm-border,rgba(127,127,127,.13));border-radius:8px;background:var(--pm-card-bg,var(--pm-panel-bg,#fff));color:var(--pm-text-secondary,currentColor);display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:10px;font-weight:650;text-align:left}.pmm-wb-picker-section.is-expanded .pmm-wb-picker-section-title{border-radius:8px 8px 4px 4px}.pmm-wb-picker-section-title span{display:flex;align-items:center;gap:6px}.pmm-wb-picker-section-title i{width:11px;text-align:center;color:var(--pm-quote-color,#3485f6)}.pmm-wb-picker-section-title small{width:auto;font-size:9px;opacity:.58}.pmm-wb-picker-section-body{padding-top:3px}.pmm-wb-picker-section-body>button{width:100%;min-height:38px;margin-bottom:3px;padding:7px 9px;border:1px solid transparent;border-radius:8px;background:transparent;color:inherit;text-align:left;display:flex;flex-direction:column;justify-content:center;gap:2px}.pmm-wb-picker-name{width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.pmm-wb-picker-section-body>button small{width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:9px;opacity:.56}.pmm-wb-picker-section-body>button.is-current{border-color:var(--pm-quote-color,#3b82f6);background:color-mix(in srgb,var(--pm-quote-color,#3b82f6) 11%,transparent)}
 @media(max-width:768px){.pmm-wb-header{height:42px;min-height:42px;padding:4px}.pmm-wb-source-select{width:auto!important;min-width:0!important;max-width:none!important;flex:1 1 auto!important}.pmm-wb-source-action{width:23px;height:24px;min-width:23px}.pmm-wb-status{display:none}.pmm-wb-tool{width:24px;height:25px;min-width:24px}.pmm-wb-kind-switch button{width:22px}.pmm-wb-search-bar{gap:3px;padding:4px 6px}.pmm-wb-search-primary{gap:3px;flex-wrap:wrap}.pmm-wb-search-input-wrap{min-width:64px;flex:1 1 92px}.pmm-wb-search-scope{margin-left:auto}.pmm-wb-search-scope button{padding:0 4px;font-size:8.5px}.pmm-wb-replace-row{gap:3px}.pmm-wb-replace-action{padding:0 6px}.pmm-wb-list{padding:5px}.pmm-wb-entry-head{min-height:var(--pmm-user-item-height,39px);padding:2px 6px}.pmm-wb-details{padding:6px 7px 8px;gap:5px}.pmm-wb-meta-grid,.pmm-wb-meta-grid.has-depth{grid-template-columns:minmax(0,1.7fr) minmax(52px,.58fr) minmax(52px,.58fr)}.pmm-wb-details textarea{min-height:118px!important}.pmm-wb-content-search-preview{height:118px;min-height:118px}.pmm-wb-editor-dialog{width:94%;height:82%;max-height:calc(100dvh - 24px);border-radius:12px}.pmm-wb-editor-dialog textarea{margin:6px;padding:8px;font-size:11px!important}}
+`;
+    style.textContent += `
+.pmm-wb-editor-dialog header button[data-wb-editor-search-toggle].is-active{background:color-mix(in srgb,var(--pmm-wb-editor-accent,#3485f6) 18%,transparent);color:var(--pmm-wb-editor-accent,#3485f6)}
+.pmm-wb-editor-search{display:flex;flex-direction:column;gap:4px;padding:5px 8px;border-bottom:1px solid var(--pmm-wb-editor-border,rgba(127,127,127,.14))}.pmm-wb-editor-search[hidden]{display:none!important}.pmm-wb-editor-search-primary{min-height:26px;display:flex;align-items:center;gap:4px;min-width:0}.pmm-wb-editor-search-primary>i{width:13px;flex:none;font-size:10px;opacity:.62;text-align:center}.pmm-wb-editor-search-input-wrap{position:relative;min-width:48px;flex:1;display:block}.pmm-wb-editor-search-input-wrap input{box-sizing:border-box;width:100%;height:26px;padding:0 37px 0 7px;border:1px solid var(--pmm-wb-editor-border,rgba(127,127,127,.18));border-radius:6px;background:var(--pmm-wb-editor-field-bg,rgba(127,127,127,.05));color:inherit;font-size:11px;outline:none}.pmm-wb-editor-search-count{position:absolute;right:6px;top:50%;transform:translateY(-50%);min-width:27px;font-size:9px;line-height:1;opacity:.58;text-align:right;white-space:nowrap;pointer-events:none}
+.pmm-wb-editor-search-primary button{width:22px;height:23px;min-width:22px;padding:0;border:0;border-radius:4px;background:transparent;color:inherit;opacity:.68}.pmm-wb-editor-search-primary button:disabled{opacity:.22}.pmm-wb-editor-search-primary button.is-active{background:color-mix(in srgb,currentColor 10%,transparent);opacity:.92}.pmm-wb-editor-search-primary button i{font-size:9px}.pmm-wb-editor-replace-row{display:none;align-items:center;gap:4px;min-width:0}.pmm-wb-editor-replace-row.is-open{display:flex}.pmm-wb-editor-replace-row input{box-sizing:border-box;min-width:0;flex:1;height:26px;padding:0 7px;border:1px solid var(--pmm-wb-editor-border,rgba(127,127,127,.18));border-radius:6px;background:var(--pmm-wb-editor-field-bg,rgba(127,127,127,.05));color:inherit;font-size:11px;outline:none}.pmm-wb-editor-replace-row button{height:26px;min-width:42px;padding:0 7px;border:0;border-radius:6px;background:color-mix(in srgb,currentColor 9%,transparent);color:inherit;font-size:9px;opacity:.62;white-space:nowrap}.pmm-wb-editor-replace-row button:last-child{min-width:57px}.pmm-wb-editor-replace-row:focus-within button{background:var(--pmm-wb-editor-text,#222);color:var(--pmm-wb-editor-bg,#fff);opacity:.93}
+.pmm-wb-editor-body{position:relative;flex:1;min-height:0;margin:8px}.pmm-wb-editor-body>.pmm-wb-editor-search-preview,.pmm-wb-editor-body>textarea{box-sizing:border-box;position:absolute!important;inset:0;width:100%!important;height:100%!important;min-height:0!important;margin:0!important;padding:10px;border:1px solid var(--pmm-wb-editor-border,rgba(127,127,127,.18));border-radius:9px;font-size:12px!important;line-height:1.55!important;white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-word}.pmm-wb-editor-body>.pmm-wb-editor-search-preview{display:none;overflow:auto;background:var(--pmm-wb-editor-field-bg,rgba(127,127,127,.05));color:var(--pmm-wb-editor-text,#222);pointer-events:none;scrollbar-width:none}.pmm-wb-editor-body>.pmm-wb-editor-search-preview::-webkit-scrollbar{display:none}.pmm-wb-editor-body.is-search-active>.pmm-wb-editor-search-preview{display:block}.pmm-wb-editor-body>textarea{z-index:1;resize:none}.pmm-wb-editor-body.is-search-active>textarea{border-color:transparent!important;background:transparent!important;color:transparent!important;-webkit-text-fill-color:transparent!important;caret-color:var(--pmm-wb-editor-text,#222)!important}.pmm-wb-editor-body.is-search-active>textarea::selection{background:color-mix(in srgb,var(--pmm-wb-editor-accent,#3485f6) 38%,transparent)}
+.pmm-wb-editor-search-preview .pmm-wb-search-highlight{border-color:color-mix(in srgb,var(--pmm-wb-editor-accent,#3485f6) 55%,transparent);background:color-mix(in srgb,var(--pmm-wb-editor-accent,#3485f6) 38%,transparent)}.pmm-wb-editor-search-preview .pmm-wb-search-highlight.is-current{border-color:var(--pmm-wb-editor-accent,#3485f6);background:color-mix(in srgb,var(--pmm-wb-editor-accent,#3485f6) 82%,transparent);box-shadow:0 0 0 1px color-mix(in srgb,var(--pmm-wb-editor-accent,#3485f6) 80%,transparent),0 0 9px color-mix(in srgb,var(--pmm-wb-editor-accent,#3485f6) 72%,transparent)}
+@media(max-width:768px){.pmm-wb-editor-dialog header{gap:5px;padding:5px 6px}.pmm-wb-editor-dialog header button{width:26px;height:26px}.pmm-wb-editor-search{gap:3px;padding:4px 6px}.pmm-wb-editor-search-primary{gap:3px}.pmm-wb-editor-body{margin:6px}.pmm-wb-editor-body>.pmm-wb-editor-search-preview,.pmm-wb-editor-body>textarea{margin:0!important;padding:8px!important;font-size:11px!important}}
 `;
     DOC.head.append(style);
   }

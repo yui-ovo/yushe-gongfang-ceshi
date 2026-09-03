@@ -4,7 +4,7 @@ import { readFile } from 'node:fs/promises';
 const source = await readFile(new URL('../dist/worldbook-stitch-test3.js', import.meta.url), 'utf8');
 
 for (const marker of [
-  'function openTextEditor({ host, title, original, sourceField, themeNodes, ariaLabel, onSave })',
+  'function openTextEditor({ host, title, original, sourceField, themeNodes, ariaLabel, onSave, searchable = false })',
   'function openPresetContentEditor(button)',
   "event.target.closest?.('.prompt-editor__expand-btn')",
   'event.stopImmediatePropagation?.();',
