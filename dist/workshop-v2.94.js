@@ -10407,31 +10407,29 @@ html.pmm-dnd-compat-active #preset-manager-main-panel{user-select:none!important
     margin-bottom:calc(var(--pmm-user-group-gap) / 2)!important;
   }
 
-  /* “预设名称框长度”同步控制主预设和缝合页下方的另一张预设卡片。
-     名称框在有余量时必须自然填满左侧，不能因为首次量到的宽度而在图标前留透明断层。 */
+  /* “预设名称框长度”同步控制主预设和缝合页下方的另一张预设卡片。 */
   #preset-manager-main-panel.pmm-layout-custom-preset-width .pm-panel-container > .pm-main-wrapper .title-row,
   #preset-manager-main-panel.pmm-layout-custom-preset-width .pm-panel-container--merge-mode > .preset-panel .title-row{
-    flex:1 1 calc(var(--pmm-native-preset-width,108px) + var(--pmm-user-preset-width-offset) + 50px)!important;
-    width:auto!important;
-    min-width:0!important;
-    max-width:none!important;
+    flex:0 0 calc(var(--pmm-native-preset-width,108px) + var(--pmm-user-preset-width-offset) + 50px)!important;
+    width:calc(var(--pmm-native-preset-width,108px) + var(--pmm-user-preset-width-offset) + 50px)!important;
+    min-width:calc(var(--pmm-native-preset-width,108px) + var(--pmm-user-preset-width-offset) + 50px)!important;
+    max-width:calc(var(--pmm-native-preset-width,108px) + var(--pmm-user-preset-width-offset) + 50px)!important;
   }
   #preset-manager-main-panel.pmm-layout-custom-preset-width .pm-panel-container > .pm-main-wrapper .title-select,
   #preset-manager-main-panel.pmm-layout-custom-preset-width .pm-panel-container > .pm-main-wrapper .title-input,
   #preset-manager-main-panel.pmm-layout-custom-preset-width .pm-panel-container--merge-mode > .preset-panel .title-select,
   #preset-manager-main-panel.pmm-layout-custom-preset-width .pm-panel-container--merge-mode > .preset-panel .title-input{
-    flex:1 1 calc(var(--pmm-native-preset-width,108px) + var(--pmm-user-preset-width-offset))!important;
-    width:auto!important;
-    min-width:0!important;
-    max-width:none!important;
+    width:calc(var(--pmm-native-preset-width,108px) + var(--pmm-user-preset-width-offset))!important;
+    min-width:calc(var(--pmm-native-preset-width,108px) + var(--pmm-user-preset-width-offset))!important;
+    max-width:calc(var(--pmm-native-preset-width,108px) + var(--pmm-user-preset-width-offset))!important;
   }
 
   #preset-manager-main-panel.pmm-layout-custom-preset-width .pm-panel-container > .pm-main-wrapper .pm-header .header-left,
   #preset-manager-main-panel.pmm-layout-custom-preset-width .pm-panel-container--merge-mode > .preset-panel .pm-header .header-left{
-    flex:1 1 auto!important;
-    width:auto!important;
+    flex:0 0 var(--pmm-title-viewport-width,150px)!important;
+    width:var(--pmm-title-viewport-width,150px)!important;
     min-width:0!important;
-    max-width:none!important;
+    max-width:var(--pmm-title-viewport-width,150px)!important;
   }
   #preset-manager-main-panel.pmm-layout-custom-preset-width .pm-panel-container > .pm-main-wrapper .pm-header .header-left .title-card,
   #preset-manager-main-panel.pmm-layout-custom-preset-width .pm-panel-container--merge-mode > .preset-panel .pm-header .header-left .title-card{
@@ -10453,11 +10451,11 @@ html.pmm-dnd-compat-active #preset-manager-main-panel{user-select:none!important
   }
   #preset-manager-main-panel.pmm-layout-custom-preset-width .pm-panel-container > .pm-main-wrapper .pm-header .title-content,
   #preset-manager-main-panel.pmm-layout-custom-preset-width .pm-panel-container--merge-mode > .preset-panel .pm-header .title-content{
-    flex:1 1 auto!important;
-    width:100%!important;
-    min-width:0!important;
+    flex:0 0 max-content!important;
+    width:max-content!important;
+    min-width:max-content!important;
     max-width:none!important;
-    overflow:hidden!important;
+    overflow:visible!important;
   }
   #preset-manager-main-panel.pmm-layout-custom-preset-width .pm-panel-container > .pm-main-wrapper .pm-header .title-actions,
   #preset-manager-main-panel.pmm-layout-custom-preset-width .pm-panel-container--merge-mode > .preset-panel .pm-header .title-actions{
