@@ -1,5 +1,5 @@
 const EXTENSION_NAME = '🧪预设工坊测试版';
-const EXTENSION_VERSION = '2.94.0-test.58';
+const EXTENSION_VERSION = '2.94.0-test.59';
 const RUNTIME_ID = 'TH-script--🧩预设工坊（GitHub 扩展）--2f53f6af-3c9e-4c71-bc52-9f635be25300';
 const LEGACY_IFRAME_PREFIX = 'TH-script--🧩预设工坊';
 const EXTENSION_FOLDER_NAME = 'yushe-gongfang-ceshi';
@@ -214,6 +214,7 @@ function buildRuntimeDocument() {
   const workshopUrl = new URL('./workshop-v2.94.js', import.meta.url).href;
   const worldbookStitchUrl = new URL('./worldbook-stitch-test3.js', import.meta.url).href;
   const worldbookLoaderKey = '__PMM_LOAD_WORLDBOOK_STITCH__';
+  const globalWorldbookBranchesKey = '__PMM_GLOBAL_WORLDBOOK_BRANCHES_V1__';
 
   return `<!DOCTYPE html>
 <html>
@@ -258,6 +259,23 @@ function buildRuntimeDocument() {
     });
     return loading;
   };
+
+  const globalWorldbookQuickEntryEnabled = () => {
+    try {
+      const storage = window.parent?.localStorage || window.localStorage;
+      const saved = JSON.parse(storage?.getItem(${JSON.stringify(globalWorldbookBranchesKey)}) || 'null');
+      return saved?.enabled === true;
+    } catch (_) {
+      return false;
+    }
+  };
+
+  window.addEventListener('load', () => {
+    if (!globalWorldbookQuickEntryEnabled()) return;
+    window.setTimeout(() => {
+      window[loaderKey]().catch(error => console.debug('[预设工坊] 全局世界书分支快捷入口未能自动载入', error));
+    }, 240);
+  }, { once: true });
 })();
 </script>
 <script type="module" src="${workshopUrl}"></script>
