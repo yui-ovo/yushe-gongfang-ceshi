@@ -41,10 +41,12 @@ for (const marker of [
   'data-wb-action="select-all"',
   'function showWorldMultiDragFloat(event, count)',
   'function positionWorldMultiDragFloat(event)',
-  "icon.className = 'fa-solid fa-layer-group'",
+  "icon.className = 'fa-solid fa-up-down'",
   'label.textContent = `拖动 ${count} 条`;',
   'transfer.setDragImage(image, 0, 0)',
   'pmm-wb-multi-drag-float',
+  'pmm-wb-multi-drag-float-back',
+  'worldMultiDragGhost',
   'pmm-wb-entry--selected',
   '.pmm-wb-multi-bar',
   'side.selected.has(key) ? selectedWorldEntryKeys(side) : [key]',
@@ -103,9 +105,14 @@ assert.ok(customDragStart.includes('showWorldMultiDragFloat(event, keys.length);
 const presetDragStart = source.slice(source.indexOf("if (state.topType === 'preset')"), source.indexOf('function onDragOver(event)'));
 assert.ok(!presetDragStart.includes('showWorldMultiDragFloat'), '原生预设拖动必须保留自己的预览，不能重复显示世界书浮标');
 assert.ok(!source.includes("icon.textContent = '↕'"), '世界书多选拖动不应继续使用 Emoji 箭头');
-assert.ok(workshopSource.includes('fa-layer-group'), '预设多选拖动缺少统一的叠层图标');
-assert.ok(workshopSource.includes("拖动 '+n.length+\" 条</span>\""), '预设多选拖动缺少数量文案');
-assert.ok(workshopSource.includes('setDragImage(c,0,0)'), '预设多选拖动没有压缩原生拖拽截图');
-assert.ok(!workshopSource.includes("r.textContent='↕'"), '预设多选拖动不应继续使用 Emoji 箭头');
+const presetDragPreviewStart = workshopSource.indexOf('n.length>1&&(()=>{const t=document.createElement("div")');
+const presetDragPreviewEnd = workshopSource.indexOf('})())}function w(){', presetDragPreviewStart);
+const presetDragPreview = workshopSource.slice(presetDragPreviewStart, presetDragPreviewEnd);
+assert.ok(presetDragPreviewStart >= 0 && presetDragPreviewEnd > presetDragPreviewStart, '无法定位预设多选拖动预览');
+assert.ok(presetDragPreview.includes('fa-up-down'), '预设多选拖动缺少统一的上下箭头图标');
+assert.ok(presetDragPreview.includes('c.textContent="拖动 "+n.length+" 条"'), '预设多选拖动缺少数量文案');
+assert.ok(presetDragPreview.includes('setDragImage(C,0,0)'), '预设多选拖动没有压缩原生拖拽截图');
+assert.ok(!presetDragPreview.includes("r.textContent='↕'"), '预设多选拖动不应继续使用 Emoji 箭头');
+assert.ok(!presetDragPreview.includes('fa-layer-group'), '预设多选拖动不应继续使用叠层图标');
 
 console.log('test.37 回归通过：世界书正文高亮、键盘避让、替换撤销、全选、预设／世界书多选跟手浮标、工具位与主题色均已覆盖。');
