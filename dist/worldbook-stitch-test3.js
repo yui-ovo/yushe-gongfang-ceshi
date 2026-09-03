@@ -78,6 +78,14 @@
   let worldMultiDragPoint = null;
   let globalBranchQuickObserver = null;
   let globalBranchQuickFrame = 0;
+  let globalBranchPanelRecoveryTimer = 0;
+  let globalBranchPanelRecoveryTimerSession = null;
+  let globalBranchPanelRecoveryBusy = false;
+  let globalBranchPanelRecoveryBusySession = null;
+  let globalBranchPanelRecoveryAttempts = 0;
+  let globalBranchPanelRecoveryReported = false;
+  let globalBranchPanelSession = 0;
+  let globalBranchPanelReload = null;
 
   function notify(type, message) {
     const toast = TOP.toastr?.[type] || SELF.toastr?.[type];
@@ -1808,6 +1816,119 @@
     if (branchLibrary) branchLibrary.scrollTop = state.globalBranchSourceScrollTop || 0;
   }
 
+  function nativeTopPanelFrom(mainWrapper) {
+    return Array.from(mainWrapper?.children || []).find(panel => (
+      panel.matches?.('.preset-panel')
+      && !panel.matches?.('[data-pmm-wb-panel],[data-pmm-wb-global-library],[data-pmm-wb-global-branch-panel]')
+    )) || null;
+  }
+
+  function ensureWorldbookPanelAnchors() {
+    const host = state.host;
+    const container = host?.querySelector?.('.pm-panel-container');
+    const currentNativeTop = state.container === container ? nativeTopPanelFrom(state.mainWrapper) : null;
+    if (state.container === container && currentNativeTop === state.nativeTop && state.container?.isConnected && state.mainWrapper?.isConnected && state.nativeTop?.isConnected
+      && state.host?.contains(state.container) && state.container.contains(state.mainWrapper) && state.mainWrapper.contains(state.nativeTop)) return true;
+    const mainWrapper = container?.querySelector?.(':scope > .pm-main-wrapper');
+    const nativeTop = nativeTopPanelFrom(mainWrapper);
+    if (!host || !container || !mainWrapper || !nativeTop) return false;
+    state.container = container;
+    state.mainWrapper = mainWrapper;
+    state.nativeTop = nativeTop;
+    host.classList.add('pmm-worldbook-mode');
+    container.classList.add('pm-panel-container--merge-mode', 'pmm-worldbook-layout');
+    return true;
+  }
+
+  function globalWorldbookBranchPanelsMounted() {
+    const container = state.host?.querySelector?.('.pm-panel-container');
+    const mainWrapper = container?.querySelector?.(':scope > .pm-main-wrapper');
+    return Boolean(container === state.container && mainWrapper === state.mainWrapper && nativeTopPanelFrom(mainWrapper) === state.nativeTop
+      && state.topCard?.isConnected && state.bottomCard?.isConnected
+      && state.mainWrapper?.contains(state.topCard) && state.container?.contains(state.bottomCard));
+  }
+
+  function isCurrentGlobalWorldbookBranchSession(session) {
+    return state.open && isGlobalWorldbookBranchMode() && session === globalBranchPanelSession;
+  }
+
+  function globalWorldbookBranchRecoveryDelay() {
+    return [100, 160, 240, 360, 520, 720, 920, 1120][Math.min(globalBranchPanelRecoveryAttempts, 7)];
+  }
+
+  function reloadGlobalWorldbookBranchPanels(session, status = '重新载入全局世界书分支…') {
+    if (!isCurrentGlobalWorldbookBranchSession(session)) return Promise.resolve(false);
+    if (globalBranchPanelReload?.session === session) return globalBranchPanelReload.promise;
+    const reload = { session, promise: null };
+    reload.promise = (async () => {
+      if (!isCurrentGlobalWorldbookBranchSession(session) || !ensureWorldbookPanelAnchors()) return false;
+      setStatus(status);
+      await refreshWorldNames();
+      if (!isCurrentGlobalWorldbookBranchSession(session)) return false;
+      await loadWorldSide(state.bottom);
+      if (!isCurrentGlobalWorldbookBranchSession(session)) return false;
+      ensureGlobalWorldbookBranchState();
+      setStatus('已同步');
+      renderPanels();
+      return globalWorldbookBranchPanelsMounted();
+    })().finally(() => {
+      if (globalBranchPanelReload === reload) globalBranchPanelReload = null;
+    });
+    globalBranchPanelReload = reload;
+    return reload.promise;
+  }
+
+  function scheduleGlobalWorldbookBranchPanelRecovery(delay = globalWorldbookBranchRecoveryDelay(), session = globalBranchPanelSession) {
+    if (!isCurrentGlobalWorldbookBranchSession(session)) return;
+    if (globalBranchPanelRecoveryTimer && globalBranchPanelRecoveryTimerSession !== session) {
+      TOP.clearTimeout(globalBranchPanelRecoveryTimer);
+      globalBranchPanelRecoveryTimer = 0;
+      globalBranchPanelRecoveryTimerSession = null;
+    }
+    if (globalBranchPanelRecoveryTimer || (globalBranchPanelRecoveryBusy && globalBranchPanelRecoveryBusySession === session)) return;
+    if (globalBranchPanelRecoveryAttempts >= 8) {
+      if (!globalBranchPanelRecoveryReported) {
+        globalBranchPanelRecoveryReported = true;
+        console.error('[世界书缝合] 全局世界书分支卡片连续重挂失败，已停止重试');
+        notify('warning', '全局世界书分支仍在准备中，请稍后再点一次分支按钮');
+      }
+      return;
+    }
+    globalBranchPanelRecoveryTimer = TOP.setTimeout(async () => {
+      if (globalBranchPanelRecoveryTimerSession === session) {
+        globalBranchPanelRecoveryTimer = 0;
+        globalBranchPanelRecoveryTimerSession = null;
+      }
+      if (!isCurrentGlobalWorldbookBranchSession(session)) return;
+      if (globalWorldbookBranchPanelsMounted()) {
+        globalBranchPanelRecoveryAttempts = 0;
+        globalBranchPanelRecoveryReported = false;
+        return;
+      }
+      globalBranchPanelRecoveryBusy = true;
+      globalBranchPanelRecoveryBusySession = session;
+      globalBranchPanelRecoveryAttempts += 1;
+      try {
+        const mounted = await reloadGlobalWorldbookBranchPanels(session);
+        if (mounted) {
+          globalBranchPanelRecoveryAttempts = 0;
+          globalBranchPanelRecoveryReported = false;
+        }
+      } catch (error) {
+        console.warn('[世界书缝合] 全局世界书分支仍未就绪，稍后重试', error);
+      } finally {
+        if (globalBranchPanelRecoveryBusySession === session) {
+          globalBranchPanelRecoveryBusy = false;
+          globalBranchPanelRecoveryBusySession = null;
+        }
+        if (isCurrentGlobalWorldbookBranchSession(session) && !globalWorldbookBranchPanelsMounted()) {
+          scheduleGlobalWorldbookBranchPanelRecovery(globalWorldbookBranchRecoveryDelay(), session);
+        }
+      }
+    }, delay);
+    globalBranchPanelRecoveryTimerSession = session;
+  }
+
   function decorateNativeTop() {
     const panel = state.nativeTop;
     if (!panel) return;
@@ -1848,6 +1969,10 @@
 
   function renderPanels() {
     if (!state.open || !state.host?.isConnected) return;
+    if (!ensureWorldbookPanelAnchors()) {
+      scheduleGlobalWorldbookBranchPanelRecovery(120);
+      return;
+    }
     syncWorldSearchHighlightTheme();
     saveScrolls();
     const themeToggle = state.host.querySelector('.pmm-mobile-theme-toggle');
@@ -2296,13 +2421,36 @@
   }
 
   async function switchBottomMode(mode) {
-    if (!['world', 'branches'].includes(mode) || state.bottomMode === mode) return;
+    if (!['world', 'branches'].includes(mode)) return;
+    const retryCurrentBranch = mode === 'branches' && state.bottomMode === 'branches' && !globalWorldbookBranchPanelsMounted();
+    if (state.bottomMode === mode && !retryCurrentBranch) return;
+    const session = ++globalBranchPanelSession;
     state.bottomMode = mode;
-    if (mode === 'branches') {
-      refreshCharacterWorldBindings();
-      ensureGlobalWorldbookBranchState();
+    if (globalBranchPanelRecoveryTimer) TOP.clearTimeout(globalBranchPanelRecoveryTimer);
+    globalBranchPanelRecoveryTimer = 0;
+    globalBranchPanelRecoveryTimerSession = null;
+    globalBranchPanelRecoveryAttempts = 0;
+    globalBranchPanelRecoveryReported = false;
+    if (mode !== 'branches') {
+      renderPanels();
+      return;
     }
+    /* 先挂出分支界面，再重新读一次世界书。部分宿主切换卡片时会重建 Vue 容器，不能沿用旧节点。 */
+    refreshCharacterWorldBindings();
+    ensureGlobalWorldbookBranchState();
     renderPanels();
+    try {
+      const mounted = await reloadGlobalWorldbookBranchPanels(session, '载入全局世界书分支…');
+      if (!mounted && isCurrentGlobalWorldbookBranchSession(session)) {
+        scheduleGlobalWorldbookBranchPanelRecovery(globalWorldbookBranchRecoveryDelay(), session);
+      }
+    } catch (error) {
+      console.error('[世界书缝合] 切换全局世界书分支失败', error);
+      if (isCurrentGlobalWorldbookBranchSession(session)) {
+        setStatus('等待宿主内容…');
+        scheduleGlobalWorldbookBranchPanelRecovery(globalWorldbookBranchRecoveryDelay(), session);
+      }
+    }
   }
 
   async function handleAction(button) {
@@ -2827,6 +2975,10 @@
     }
     installStyle();
     state.open = true;
+    globalBranchPanelSession += 1;
+    globalBranchPanelReload = null;
+    globalBranchPanelRecoveryAttempts = 0;
+    globalBranchPanelRecoveryReported = false;
     state.host = host;
     state.container = container;
     state.mainWrapper = mainWrapper;
@@ -2852,12 +3004,27 @@
     hostObserver?.disconnect();
     hostObserver = new MutationObserver(() => {
       if (!state.host?.isConnected) return resetClosedState();
+      ensureWorldbookPanelAnchors();
       scheduleDecorate();
+      if (isGlobalWorldbookBranchMode() && !globalWorldbookBranchPanelsMounted()) {
+        scheduleGlobalWorldbookBranchPanelRecovery();
+      }
     });
     hostObserver.observe(host, { childList: true, subtree: true });
   }
 
   function resetClosedState() {
+    globalBranchPanelSession += 1;
+    if (globalBranchPanelRecoveryTimer) {
+      TOP.clearTimeout(globalBranchPanelRecoveryTimer);
+      globalBranchPanelRecoveryTimer = 0;
+    }
+    globalBranchPanelRecoveryTimerSession = null;
+    globalBranchPanelRecoveryBusy = false;
+    globalBranchPanelRecoveryBusySession = null;
+    globalBranchPanelRecoveryAttempts = 0;
+    globalBranchPanelRecoveryReported = false;
+    globalBranchPanelReload = null;
     state.open = false;
     state.busy = false;
     state.status = '已同步';
