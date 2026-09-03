@@ -48,6 +48,9 @@ for (const marker of [
   'transfer.setDragImage(image, 0, 0)',
   'pmm-wb-multi-drag-float',
   'pmm-wb-multi-drag-float-back',
+  "plus.className = 'pmm-wb-multi-drag-float-plus';",
+  'transform:translate(8px,8px) rotate(1.6deg)',
+  '.pmm-wb-multi-drag-float-plus::before',
   'background:rgba(247,246,248,.88)',
   '[data-pmm-wb-multi-drag-tone="dark"]',
   'backdrop-filter:blur(18px) saturate(112%)',
@@ -107,6 +110,10 @@ assert.equal(multiDragPreviewLabel(3), '拖动 3 条', '多选拖动预览必须
 assert.equal(multiDragPreviewLabel(1), '', '单条拖动不应显示多选数量预览');
 const customDragStart = source.slice(source.indexOf('if (custom) {'), source.indexOf("if (state.topType === 'preset')"));
 assert.ok(customDragStart.includes('showWorldMultiDragFloat(event, keys.length);'), '世界书多选拖动必须生成数量浮标');
+const worldDropEffect = selectedCount => selectedCount > 1 ? 'move' : 'copy';
+assert.equal(worldDropEffect(3), 'move', '多选拖动应避免宿主额外显示复制加号');
+assert.equal(worldDropEffect(1), 'copy', '单条跨世界书拖动必须保留复制语义');
+assert.ok(source.includes("event.dataTransfer.dropEffect = dragPayload.keys.length > 1 ? 'move' : 'copy';"), '世界书多选拖动没有切换原生拖放徽章状态');
 const presetDragStart = source.slice(source.indexOf("if (state.topType === 'preset')"), source.indexOf('function onDragOver(event)'));
 assert.ok(!presetDragStart.includes('showWorldMultiDragFloat'), '原生预设拖动必须保留自己的预览，不能重复显示世界书浮标');
 assert.ok(!source.includes("icon.textContent = '↕'"), '世界书多选拖动不应继续使用 Emoji 箭头');
@@ -123,6 +130,8 @@ assert.ok(presetDragPreview.includes('t.dataset.pmmMultiDragTone=a?"dark":"light
 assert.ok(presetDragPreview.includes('rgba(247,246,248,.88)'), '预设多选拖动缺少日间白瓷玻璃样式');
 assert.ok(presetDragPreview.includes('rgba(36,43,57,.84)'), '预设多选拖动缺少夜间深蓝玻璃样式');
 assert.ok(presetDragPreview.includes('backdrop-filter:blur(18px) saturate(112%)'), '预设多选拖动缺少玻璃磨砂效果');
+assert.ok(presetDragPreview.includes('rotate(1.6deg)'), '预设多选拖动缺少右下倾斜的后层卡片');
+assert.ok(presetDragPreview.includes('right:-10px;top:-15px'), '预设多选拖动缺少右上角浅绿加号徽章');
 assert.ok(!presetDragPreview.includes("r.textContent='↕'"), '预设多选拖动不应继续使用 Emoji 箭头');
 assert.ok(!presetDragPreview.includes('fa-layer-group'), '预设多选拖动不应继续使用叠层图标');
 
