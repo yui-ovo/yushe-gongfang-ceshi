@@ -48,7 +48,7 @@ for (const marker of [
   'transfer.setDragImage(image, 0, 0)',
   'pmm-wb-multi-drag-float',
   'pmm-wb-multi-drag-float-back',
-  'transform:translate(8px,8px) rotate(1.6deg)',
+  'transform:rotate(1.6deg)',
   'width:188px;height:46px',
   'font-size:14px;font-weight:500',
   'background:rgba(247,246,248,.88)',
@@ -111,6 +111,7 @@ assert.equal(multiDragPreviewLabel(1), '', '单条拖动不应显示多选数量
 const customDragStart = source.slice(source.indexOf('if (custom) {'), source.indexOf("if (state.topType === 'preset')"));
 assert.ok(customDragStart.includes('showWorldMultiDragFloat(event, keys.length);'), '世界书多选拖动必须生成数量浮标');
 assert.ok(source.includes("event.dataTransfer.dropEffect = 'copy';"), '世界书拖动必须保留浏览器原生复制提示');
+assert.ok(!source.includes('transform:translate(8px,8px) rotate(1.6deg)'), '双层卡后层不应再向右下平移');
 const presetDragStart = source.slice(source.indexOf("if (state.topType === 'preset')"), source.indexOf('function onDragOver(event)'));
 assert.ok(!presetDragStart.includes('showWorldMultiDragFloat'), '原生预设拖动必须保留自己的预览，不能重复显示世界书浮标');
 assert.ok(!source.includes("icon.textContent = '↕'"), '世界书多选拖动不应继续使用 Emoji 箭头');
@@ -127,7 +128,8 @@ assert.ok(presetDragPreview.includes('t.dataset.pmmMultiDragTone=a?"dark":"light
 assert.ok(presetDragPreview.includes('rgba(247,246,248,.88)'), '预设多选拖动缺少日间白瓷玻璃样式');
 assert.ok(presetDragPreview.includes('rgba(36,43,57,.84)'), '预设多选拖动缺少夜间深蓝玻璃样式');
 assert.ok(presetDragPreview.includes('backdrop-filter:blur(18px) saturate(112%)'), '预设多选拖动缺少玻璃磨砂效果');
-assert.ok(presetDragPreview.includes('rotate(1.6deg)'), '预设多选拖动缺少右下倾斜的后层卡片');
+assert.ok(presetDragPreview.includes('rotate(1.6deg)'), '预设多选拖动缺少原位轻转的后层卡片');
+assert.ok(!presetDragPreview.includes('translate(8px,8px) rotate(1.6deg)'), '预设多选拖动后层不应再向右下平移');
 assert.ok(presetDragPreview.includes('width:188px;height:46px'), '预设多选拖动没有压薄上下高度');
 assert.ok(presetDragPreview.includes('font-size:14px;font-weight:500'), '预设多选拖动的文字仍然过厚');
 assert.ok(!presetDragPreview.includes("r.textContent='↕'"), '预设多选拖动不应继续使用 Emoji 箭头');
