@@ -1,5 +1,5 @@
 const EXTENSION_NAME = '🧪预设工坊测试版';
-const EXTENSION_VERSION = '2.94.0-test.53';
+const EXTENSION_VERSION = '2.94.0-test.54';
 const RUNTIME_ID = 'TH-script--🧩预设工坊（GitHub 扩展）--2f53f6af-3c9e-4c71-bc52-9f635be25300';
 const LEGACY_IFRAME_PREFIX = 'TH-script--🧩预设工坊';
 const EXTENSION_FOLDER_NAME = 'yushe-gongfang-ceshi';
@@ -213,6 +213,7 @@ function buildRuntimeDocument() {
   const predefineUrl = new URL('../bridge/predefine.js', import.meta.url).href;
   const workshopUrl = new URL('./workshop-v2.94.js', import.meta.url).href;
   const worldbookStitchUrl = new URL('./worldbook-stitch-test3.js', import.meta.url).href;
+  const worldbookLoaderKey = '__PMM_LOAD_WORLDBOOK_STITCH__';
 
   return `<!DOCTYPE html>
 <html>
@@ -225,8 +226,41 @@ function buildRuntimeDocument() {
 <script src="https://testingcf.jsdelivr.net/gh/N0VI028/JS-Slash-Runner/src/iframe/node_modules/log.js"></script>
 </head>
 <body>
+<script>
+(() => {
+  const source = ${JSON.stringify(worldbookStitchUrl)};
+  const loaderKey = ${JSON.stringify(worldbookLoaderKey)};
+  const apiKey = '__PMM_WORLDBOOK_STITCH_TEST3__';
+  let loading = null;
+
+  const currentApi = () => {
+    try { return window.parent?.[apiKey] || null; } catch (_) { return null; }
+  };
+
+  window[loaderKey] = () => {
+    const ready = currentApi();
+    if (typeof ready?.open === 'function') return Promise.resolve(ready);
+    if (loading) return loading;
+    loading = new Promise((resolve, reject) => {
+      const script = document.createElement('script');
+      script.type = 'module';
+      script.src = source;
+      script.addEventListener('load', () => {
+        const api = currentApi();
+        if (typeof api?.open === 'function') resolve(api);
+        else reject(new Error('世界书模块没有提供打开接口'));
+      }, { once: true });
+      script.addEventListener('error', () => reject(new Error('世界书模块载入失败')), { once: true });
+      document.head.append(script);
+    }).catch(error => {
+      loading = null;
+      throw error;
+    });
+    return loading;
+  };
+})();
+</script>
 <script type="module" src="${workshopUrl}"></script>
-<script type="module" src="${worldbookStitchUrl}"></script>
 </body>
 </html>`;
 }

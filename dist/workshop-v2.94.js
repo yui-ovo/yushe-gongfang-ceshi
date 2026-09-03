@@ -3760,8 +3760,10 @@ async function ce(){
   const DOC = TOP.document || document;
   const API_KEY = '__PMM_WORLDBOOK_SLOT_TEST1__';
   const BUTTON_MARK = 'data-pmm-worldbook-placeholder';
+  const LOADER_KEY = '__PMM_LOAD_WORLDBOOK_STITCH__';
   let observer = null;
   let frameId = 0;
+  let openingPromise = null;
 
   try { TOP[API_KEY]?.cleanup?.(); } catch (_) {}
 
@@ -3774,11 +3776,42 @@ async function ce(){
     }
   }
 
-  function stopPlaceholderAction(event) {
+  function openWorldbook() {
+    if (openingPromise) return openingPromise;
+    openingPromise = (async () => {
+      let api = TOP.__PMM_WORLDBOOK_STITCH_TEST3__;
+      if (typeof api?.open !== 'function') {
+        const loader = window[LOADER_KEY];
+        if (typeof loader !== 'function') throw new Error('世界书按需加载器尚未就绪');
+        api = await loader();
+      }
+      if (typeof api?.open !== 'function') throw new Error('世界书模块没有提供打开接口');
+      return api.open();
+    })().finally(() => { openingPromise = null; });
+    return openingPromise;
+  }
+
+  async function stopPlaceholderAction(event) {
     event.preventDefault();
     event.stopPropagation();
     event.stopImmediatePropagation?.();
-    TOP.__PMM_WORLDBOOK_STITCH_TEST3__?.open?.();
+    const button = event.currentTarget;
+    if (button?.dataset.pmmWorldbookLoading === '1') return;
+    const icon = button?.querySelector('i');
+    const iconClass = icon?.className || '';
+    button?.setAttribute('aria-busy', 'true');
+    button?.setAttribute('data-pmm-worldbook-loading', '1');
+    if (icon) icon.className = 'fa-solid fa-spinner fa-spin';
+    try {
+      await openWorldbook();
+    } catch (error) {
+      console.error('[预设工坊测试版] 世界书按需加载失败', error);
+      TOP.toastr?.error?.('世界书加载失败，请重试', '预设工坊测试版');
+    } finally {
+      button?.removeAttribute('aria-busy');
+      button?.removeAttribute('data-pmm-worldbook-loading');
+      if (icon) icon.className = iconClass || 'fa-solid fa-book-atlas';
+    }
   }
 
   function createButton(toolbar) {
