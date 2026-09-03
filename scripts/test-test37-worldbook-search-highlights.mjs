@@ -41,12 +41,16 @@ for (const marker of [
   'data-wb-action="select-all"',
   'function showWorldMultiDragFloat(event, count)',
   'function positionWorldMultiDragFloat(event)',
+  'function resolveWorldMultiDragTone()',
+  'chip.dataset.pmmWbMultiDragTone = resolveWorldMultiDragTone();',
   "icon.className = 'fa-solid fa-up-down'",
   'label.textContent = `拖动 ${count} 条`;',
   'transfer.setDragImage(image, 0, 0)',
   'pmm-wb-multi-drag-float',
   'pmm-wb-multi-drag-float-back',
-  'background:#efedf0;color:#504e55!important',
+  'background:rgba(247,246,248,.88)',
+  '[data-pmm-wb-multi-drag-tone="dark"]',
+  'backdrop-filter:blur(18px) saturate(112%)',
   'worldMultiDragGhost',
   'pmm-wb-entry--selected',
   '.pmm-wb-multi-bar',
@@ -115,7 +119,10 @@ assert.ok(presetDragPreview.includes('c.textContent="拖动 "+n.length+" 条"'),
 assert.ok(presetDragPreview.includes('setDragImage(C,0,0)'), '预设多选拖动没有压缩原生拖拽截图');
 assert.ok(presetDragPreview.includes('h.body.appendChild(t)'), '预设多选拖动必须渲染到可见的酒馆页面');
 assert.ok(presetDragPreview.includes('h.addEventListener("drag",p,!0)'), '预设多选拖动必须在酒馆页面持续跟手');
-assert.ok(presetDragPreview.includes('background:#efedf0;color:#504e55!important'), '预设多选拖动必须使用稳定的瓷灰卡片与深灰文字');
+assert.ok(presetDragPreview.includes('t.dataset.pmmMultiDragTone=a?"dark":"light"'), '预设多选拖动必须根据当前明暗选择浮标样式');
+assert.ok(presetDragPreview.includes('rgba(247,246,248,.88)'), '预设多选拖动缺少日间白瓷玻璃样式');
+assert.ok(presetDragPreview.includes('rgba(36,43,57,.84)'), '预设多选拖动缺少夜间深蓝玻璃样式');
+assert.ok(presetDragPreview.includes('backdrop-filter:blur(18px) saturate(112%)'), '预设多选拖动缺少玻璃磨砂效果');
 assert.ok(!presetDragPreview.includes("r.textContent='↕'"), '预设多选拖动不应继续使用 Emoji 箭头');
 assert.ok(!presetDragPreview.includes('fa-layer-group'), '预设多选拖动不应继续使用叠层图标');
 
