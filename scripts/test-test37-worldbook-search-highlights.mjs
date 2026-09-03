@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
 const source = await readFile(new URL('../dist/worldbook-stitch-test3.js', import.meta.url), 'utf8');
+const workshopSource = await readFile(new URL('../dist/workshop-v2.94.js', import.meta.url), 'utf8');
 
 for (const marker of [
   "function highlightedWorldSearchText(value, query, currentMatch = null, fieldName = '')",
@@ -38,9 +39,12 @@ for (const marker of [
   'function selectedWorldEntryKeys(side)',
   'function toggleWorldSelectAll(sideName)',
   'data-wb-action="select-all"',
-  'function setWorldMultiDragImage(event, count)',
-  'title.textContent = `拖动 ${count} 条`;',
-  'transfer.setDragImage(preview, 28, 24)',
+  'function showWorldMultiDragFloat(event, count)',
+  'function positionWorldMultiDragFloat(event)',
+  "icon.className = 'fa-solid fa-layer-group'",
+  'label.textContent = `拖动 ${count} 条`;',
+  'transfer.setDragImage(image, 0, 0)',
+  'pmm-wb-multi-drag-float',
   'pmm-wb-entry--selected',
   '.pmm-wb-multi-bar',
   'side.selected.has(key) ? selectedWorldEntryKeys(side) : [key]',
@@ -95,8 +99,13 @@ const multiDragPreviewLabel = count => count > 1 ? `拖动 ${count} 条` : '';
 assert.equal(multiDragPreviewLabel(3), '拖动 3 条', '多选拖动预览必须明确显示条目数量');
 assert.equal(multiDragPreviewLabel(1), '', '单条拖动不应显示多选数量预览');
 const customDragStart = source.slice(source.indexOf('if (custom) {'), source.indexOf("if (state.topType === 'preset')"));
-assert.ok(customDragStart.includes('setWorldMultiDragImage(event, keys.length);'), '世界书多选拖动必须生成数量预览');
+assert.ok(customDragStart.includes('showWorldMultiDragFloat(event, keys.length);'), '世界书多选拖动必须生成数量浮标');
 const presetDragStart = source.slice(source.indexOf("if (state.topType === 'preset')"), source.indexOf('function onDragOver(event)'));
-assert.ok(!presetDragStart.includes('setWorldMultiDragImage'), '原生预设拖动必须保留自己的预览，不能重复显示世界书预览');
+assert.ok(!presetDragStart.includes('showWorldMultiDragFloat'), '原生预设拖动必须保留自己的预览，不能重复显示世界书浮标');
+assert.ok(!source.includes("icon.textContent = '↕'"), '世界书多选拖动不应继续使用 Emoji 箭头');
+assert.ok(workshopSource.includes('fa-layer-group'), '预设多选拖动缺少统一的叠层图标');
+assert.ok(workshopSource.includes("拖动 '+n.length+\" 条</span>\""), '预设多选拖动缺少数量文案');
+assert.ok(workshopSource.includes('setDragImage(c,0,0)'), '预设多选拖动没有压缩原生拖拽截图');
+assert.ok(!workshopSource.includes("r.textContent='↕'"), '预设多选拖动不应继续使用 Emoji 箭头');
 
-console.log('test.37 回归通过：世界书正文高亮、键盘避让、替换撤销、全选、多选拖动预览、工具位与主题色均已覆盖。');
+console.log('test.37 回归通过：世界书正文高亮、键盘避让、替换撤销、全选、预设／世界书多选跟手浮标、工具位与主题色均已覆盖。');
