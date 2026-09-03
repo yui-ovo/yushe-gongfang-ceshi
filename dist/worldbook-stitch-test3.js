@@ -11,9 +11,6 @@
   const HISTORY_LIMIT = 20;
   const MULTI_DRAG_FLOAT_WIDTH = 198;
   const MULTI_DRAG_FLOAT_HEIGHT = 58;
-  const GLOBAL_WORLDBOOK_BRANCHES_KEY = '__PMM_GLOBAL_WORLDBOOK_BRANCHES_V1__';
-  const GLOBAL_WORLDBOOK_BRANCHES_VERSION = 1;
-  const GLOBAL_WORLDBOOK_BRANCH_QUICK_MARK = 'data-pmm-global-worldbook-branch-quick';
   const IS_ANDROID = /Android/i.test(String(TOP.navigator?.userAgent || SELF.navigator?.userAgent || ''));
   const MODE_CLASSES = ['pm-panel-container--merge-mode', 'pm-panel-container--branch-mode', 'pm-panel-container--favorite-mode'];
   const POSITION_OPTIONS = [
@@ -52,11 +49,6 @@
     bottomMode: 'world',
     worldNames: [],
     worldBindings: new Map(),
-    worldPrimaryBindings: new Map(),
-    worldAdditionalBindings: new Map(),
-    globalWorldbookBranches: null,
-    globalBranchSourceQuery: '',
-    globalBranchSourceScrollTop: 0,
     top: emptyWorldSide(),
     bottom: emptyWorldSide(),
     host: null,
@@ -76,16 +68,6 @@
   let worldMultiDragGhost = null;
   let worldMultiDragFrame = 0;
   let worldMultiDragPoint = null;
-  let globalBranchQuickObserver = null;
-  let globalBranchQuickFrame = 0;
-  let globalBranchPanelRecoveryTimer = 0;
-  let globalBranchPanelRecoveryTimerSession = null;
-  let globalBranchPanelRecoveryBusy = false;
-  let globalBranchPanelRecoveryBusySession = null;
-  let globalBranchPanelRecoveryAttempts = 0;
-  let globalBranchPanelRecoveryReported = false;
-  let globalBranchPanelSession = 0;
-  let globalBranchPanelReload = null;
 
   function notify(type, message) {
     const toast = TOP.toastr?.[type] || SELF.toastr?.[type];
@@ -113,251 +95,6 @@
 
   function getContext() {
     return SELF.SillyTavern?.getContext?.() || TOP.SillyTavern?.getContext?.() || null;
-  }
-
-  function textValue(value) { return String(value ?? '').trim(); }
-
-  function safeLocalStorageGet(key) {
-    try { return TOP.localStorage?.getItem?.(key) || ''; } catch (_) { return ''; }
-  }
-
-  function safeLocalStorageSet(key, value) {
-    try { TOP.localStorage?.setItem?.(key, value); return true; } catch (_) { return false; }
-  }
-
-  function newGlobalWorldbookBranchId() {
-    return `wb-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
-  }
-
-  function normalizeGlobalWorldbookNames(values, availableNames = state.worldNames) {
-    const available = new Set((availableNames || []).map(textValue).filter(Boolean));
-    const seen = new Set();
-    const normalized = [];
-    for (const value of Array.isArray(values) ? values : []) {
-      const name = textValue(value);
-      if (!name || !available.has(name) || seen.has(name)) continue;
-      seen.add(name);
-      normalized.push(name);
-    }
-    return normalized;
-  }
-
-  function mergeGlobalWorldbookNames(current, addition, availableNames = state.worldNames) {
-    return normalizeGlobalWorldbookNames([...(current || []), ...(addition || [])], availableNames);
-  }
-
-  function readGlobalWorldbookBranchState() {
-    let parsed = null;
-    try { parsed = JSON.parse(safeLocalStorageGet(GLOBAL_WORLDBOOK_BRANCHES_KEY) || 'null'); } catch (_) {}
-    const branches = Array.isArray(parsed?.branches) ? parsed.branches.map(branch => ({
-      id: textValue(branch?.id) || newGlobalWorldbookBranchId(),
-      name: textValue(branch?.name) || '未命名分支',
-      worldNames: Array.isArray(branch?.worldNames) ? branch.worldNames.map(textValue).filter(Boolean) : [],
-    })) : [];
-    const ids = new Set();
-    const uniqueBranches = branches.filter(branch => {
-      if (ids.has(branch.id)) return false;
-      ids.add(branch.id);
-      return true;
-    });
-    const selectedId = uniqueBranches.some(branch => branch.id === parsed?.selectedId)
-      ? parsed.selectedId
-      : (uniqueBranches[0]?.id || '');
-    return {
-      version: GLOBAL_WORLDBOOK_BRANCHES_VERSION,
-      enabled: parsed?.enabled === true,
-      selectedId,
-      branches: uniqueBranches,
-    };
-  }
-
-  function writeGlobalWorldbookBranchState(nextState) {
-    const raw = nextState && typeof nextState === 'object' ? nextState : {};
-    const branches = Array.isArray(raw.branches) ? raw.branches.map(branch => ({
-      id: textValue(branch?.id) || newGlobalWorldbookBranchId(),
-      name: textValue(branch?.name) || '未命名分支',
-      worldNames: Array.isArray(branch?.worldNames) ? branch.worldNames.map(textValue).filter(Boolean) : [],
-    })) : [];
-    const ids = new Set();
-    const uniqueBranches = branches.filter(branch => {
-      if (ids.has(branch.id)) return false;
-      ids.add(branch.id);
-      return true;
-    });
-    const saved = {
-      version: GLOBAL_WORLDBOOK_BRANCHES_VERSION,
-      enabled: raw.enabled === true,
-      selectedId: uniqueBranches.some(branch => branch.id === raw.selectedId)
-        ? raw.selectedId
-        : (uniqueBranches[0]?.id || ''),
-      branches: uniqueBranches,
-    };
-    state.globalWorldbookBranches = saved;
-    safeLocalStorageSet(GLOBAL_WORLDBOOK_BRANCHES_KEY, JSON.stringify(saved));
-    scheduleGlobalBranchQuickToolbar();
-    return saved;
-  }
-
-  function ensureGlobalWorldbookBranchState() {
-    const existing = state.globalWorldbookBranches || readGlobalWorldbookBranchState();
-    if (existing.branches.length) {
-      state.globalWorldbookBranches = existing;
-      return existing;
-    }
-    return writeGlobalWorldbookBranchState({
-      ...existing,
-      selectedId: 'default',
-      branches: [{ id:'default', name:'默认', worldNames:currentGlobalWorldbookNames() }],
-    });
-  }
-
-  function selectedGlobalWorldbookBranch() {
-    const branchState = ensureGlobalWorldbookBranchState();
-    return branchState.branches.find(branch => branch.id === branchState.selectedId) || branchState.branches[0] || null;
-  }
-
-  function globalWorldInfoSelect() {
-    return DOC.querySelector('#world_info');
-  }
-
-  function currentGlobalWorldbookNames() {
-    const reader = helperFunction('getGlobalWorldbookNames');
-    if (reader) {
-      try {
-        const names = reader();
-        if (Array.isArray(names)) return names.map(textValue).filter(Boolean);
-      } catch (error) {
-        console.warn('[世界书缝合] 读取原生全局世界书失败，改用选择器兜底', error);
-      }
-    }
-    const select = DOC.querySelector('#world_info');
-    if (!select) return [];
-    return Array.from(select.options || [])
-      .filter(option => option.selected)
-      .map(option => textValue(option.textContent))
-      .filter(Boolean);
-  }
-
-  async function updateNativeGlobalWorldbookNames(names) {
-    const next = normalizeGlobalWorldbookNames(names);
-    const rebind = helperFunction('rebindGlobalWorldbooks');
-    if (rebind) {
-      await rebind(next);
-      return next;
-    }
-    const select = DOC.querySelector('#world_info');
-    if (!select) throw new Error('酒馆原生全局世界书选择器尚未就绪');
-    const selected = new Set(next);
-    for (const option of Array.from(select.options || [])) {
-      option.selected = selected.has(textValue(option.textContent));
-    }
-    const jquery = TOP.jQuery || TOP.$;
-    if (typeof jquery === 'function') {
-      const selectedValues = Array.from(select.options || []).filter(option => option.selected).map(option => option.value);
-      jquery(select).val(selectedValues).trigger('input').trigger('change');
-    } else {
-      select.dispatchEvent(new Event('input', { bubbles:true }));
-      select.dispatchEvent(new Event('change', { bubbles:true }));
-    }
-    return next;
-  }
-
-  async function applyGlobalWorldbookBranch(branch, mode = 'replace') {
-    if (!branch) return notify('warning', '请先选择世界书分支');
-    const branchNames = normalizeGlobalWorldbookNames(branch.worldNames, globalWorldbookBranchCandidates());
-    const current = currentGlobalWorldbookNames();
-    const next = mode === 'merge'
-      ? mergeGlobalWorldbookNames(current, branchNames)
-      : branchNames;
-    await updateNativeGlobalWorldbookNames(next);
-    notify('success', mode === 'merge'
-      ? `已叠加“${branch.name}”的 ${branchNames.length} 本世界书`
-      : `已整组切换到“${branch.name}”`);
-    return next;
-  }
-
-  function isGlobalWorldbookBranchMode() {
-    return state.bottomMode === 'branches';
-  }
-
-  function updateGlobalWorldbookBranch(mutator) {
-    const previous = ensureGlobalWorldbookBranchState();
-    const draft = {
-      ...previous,
-      branches: previous.branches.map(branch => ({ ...branch, worldNames:[...branch.worldNames] })),
-    };
-    mutator?.(draft);
-    return writeGlobalWorldbookBranchState(draft);
-  }
-
-  function selectGlobalWorldbookBranch(id) {
-    const branchId = textValue(id);
-    const next = updateGlobalWorldbookBranch(draft => {
-      if (draft.branches.some(branch => branch.id === branchId)) draft.selectedId = branchId;
-    });
-    return next.branches.find(branch => branch.id === next.selectedId) || next.branches[0] || null;
-  }
-
-  function addGlobalWorldbooksToBranch(names) {
-    const requested = normalizeGlobalWorldbookNames(names, globalWorldbookBranchCandidates());
-    if (!requested.length) return selectedGlobalWorldbookBranch();
-    let selected = null;
-    updateGlobalWorldbookBranch(draft => {
-      selected = draft.branches.find(branch => branch.id === draft.selectedId) || draft.branches[0];
-      if (!selected) return;
-      selected.worldNames = mergeGlobalWorldbookNames(selected.worldNames, requested);
-    });
-    return selected;
-  }
-
-  function removeGlobalWorldbookFromBranch(name) {
-    const removedName = textValue(name);
-    updateGlobalWorldbookBranch(draft => {
-      const selected = draft.branches.find(branch => branch.id === draft.selectedId) || draft.branches[0];
-      if (!selected) return;
-      selected.worldNames = selected.worldNames.filter(item => item !== removedName);
-    });
-  }
-
-  function createGlobalWorldbookBranch() {
-    const requestedName = TOP.prompt?.('给这个全局世界书分支起个名字', '新世界书分支');
-    const name = textValue(requestedName);
-    if (!name) return null;
-    let created = null;
-    updateGlobalWorldbookBranch(draft => {
-      created = { id:newGlobalWorldbookBranchId(), name, worldNames:[] };
-      draft.branches.push(created);
-      draft.selectedId = created.id;
-    });
-    return created;
-  }
-
-  function renameGlobalWorldbookBranch() {
-    const branch = selectedGlobalWorldbookBranch();
-    if (!branch) return null;
-    const requestedName = TOP.prompt?.('修改全局世界书分支名称', branch.name);
-    const name = textValue(requestedName);
-    if (!name || name === branch.name) return branch;
-    updateGlobalWorldbookBranch(draft => {
-      const selected = draft.branches.find(item => item.id === draft.selectedId);
-      if (selected) selected.name = name;
-    });
-    return selectedGlobalWorldbookBranch();
-  }
-
-  function deleteGlobalWorldbookBranch() {
-    const branch = selectedGlobalWorldbookBranch();
-    if (!branch) return null;
-    if (typeof TOP.confirm === 'function' && !TOP.confirm(`删除全局世界书分支“${branch.name}”？世界书文件不会被删除。`)) return branch;
-    updateGlobalWorldbookBranch(draft => {
-      draft.branches = draft.branches.filter(item => item.id !== branch.id);
-      if (!draft.branches.length) {
-        const fallback = { id:newGlobalWorldbookBranchId(), name:'默认', worldNames:currentGlobalWorldbookNames() };
-        draft.branches.push(fallback);
-      }
-      draft.selectedId = draft.branches[0].id;
-    });
-    return selectedGlobalWorldbookBranch();
   }
 
   function getLoadedPresetNameSafe() {
@@ -680,9 +417,6 @@
       if (normalizedName && !byNormalizedName.has(normalizedName)) byNormalizedName.set(normalizedName, name);
     }
     const bindings = new Map(state.worldNames.map(name => [name, new Set()]));
-    const primaryBindings = new Map(state.worldNames.map(name => [name, new Set()]));
-    const additionalBindings = new Map(state.worldNames.map(name => [name, new Set()]));
-    let bindingKind = 'primary';
     const addBinding = (worldName, characterName) => {
       const rawWorldName = String(worldName ?? '');
       const actualName = byExactName.get(rawWorldName)
@@ -690,7 +424,6 @@
       const visibleCharacterName = String(characterName || '').trim();
       if (!actualName || !visibleCharacterName) return;
       bindings.get(actualName)?.add(visibleCharacterName);
-      (bindingKind === 'additional' ? additionalBindings : primaryBindings).get(actualName)?.add(visibleCharacterName);
     };
 
     /* 主绑定的兼容兜底：酒馆当前上下文通常已经带有全部角色摘要。 */
@@ -708,12 +441,7 @@
         try {
           const linked = getCharWorldbookNames(characterName) || {};
           addBinding(linked.primary, characterName);
-          try {
-            bindingKind = 'additional';
-            for (const extraName of linked.additional || []) addBinding(extraName, characterName);
-          } finally {
-            bindingKind = 'primary';
-          }
+          for (const extraName of linked.additional || []) addBinding(extraName, characterName);
         } catch (error) {
           console.warn(`[世界书缝合] 读取角色“${characterName}”的世界书绑定失败`, error);
         }
@@ -721,27 +449,11 @@
     }
 
     state.worldBindings = bindings;
-    state.worldPrimaryBindings = primaryBindings;
-    state.worldAdditionalBindings = additionalBindings;
   }
 
   function boundCharacterNames(worldName) {
     return [...(state.worldBindings.get(worldName) || [])]
       .sort((left, right) => left.localeCompare(right, undefined, { numeric: true }));
-  }
-
-  function primaryBoundCharacterNames(worldName) {
-    return [...(state.worldPrimaryBindings.get(worldName) || [])]
-      .sort((left, right) => left.localeCompare(right, undefined, { numeric: true }));
-  }
-
-  function additionalBoundCharacterNames(worldName) {
-    return [...(state.worldAdditionalBindings.get(worldName) || [])]
-      .sort((left, right) => left.localeCompare(right, undefined, { numeric: true }));
-  }
-
-  function globalWorldbookBranchCandidates() {
-    return state.worldNames.filter(name => primaryBoundCharacterNames(name).length === 0);
   }
 
   const WORLD_PICKER_THEME_VARS = [
@@ -1632,10 +1344,14 @@
     </span>`;
   }
 
+  function isWorldbookBranchMode() {
+    return state.bottomMode === 'branches';
+  }
+
   function bottomModeSwitchMarkup() {
-    return `<span class="pmm-wb-kind-switch pmm-wb-global-branch-switch" data-pmm-wb-global-branch-mode>
+    return `<span class="pmm-wb-kind-switch pmm-wb-branch-mode-switch" data-pmm-wb-branch-mode-switch>
       <button type="button" data-wb-action="bottom-mode" data-wb-bottom-mode="world" class="${state.bottomMode === 'world' ? 'is-active' : ''}" title="下方显示世界书"><i class="fa-solid fa-book-atlas"></i></button>
-      <button type="button" data-wb-action="bottom-mode" data-wb-bottom-mode="branches" class="${state.bottomMode === 'branches' ? 'is-active' : ''}" title="全局世界书分支"><i class="fa-solid fa-globe"></i><i class="fa-solid fa-code-branch pmm-wb-global-branch-glyph"></i></button>
+      <button type="button" data-wb-action="bottom-mode" data-wb-bottom-mode="branches" class="${isWorldbookBranchMode() ? 'is-active' : ''}" title="世界书分支（准备中）"><i class="fa-solid fa-globe"></i><i class="fa-solid fa-code-branch pmm-wb-branch-mode-glyph"></i></button>
     </span>`;
   }
 
@@ -1645,71 +1361,6 @@
 
   function sourceOptions(side) {
     return state.worldNames.map(name => `<option value="${h(name)}"${name === side.name ? ' selected' : ''}>${h(name)}</option>`).join('');
-  }
-
-  function globalWorldbookBranchOptions() {
-    const branchState = ensureGlobalWorldbookBranchState();
-    return branchState.branches.map(branch => `<option value="${h(branch.id)}"${branch.id === branchState.selectedId ? ' selected' : ''}>${h(branch.name)}</option>`).join('');
-  }
-
-  function globalWorldbookLibraryRowsMarkup() {
-    const branch = selectedGlobalWorldbookBranch();
-    const selectedNames = new Set(branch?.worldNames || []);
-    const query = textValue(state.globalBranchSourceQuery).toLocaleLowerCase();
-    const candidates = globalWorldbookBranchCandidates().filter(name => !query || name.toLocaleLowerCase().includes(query));
-    const candidateRows = candidates.map(name => {
-      const included = selectedNames.has(name);
-      const additional = additionalBoundCharacterNames(name);
-      return `<article class="pmm-wb-global-book${included ? ' is-included' : ''}" draggable="${included ? 'false' : 'true'}" data-wb-library-drag-name="${safeId(name)}">
-        <i class="fa-solid fa-book-atlas" aria-hidden="true"></i>
-        <span class="pmm-wb-global-book-name" title="${h(name)}">${h(name)}</span>
-        ${additional.length ? `<small title="作为附加世界书绑定到：${h(additional.join('、'))}">附加·${h(additional.join('、'))}</small>` : ''}
-        <button type="button" class="pmm-wb-global-book-add" data-wb-action="global-branch-add-world" data-wb-global-world="${safeId(name)}" ${included ? 'disabled' : ''} title="加入当前分支"><i class="fa-solid fa-plus"></i></button>
-      </article>`;
-    }).join('');
-    return candidateRows || '<div class="pmm-wb-empty">没有可加入的全局世界书</div>';
-  }
-
-  function renderGlobalWorldbookLibraryCard() {
-    const primaryHidden = state.worldNames.length - globalWorldbookBranchCandidates().length;
-    return `<section class="preset-panel pmm-wb-inline-panel pmm-wb-global-library-panel" data-pmm-wb-global-library>
-      <div class="pmm-wb-main-content">
-        <header class="pmm-wb-header">
-          <div class="pmm-wb-header-left"><span class="pmm-wb-global-heading"><i class="fa-solid fa-globe"></i><strong>可加入的全局世界书</strong><small>${primaryHidden ? `已隐藏 ${primaryHidden} 本角色主绑定书` : '不显示角色主绑定书'}</small></span></div>
-          <div class="pmm-wb-header-right">${themeToolbarSlotMarkup()}${toolbarButton('close-main', '关闭', 'fa-xmark')}</div>
-        </header>
-        <div class="pmm-wb-global-library-search"><i class="fa-solid fa-magnifying-glass"></i><input type="search" value="${h(state.globalBranchSourceQuery)}" data-wb-action="global-branch-source-query" placeholder="搜索可加入的世界书" autocomplete="off"></div>
-        <div class="pmm-wb-content"><div class="pmm-wb-global-library-list" data-pmm-wb-global-library-list>
-          ${globalWorldbookLibraryRowsMarkup()}
-        </div></div>
-      </div>
-    </section>`;
-  }
-
-  function renderGlobalWorldbookBranchCard() {
-    const branchState = ensureGlobalWorldbookBranchState();
-    const branch = selectedGlobalWorldbookBranch();
-    const candidates = globalWorldbookBranchCandidates();
-    const eligibleNames = normalizeGlobalWorldbookNames(branch?.worldNames || [], candidates);
-    const hiddenCount = Math.max(0, (branch?.worldNames?.length || 0) - eligibleNames.length);
-    const selectedNames = new Set(eligibleNames);
-    const rows = eligibleNames.map(name => `<article class="pmm-wb-global-branch-book"><i class="fa-solid fa-book-atlas"></i><span title="${h(name)}">${h(name)}</span><button type="button" data-wb-action="global-branch-remove-world" data-wb-global-world="${safeId(name)}" title="从当前分支移除"><i class="fa-solid fa-xmark"></i></button></article>`).join('');
-    return `<section class="preset-panel pmm-wb-inline-panel pmm-wb-global-branch-panel" data-pmm-wb-global-branch-panel>
-      <div class="pmm-wb-main-content">
-        <header class="pmm-wb-header">
-          <div class="pmm-wb-header-left"><span class="pmm-wb-title-row"><span class="pmm-wb-global-branch-title"><i class="fa-solid fa-globe"></i><i class="fa-solid fa-code-branch"></i></span><select class="title-select pmm-wb-source-select" data-wb-action="global-branch-select" aria-label="选择全局世界书分支">${globalWorldbookBranchOptions()}</select><button class="pmm-wb-source-action" data-wb-action="global-branch-create" title="新建全局世界书分支"><i class="fa-solid fa-plus"></i></button><button class="pmm-wb-source-action" data-wb-action="global-branch-rename" title="重命名当前分支"><i class="fa-solid fa-pencil"></i></button><button class="pmm-wb-source-action" data-wb-action="global-branch-delete" title="删除当前分支"><i class="fa-solid fa-trash"></i></button></span></div>
-          <div class="pmm-wb-header-right">${bottomModeSwitchMarkup()}${toolbarButton('exit', '关闭', 'fa-xmark')}</div>
-        </header>
-        <div class="pmm-wb-global-branch-body">
-          <div class="pmm-wb-global-branch-note"><span><i class="fa-solid fa-circle-info"></i> 仅管理酒馆原生“全局启用”的世界书</span><label class="pmm-wb-global-quick-toggle"><input type="checkbox" data-wb-action="global-branch-quick-toggle" data-wb-global-branch-quick-toggle ${branchState.enabled ? 'checked' : ''}><span>显示悬浮栏快捷入口</span></label></div>
-          <div class="pmm-wb-global-branch-actions"><button type="button" data-wb-action="global-branch-apply" data-wb-global-branch-apply="replace" title="整组替换当前勾选">整组替换</button><button type="button" data-wb-action="global-branch-apply" data-wb-global-branch-apply="merge" title="在当前勾选基础上叠加">叠加当前</button></div>
-          <section class="pmm-wb-global-branch-drop" data-pmm-wb-global-branch-drop>
-            <div class="pmm-wb-global-branch-drop-head"><span><i class="fa-solid fa-code-branch"></i> ${h(branch?.name || '当前分支')}</span><small>${eligibleNames.length} 本${hiddenCount ? ` · ${hiddenCount} 本已因角色主绑定隐藏` : ''}</small></div>
-            <div class="pmm-wb-global-branch-books">${rows || '<div class="pmm-wb-global-branch-empty">从上方点「＋」或拖入世界书</div>'}</div>
-          </section>
-        </div>
-      </div>
-    </section>`;
   }
 
   function searchScopeButton(sideName, side, scope, label) {
@@ -1774,6 +1425,24 @@
     </section>`;
   }
 
+  function renderWorldbookBranchSkeletonCard() {
+    return `<section class="preset-panel pmm-wb-inline-panel pmm-wb-branch-shell" data-pmm-wb-branch-shell>
+      <div class="pmm-wb-main-content">
+        <header class="pmm-wb-header">
+          <div class="pmm-wb-header-left">
+            <span class="pmm-wb-title-row pmm-wb-branch-shell-title"><span class="pmm-wb-branch-shell-icon"><i class="fa-solid fa-globe"></i><i class="fa-solid fa-code-branch"></i></span><strong>世界书分支</strong></span>
+          </div>
+          <div class="pmm-wb-header-right">${bottomModeSwitchMarkup()}${toolbarButton('exit', '关闭', 'fa-xmark')}</div>
+        </header>
+        <div class="pmm-wb-branch-shell-body">
+          <span class="pmm-wb-branch-shell-mark"><i class="fa-solid fa-code-branch"></i></span>
+          <strong>世界书分支功能准备中</strong>
+          <small>这一页目前不会读取、保存或改变任何世界书；我们会从这里慢慢把功能加回来。</small>
+        </div>
+      </div>
+    </section>`;
+  }
+
   function refreshWorldSearchResults(sideName) {
     const side = state[sideName];
     const panel = state.host?.querySelector?.(`[data-pmm-wb-panel="${sideName}"]`);
@@ -1803,8 +1472,6 @@
       const list = state.host?.querySelector?.(`[data-wb-list="${name}"]`);
       if (list) state[name].scrollTop = list.scrollTop;
     }
-    const branchLibrary = state.host?.querySelector?.('[data-pmm-wb-global-library-list]');
-    if (branchLibrary) state.globalBranchSourceScrollTop = branchLibrary.scrollTop;
   }
 
   function restoreScrolls() {
@@ -1812,127 +1479,12 @@
       const list = state.host?.querySelector?.(`[data-wb-list="${name}"]`);
       if (list) list.scrollTop = state[name].scrollTop || 0;
     }
-    const branchLibrary = state.host?.querySelector?.('[data-pmm-wb-global-library-list]');
-    if (branchLibrary) branchLibrary.scrollTop = state.globalBranchSourceScrollTop || 0;
-  }
-
-  function nativeTopPanelFrom(mainWrapper) {
-    return Array.from(mainWrapper?.children || []).find(panel => (
-      panel.matches?.('.preset-panel')
-      && !panel.matches?.('[data-pmm-wb-panel],[data-pmm-wb-global-library],[data-pmm-wb-global-branch-panel]')
-    )) || null;
-  }
-
-  function ensureWorldbookPanelAnchors() {
-    const host = state.host;
-    const container = host?.querySelector?.('.pm-panel-container');
-    const currentNativeTop = state.container === container ? nativeTopPanelFrom(state.mainWrapper) : null;
-    if (state.container === container && currentNativeTop === state.nativeTop && state.container?.isConnected && state.mainWrapper?.isConnected && state.nativeTop?.isConnected
-      && state.host?.contains(state.container) && state.container.contains(state.mainWrapper) && state.mainWrapper.contains(state.nativeTop)) return true;
-    const mainWrapper = container?.querySelector?.(':scope > .pm-main-wrapper');
-    const nativeTop = nativeTopPanelFrom(mainWrapper);
-    if (!host || !container || !mainWrapper || !nativeTop) return false;
-    state.container = container;
-    state.mainWrapper = mainWrapper;
-    state.nativeTop = nativeTop;
-    host.classList.add('pmm-worldbook-mode');
-    container.classList.add('pm-panel-container--merge-mode', 'pmm-worldbook-layout');
-    return true;
-  }
-
-  function globalWorldbookBranchPanelsMounted() {
-    const container = state.host?.querySelector?.('.pm-panel-container');
-    const mainWrapper = container?.querySelector?.(':scope > .pm-main-wrapper');
-    return Boolean(container === state.container && mainWrapper === state.mainWrapper && nativeTopPanelFrom(mainWrapper) === state.nativeTop
-      && state.topCard?.isConnected && state.bottomCard?.isConnected
-      && state.mainWrapper?.contains(state.topCard) && state.container?.contains(state.bottomCard));
-  }
-
-  function isCurrentGlobalWorldbookBranchSession(session) {
-    return state.open && isGlobalWorldbookBranchMode() && session === globalBranchPanelSession;
-  }
-
-  function globalWorldbookBranchRecoveryDelay() {
-    return [100, 160, 240, 360, 520, 720, 920, 1120][Math.min(globalBranchPanelRecoveryAttempts, 7)];
-  }
-
-  function reloadGlobalWorldbookBranchPanels(session, status = '重新载入全局世界书分支…') {
-    if (!isCurrentGlobalWorldbookBranchSession(session)) return Promise.resolve(false);
-    if (globalBranchPanelReload?.session === session) return globalBranchPanelReload.promise;
-    const reload = { session, promise: null };
-    reload.promise = (async () => {
-      if (!isCurrentGlobalWorldbookBranchSession(session) || !ensureWorldbookPanelAnchors()) return false;
-      setStatus(status);
-      await refreshWorldNames();
-      if (!isCurrentGlobalWorldbookBranchSession(session)) return false;
-      await loadWorldSide(state.bottom);
-      if (!isCurrentGlobalWorldbookBranchSession(session)) return false;
-      ensureGlobalWorldbookBranchState();
-      setStatus('已同步');
-      renderPanels();
-      return globalWorldbookBranchPanelsMounted();
-    })().finally(() => {
-      if (globalBranchPanelReload === reload) globalBranchPanelReload = null;
-    });
-    globalBranchPanelReload = reload;
-    return reload.promise;
-  }
-
-  function scheduleGlobalWorldbookBranchPanelRecovery(delay = globalWorldbookBranchRecoveryDelay(), session = globalBranchPanelSession) {
-    if (!isCurrentGlobalWorldbookBranchSession(session)) return;
-    if (globalBranchPanelRecoveryTimer && globalBranchPanelRecoveryTimerSession !== session) {
-      TOP.clearTimeout(globalBranchPanelRecoveryTimer);
-      globalBranchPanelRecoveryTimer = 0;
-      globalBranchPanelRecoveryTimerSession = null;
-    }
-    if (globalBranchPanelRecoveryTimer || (globalBranchPanelRecoveryBusy && globalBranchPanelRecoveryBusySession === session)) return;
-    if (globalBranchPanelRecoveryAttempts >= 8) {
-      if (!globalBranchPanelRecoveryReported) {
-        globalBranchPanelRecoveryReported = true;
-        console.error('[世界书缝合] 全局世界书分支卡片连续重挂失败，已停止重试');
-        notify('warning', '全局世界书分支仍在准备中，请稍后再点一次分支按钮');
-      }
-      return;
-    }
-    globalBranchPanelRecoveryTimer = TOP.setTimeout(async () => {
-      if (globalBranchPanelRecoveryTimerSession === session) {
-        globalBranchPanelRecoveryTimer = 0;
-        globalBranchPanelRecoveryTimerSession = null;
-      }
-      if (!isCurrentGlobalWorldbookBranchSession(session)) return;
-      if (globalWorldbookBranchPanelsMounted()) {
-        globalBranchPanelRecoveryAttempts = 0;
-        globalBranchPanelRecoveryReported = false;
-        return;
-      }
-      globalBranchPanelRecoveryBusy = true;
-      globalBranchPanelRecoveryBusySession = session;
-      globalBranchPanelRecoveryAttempts += 1;
-      try {
-        const mounted = await reloadGlobalWorldbookBranchPanels(session);
-        if (mounted) {
-          globalBranchPanelRecoveryAttempts = 0;
-          globalBranchPanelRecoveryReported = false;
-        }
-      } catch (error) {
-        console.warn('[世界书缝合] 全局世界书分支仍未就绪，稍后重试', error);
-      } finally {
-        if (globalBranchPanelRecoveryBusySession === session) {
-          globalBranchPanelRecoveryBusy = false;
-          globalBranchPanelRecoveryBusySession = null;
-        }
-        if (isCurrentGlobalWorldbookBranchSession(session) && !globalWorldbookBranchPanelsMounted()) {
-          scheduleGlobalWorldbookBranchPanelRecovery(globalWorldbookBranchRecoveryDelay(), session);
-        }
-      }
-    }, delay);
-    globalBranchPanelRecoveryTimerSession = session;
   }
 
   function decorateNativeTop() {
     const panel = state.nativeTop;
     if (!panel) return;
-    panel.classList.toggle('pmm-wb-native-hidden', isGlobalWorldbookBranchMode() || state.topType !== 'preset');
+    panel.classList.toggle('pmm-wb-native-hidden', state.topType !== 'preset');
     let switcher = panel.querySelector('[data-pmm-wb-kind-switch]');
     if (!switcher) {
       const headerRight = panel.querySelector('.header-right');
@@ -1961,7 +1513,7 @@
 
   function placeThemeToolbarButton(themeToggle = state.host?.querySelector?.('.pmm-mobile-theme-toggle')) {
     if (!themeToggle) return;
-    const target = (isGlobalWorldbookBranchMode() || state.topType === 'world')
+    const target = state.topType === 'world'
       ? state.topCard?.querySelector?.('[data-pmm-theme-toolbar-slot]')
       : state.nativeTop?.querySelector?.('[data-pmm-theme-toolbar-slot]');
     if (target && themeToggle.parentElement !== target) target.append(themeToggle);
@@ -1969,10 +1521,6 @@
 
   function renderPanels() {
     if (!state.open || !state.host?.isConnected) return;
-    if (!ensureWorldbookPanelAnchors()) {
-      scheduleGlobalWorldbookBranchPanelRecovery(120);
-      return;
-    }
     syncWorldSearchHighlightTheme();
     saveScrolls();
     const themeToggle = state.host.querySelector('.pmm-mobile-theme-toggle');
@@ -1981,15 +1529,13 @@
     state.topCard = null;
     state.bottomCard = null;
     decorateNativeTop();
-    if (isGlobalWorldbookBranchMode()) {
-      state.topCard = createGlobalWorldbookLibraryCard();
-      state.mainWrapper.insertBefore(state.topCard, state.mainWrapper.querySelector('.side-panel-root'));
-      state.bottomCard = createGlobalWorldbookBranchCard();
-    } else if (state.topType === 'world') {
+    if (state.topType === 'world') {
       state.topCard = createCard('top', state.top);
       state.mainWrapper.insertBefore(state.topCard, state.mainWrapper.querySelector('.side-panel-root'));
     }
-    if (!state.bottomCard) state.bottomCard = createCard('bottom', state.bottom);
+    state.bottomCard = isWorldbookBranchMode()
+      ? createWorldbookBranchSkeletonCard()
+      : createCard('bottom', state.bottom);
     state.container.append(state.bottomCard);
     placeThemeToolbarButton(themeToggle);
     markWorldbookButton();
@@ -2011,103 +1557,6 @@
     state.host?.querySelectorAll?.('.panel-btn').forEach(button => {
       button.classList.toggle('panel-btn--active', button.matches('[data-pmm-worldbook-placeholder="1"]'));
     });
-  }
-
-  function globalBranchQuickSelector() {
-    return `[${GLOBAL_WORLDBOOK_BRANCH_QUICK_MARK}]`;
-  }
-
-  function globalBranchQuickMarkup(branchState) {
-    const options = branchState.branches.map(branch => `<option value="${h(branch.id)}"${branch.id === branchState.selectedId ? ' selected' : ''}>${h(branch.name)}</option>`).join('');
-    return `<span class="pmm-global-worldbook-branch-quick-icon" title="全局世界书分支"><i class="fa-solid fa-globe"></i><i class="fa-solid fa-code-branch"></i></span><select class="panel-select pmm-global-worldbook-branch-quick-select" title="切换全局世界书分支" aria-label="切换全局世界书分支">${options}</select>`;
-  }
-
-  async function applyQuickGlobalWorldbookBranch(id) {
-    selectGlobalWorldbookBranch(id);
-    try {
-      await refreshWorldNames();
-      const branch = selectedGlobalWorldbookBranch();
-      await applyGlobalWorldbookBranch(branch, 'replace');
-    } catch (error) {
-      console.error('[世界书缝合] 悬浮栏切换全局世界书分支失败', error);
-      notify('error', `切换全局世界书分支失败：${error?.message || error}`);
-    }
-  }
-
-  function syncGlobalBranchQuickToolbar() {
-    globalBranchQuickFrame = 0;
-    const savedBranchState = state.globalWorldbookBranches || readGlobalWorldbookBranchState();
-    const branchState = savedBranchState.enabled && !savedBranchState.branches.length
-      ? ensureGlobalWorldbookBranchState()
-      : savedBranchState;
-    const selector = globalBranchQuickSelector();
-    const existing = Array.from(DOC.querySelectorAll(selector));
-    if (!branchState.enabled) {
-      existing.forEach(node => node.remove());
-      globalBranchQuickObserver?.disconnect();
-      globalBranchQuickObserver = null;
-      return;
-    }
-    installStyle();
-    const floatingHeader = DOC.querySelector('#preset-manager-floating-panel .panel-header');
-    if (!floatingHeader) {
-      if (!globalBranchQuickObserver && DOC.body) {
-        globalBranchQuickObserver = new MutationObserver(records => {
-          if (records.some(record => record.target?.closest?.('#preset-manager-floating-panel')
-            || Array.from(record.addedNodes || []).some(node => node.id === 'preset-manager-floating-panel' || node.querySelector?.('#preset-manager-floating-panel')))) {
-            scheduleGlobalBranchQuickToolbar();
-          }
-        });
-        globalBranchQuickObserver.observe(DOC.body, { childList:true, subtree:true });
-      }
-      return;
-    }
-    let control = existing.find(node => node.parentElement === floatingHeader) || null;
-    existing.filter(node => node !== control).forEach(node => node.remove());
-    const signature = `${branchState.selectedId}|${branchState.branches.map(branch => `${branch.id}:${branch.name}`).join('|')}`;
-    if (!control) {
-      control = DOC.createElement('span');
-      control.className = 'panel-section pmm-global-worldbook-branch-quick';
-      control.setAttribute(GLOBAL_WORLDBOOK_BRANCH_QUICK_MARK, '');
-      const collapse = floatingHeader.querySelector('.panel-collapse');
-      if (collapse) floatingHeader.insertBefore(control, collapse);
-      else floatingHeader.append(control);
-    }
-    if (control.dataset.pmmGlobalWorldbookBranchSignature !== signature) {
-      control.dataset.pmmGlobalWorldbookBranchSignature = signature;
-      control.innerHTML = globalBranchQuickMarkup(branchState);
-      control.querySelector('select')?.addEventListener('change', event => {
-        event.stopPropagation();
-        void applyQuickGlobalWorldbookBranch(event.currentTarget.value);
-      });
-    }
-    if (!globalBranchQuickObserver && DOC.body) {
-      globalBranchQuickObserver = new MutationObserver(records => {
-        if (records.some(record => record.target?.closest?.('#preset-manager-floating-panel')
-          || Array.from(record.addedNodes || []).some(node => node.id === 'preset-manager-floating-panel' || node.querySelector?.('#preset-manager-floating-panel')))) {
-          scheduleGlobalBranchQuickToolbar();
-        }
-      });
-      globalBranchQuickObserver.observe(DOC.body, { childList:true, subtree:true });
-    }
-  }
-
-  function scheduleGlobalBranchQuickToolbar() {
-    if (globalBranchQuickFrame) return;
-    globalBranchQuickFrame = typeof TOP.requestAnimationFrame === 'function'
-      ? TOP.requestAnimationFrame(syncGlobalBranchQuickToolbar)
-      : TOP.setTimeout(syncGlobalBranchQuickToolbar, 16);
-  }
-
-  function stopGlobalBranchQuickToolbar() {
-    if (globalBranchQuickFrame) {
-      if (typeof TOP.cancelAnimationFrame === 'function') TOP.cancelAnimationFrame(globalBranchQuickFrame);
-      else TOP.clearTimeout(globalBranchQuickFrame);
-      globalBranchQuickFrame = 0;
-    }
-    globalBranchQuickObserver?.disconnect();
-    globalBranchQuickObserver = null;
-    DOC.querySelectorAll(globalBranchQuickSelector()).forEach(node => node.remove());
   }
 
   function parseFieldValue(target, fieldName) {
@@ -2420,37 +1869,10 @@
     }
   }
 
-  async function switchBottomMode(mode) {
-    if (!['world', 'branches'].includes(mode)) return;
-    const retryCurrentBranch = mode === 'branches' && state.bottomMode === 'branches' && !globalWorldbookBranchPanelsMounted();
-    if (state.bottomMode === mode && !retryCurrentBranch) return;
-    const session = ++globalBranchPanelSession;
+  function switchBottomMode(mode) {
+    if (!['world', 'branches'].includes(mode) || state.bottomMode === mode) return;
     state.bottomMode = mode;
-    if (globalBranchPanelRecoveryTimer) TOP.clearTimeout(globalBranchPanelRecoveryTimer);
-    globalBranchPanelRecoveryTimer = 0;
-    globalBranchPanelRecoveryTimerSession = null;
-    globalBranchPanelRecoveryAttempts = 0;
-    globalBranchPanelRecoveryReported = false;
-    if (mode !== 'branches') {
-      renderPanels();
-      return;
-    }
-    /* 先挂出分支界面，再重新读一次世界书。部分宿主切换卡片时会重建 Vue 容器，不能沿用旧节点。 */
-    refreshCharacterWorldBindings();
-    ensureGlobalWorldbookBranchState();
     renderPanels();
-    try {
-      const mounted = await reloadGlobalWorldbookBranchPanels(session, '载入全局世界书分支…');
-      if (!mounted && isCurrentGlobalWorldbookBranchSession(session)) {
-        scheduleGlobalWorldbookBranchPanelRecovery(globalWorldbookBranchRecoveryDelay(), session);
-      }
-    } catch (error) {
-      console.error('[世界书缝合] 切换全局世界书分支失败', error);
-      if (isCurrentGlobalWorldbookBranchSession(session)) {
-        setStatus('等待宿主内容…');
-        scheduleGlobalWorldbookBranchPanelRecovery(globalWorldbookBranchRecoveryDelay(), session);
-      }
-    }
   }
 
   async function handleAction(button) {
@@ -2459,28 +1881,6 @@
     const side = sideName ? state[sideName] : null;
     if (action === 'top-kind') return switchTopKind(button.dataset.wbKind);
     if (action === 'bottom-mode') return switchBottomMode(button.dataset.wbBottomMode);
-    if (action === 'global-branch-add-world') {
-      const branch = addGlobalWorldbooksToBranch([decodeId(button.dataset.wbGlobalWorld)]);
-      if (branch) notify('success', '已加入当前全局世界书分支');
-      return renderPanels();
-    }
-    if (action === 'global-branch-remove-world') {
-      removeGlobalWorldbookFromBranch(decodeId(button.dataset.wbGlobalWorld));
-      return renderPanels();
-    }
-    if (action === 'global-branch-create') {
-      createGlobalWorldbookBranch();
-      return renderPanels();
-    }
-    if (action === 'global-branch-rename') {
-      renameGlobalWorldbookBranch();
-      return renderPanels();
-    }
-    if (action === 'global-branch-delete') {
-      deleteGlobalWorldbookBranch();
-      return renderPanels();
-    }
-    if (action === 'global-branch-apply') return applyGlobalWorldbookBranch(selectedGlobalWorldbookBranch(), button.dataset.wbGlobalBranchApply);
     if (action === 'source-picker') return openSourcePicker(sideName);
     if (action === 'rename-source') return renameWorldSource(sideName);
     if (action === 'select-source') return;
@@ -2611,10 +2011,6 @@
     });
   }
 
-  function clearGlobalWorldbookBranchDropIndicators() {
-    state.host?.querySelectorAll?.('[data-pmm-wb-global-branch-drop].is-dragover').forEach(node => node.classList.remove('is-dragover'));
-  }
-
   function removeWorldMultiDragFloat() {
     if (worldMultiDragFrame !== 0) {
       if (typeof TOP.cancelAnimationFrame === 'function') TOP.cancelAnimationFrame(worldMultiDragFrame);
@@ -2710,15 +2106,6 @@
 
   function onDragStart(event) {
     if (!state.open) return;
-    const globalWorldbook = event.target.closest?.('[data-wb-library-drag-name]');
-    if (globalWorldbook && isGlobalWorldbookBranchMode()) {
-      const name = decodeId(globalWorldbook.dataset.wbLibraryDragName);
-      if (!name) return;
-      dragPayload = { kind: 'global-worldbook', names:[name] };
-      event.dataTransfer?.setData('text/plain', 'pmm-global-worldbook');
-      if (event.dataTransfer) event.dataTransfer.effectAllowed = 'copy';
-      return;
-    }
     const custom = event.target.closest?.('[data-wb-drag-side][data-wb-drag-key]');
     if (custom) {
       const sideName = custom.dataset.wbDragSide;
@@ -2742,15 +2129,6 @@
 
   function onDragOver(event) {
     if (!state.open || !dragPayload) return;
-    if (dragPayload.kind === 'global-worldbook') {
-      const target = event.target.closest?.('[data-pmm-wb-global-branch-drop]');
-      clearGlobalWorldbookBranchDropIndicators();
-      if (!isGlobalWorldbookBranchMode() || !target) return;
-      event.preventDefault();
-      if (event.dataTransfer) event.dataTransfer.dropEffect = 'copy';
-      target.classList.add('is-dragover');
-      return;
-    }
     positionWorldMultiDragFloat(event);
     const customList = event.target.closest?.('[data-wb-list]');
     const customPanel = event.target.closest?.('[data-pmm-wb-panel]');
@@ -2772,19 +2150,6 @@
 
   function onDrop(event) {
     if (!state.open || !dragPayload) return;
-    if (dragPayload.kind === 'global-worldbook') {
-      const target = event.target.closest?.('[data-pmm-wb-global-branch-drop]');
-      if (!isGlobalWorldbookBranchMode() || !target) return;
-      event.preventDefault();
-      event.stopPropagation();
-      const payload = dragPayload;
-      dragPayload = null;
-      clearGlobalWorldbookBranchDropIndicators();
-      addGlobalWorldbooksToBranch(payload.names);
-      notify('success', `已加入当前分支：${payload.names.length} 本世界书`);
-      renderPanels();
-      return;
-    }
     const customList = event.target.closest?.('[data-wb-list]');
     const customPanel = event.target.closest?.('[data-pmm-wb-panel]');
     const nativeList = state.topType === 'preset' && event.target.closest?.('.pm-main-wrapper > .preset-panel .prompt-panel__list');
@@ -2802,16 +2167,6 @@
     void transfer(payload.from, false, payload.keys, placement);
   }
 
-  function refreshGlobalWorldbookLibraryResults() {
-    const list = state.host?.querySelector?.('[data-pmm-wb-global-library-list]');
-    if (list) {
-      list.innerHTML = globalWorldbookLibraryRowsMarkup();
-      list.scrollTop = 0;
-      return;
-    }
-    renderPanels();
-  }
-
   function onDocumentClick(event) {
     if (!state.open) return;
     const modeButton = event.target.closest?.('.side-panel-root .panel-btn');
@@ -2825,7 +2180,7 @@
       return;
     }
     if (action.tagName === 'SELECT'
-      || action.matches('[data-wb-action="search-input"],[data-wb-action="replace-input"],[data-wb-action="global-branch-source-query"],[data-wb-action="global-branch-quick-toggle"]')
+      || action.matches('[data-wb-action="search-input"],[data-wb-action="replace-input"]')
       || (action.matches('[data-wb-action="content-search-edit"]') && event.target.matches('textarea'))) return;
     event.preventDefault();
     event.stopPropagation();
@@ -2843,26 +2198,12 @@
       void enqueue('载入世界书', async () => { await loadWorldSide(side); renderPanels(); });
       return;
     }
-    if (target.matches?.('[data-wb-action="global-branch-select"]')) {
-      selectGlobalWorldbookBranch(target.value);
-      renderPanels();
-      return;
-    }
-    if (target.matches?.('[data-wb-action="global-branch-quick-toggle"]')) {
-      updateGlobalWorldbookBranch(draft => { draft.enabled = target.checked === true; });
-      return;
-    }
     if (target.matches?.('[data-wb-field]')) void updateField(target);
   }
 
   function onDocumentInput(event) {
     if (!state.open || !event.target.matches?.('[data-wb-action]')) return;
     const input = event.target;
-    if (input.matches?.('[data-wb-action="global-branch-source-query"]')) {
-      state.globalBranchSourceQuery = input.value;
-      state.globalBranchSourceScrollTop = 0;
-      return refreshGlobalWorldbookLibraryResults();
-    }
     const side = state[input.dataset.wbSide];
     if (!side) return;
     if (input.matches?.('[data-wb-action="replace-input"]')) {
@@ -2913,6 +2254,7 @@
 .pmm-wb-source-select{width:auto!important;min-width:0!important;max-width:none!important;flex:1 1 auto!important}.pmm-wb-source-action{width:25px;height:25px;min-width:25px;padding:0;border:0;border-radius:5px;background:transparent;color:var(--pm-text-secondary,currentColor);display:inline-flex;align-items:center;justify-content:center;opacity:.68}.pmm-wb-source-action i{font-size:9px}.pmm-wb-source-action:active{transform:scale(.94)}.pmm-wb-kind-switch{display:inline-flex;align-items:center;gap:1px;padding:2px;border-radius:7px;background:color-mix(in srgb,currentColor 6%,transparent)}
 .pmm-wb-kind-switch button{width:25px;height:23px;padding:0;border:0;border-radius:5px;background:transparent;color:var(--pm-text-secondary,currentColor);opacity:.62;display:inline-flex;align-items:center;justify-content:center}.pmm-wb-kind-switch button.is-active{background:var(--pm-quote-color,#3b82f6);color:#fff;opacity:1}.pmm-wb-kind-switch button:active{transform:scale(.94)}.pmm-wb-kind-switch i{font-size:10px}
 #preset-manager-main-panel .pmm-wb-kind-switch--toolbar button.is-active,#preset-manager-main-panel .pmm-wb-kind-switch--toolbar button.is-active>i,#preset-manager-main-panel .pmm-wb-kind-switch--toolbar button.is-active>i::before{color:#fff!important;opacity:1!important;-webkit-text-fill-color:#fff!important}#preset-manager-main-panel .pmm-wb-kind-switch--toolbar button[data-wb-kind="world"].is-active>i{filter:drop-shadow(0 1px 1px rgba(0,0,0,.26))}
+.pmm-wb-branch-mode-switch button[data-wb-bottom-mode="branches"]{position:relative}.pmm-wb-branch-mode-glyph{position:absolute;right:2px;bottom:1px;font-size:6px!important;text-shadow:0 0 2px var(--pm-toolbar-bg,var(--pm-panel-bg,#fff))}.pmm-wb-branch-shell-title{gap:6px;color:var(--pm-text-primary,currentColor)}.pmm-wb-branch-shell-title strong{font-size:11px;font-weight:650}.pmm-wb-branch-shell-icon{position:relative;width:15px;height:19px;display:inline-flex;align-items:center;justify-content:center;color:var(--pm-quote-color,#3485f6)}.pmm-wb-branch-shell-icon>i:first-child{font-size:12px}.pmm-wb-branch-shell-icon>i:last-child{position:absolute;right:-1px;bottom:1px;font-size:6px;text-shadow:0 0 2px var(--pm-toolbar-bg,var(--pm-panel-bg,#fff))}.pmm-wb-branch-shell-body{flex:1;min-height:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:24px;text-align:center}.pmm-wb-branch-shell-mark{width:58px;height:58px;display:inline-flex;align-items:center;justify-content:center;border:1px solid color-mix(in srgb,var(--pm-text-secondary,currentColor) 20%,transparent);border-radius:16px;background:color-mix(in srgb,var(--pm-text-secondary,currentColor) 5%,transparent);color:var(--pm-text-secondary,currentColor);opacity:.72}.pmm-wb-branch-shell-mark i{font-size:23px}.pmm-wb-branch-shell-body>strong{font-size:13px;font-weight:650}.pmm-wb-branch-shell-body>small{max-width:270px;font-size:10px;line-height:1.55;opacity:.58}
 #preset-manager-main-panel[data-pmm-wb-search-theme="light"] .pmm-wb-search-highlight{border-color:transparent!important;background:#d6eefc!important;color:#183f5c!important;-webkit-text-fill-color:#183f5c!important}#preset-manager-main-panel[data-pmm-wb-search-theme="light"] .pmm-wb-search-highlight.is-current{border-color:transparent!important;background:#75bee8!important;color:#163d59!important;-webkit-text-fill-color:#163d59!important;box-shadow:none!important}
 #preset-manager-main-panel[data-pmm-wb-search-theme="light"] .pmm-wb-replace-row:focus-within .pmm-wb-replace-action{background:color-mix(in srgb,var(--pm-text-primary,#1f2937) 48%,var(--pm-panel-bg,#fff))!important;color:var(--pm-text-primary,#1f2937)!important;-webkit-text-fill-color:var(--pm-text-primary,#1f2937)!important;opacity:.9!important}
 .pmm-wb-tool{width:27px;height:27px;min-width:27px;padding:0;border:0;border-radius:5px;background:transparent;color:var(--pm-text-secondary,currentColor);display:inline-flex;align-items:center;justify-content:center;opacity:.72}.pmm-wb-tool:active:not(:disabled){transform:scale(.94)}.pmm-wb-tool:disabled{opacity:.22}.pmm-wb-tool i{font-size:10px}.pmm-wb-status{font-size:9px;opacity:.5;white-space:nowrap}
@@ -2937,12 +2279,6 @@
 `;
     style.textContent += `
 .pmm-wb-editor-search-primary{flex-wrap:nowrap!important}.pmm-wb-editor-search-input-wrap input{padding:0 7px!important}.pmm-wb-editor-search-count{position:static!important;top:auto!important;right:auto!important;transform:none!important;display:block;flex:0 0 28px;min-width:28px;font-size:9px;line-height:26px;opacity:.58;text-align:center;white-space:nowrap;pointer-events:none}
-`;
-    style.textContent += `
-.pmm-wb-global-branch-switch button[data-wb-bottom-mode="branches"]{position:relative}.pmm-wb-global-branch-switch .pmm-wb-global-branch-glyph{position:absolute;right:2px;bottom:2px;font-size:6px;text-shadow:0 0 2px var(--pm-toolbar-bg,var(--pm-panel-bg,#fff))}
-.pmm-wb-global-heading{min-width:0;display:flex;align-items:center;gap:6px;font-size:11px}.pmm-wb-global-heading>i{color:var(--pm-quote-color,#3485f6)}.pmm-wb-global-heading strong{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.pmm-wb-global-heading small{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:8px;font-weight:400;opacity:.58}.pmm-wb-global-library-search{min-height:30px;display:flex;align-items:center;gap:6px;padding:4px 8px;border-bottom:1px solid var(--pm-border,rgba(127,127,127,.12))}.pmm-wb-global-library-search>i{width:11px;flex:none;font-size:9px;opacity:.62}.pmm-wb-global-library-search input{box-sizing:border-box;width:100%;height:24px;min-width:0;padding:0 7px;border:1px solid var(--pm-border,rgba(127,127,127,.18));border-radius:6px;background:var(--pm-card-bg,rgba(127,127,127,.05));color:inherit;font-size:10px;outline:none}.pmm-wb-global-library-list{height:100%;min-height:0;overflow:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;padding:7px;display:flex;flex-direction:column;gap:5px}.pmm-wb-global-book{min-height:35px;display:flex;align-items:center;gap:7px;padding:3px 5px 3px 8px;border:1px solid var(--pm-border,rgba(127,127,127,.14));border-radius:9px;background:var(--pm-card-bg,rgba(127,127,127,.05));cursor:grab}.pmm-wb-global-book:active{cursor:grabbing}.pmm-wb-global-book.is-included{border-style:dashed;opacity:.56}.pmm-wb-global-book>i{width:13px;flex:none;color:var(--pm-quote-color,#3485f6);font-size:10px}.pmm-wb-global-book-name{min-width:0;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:10.5px}.pmm-wb-global-book small{max-width:36%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:8px;opacity:.58}.pmm-wb-global-book-add{width:25px;height:25px;flex:none;padding:0;border:0;border-radius:7px;background:color-mix(in srgb,var(--pm-quote-color,#3485f6) 12%,transparent);color:var(--pm-quote-color,#3485f6)}.pmm-wb-global-book-add:disabled{opacity:.3}.pmm-wb-global-branch-title{position:relative;width:17px;height:20px;display:inline-flex;align-items:center;justify-content:center;color:var(--pm-quote-color,#3485f6)}.pmm-wb-global-branch-title>i:first-child{font-size:12px}.pmm-wb-global-branch-title>i:last-child{position:absolute;right:-1px;bottom:1px;font-size:6px;text-shadow:0 0 2px var(--pm-toolbar-bg,var(--pm-panel-bg,#fff))}.pmm-wb-global-branch-body{flex:1;min-height:0;overflow:auto;overscroll-behavior:contain;padding:8px;display:flex;flex-direction:column;gap:7px}.pmm-wb-global-branch-note{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:9px;opacity:.74}.pmm-wb-global-branch-note>span{min-width:0}.pmm-wb-global-branch-note i{color:var(--pm-quote-color,#3485f6)}.pmm-wb-global-quick-toggle{display:inline-flex;align-items:center;gap:4px;flex:none;white-space:nowrap;cursor:pointer}.pmm-wb-global-quick-toggle input{margin:0;accent-color:var(--pm-quote-color,#3485f6)}.pmm-wb-global-branch-actions{display:flex;gap:6px}.pmm-wb-global-branch-actions button{min-height:29px;flex:1;padding:0 8px;border:1px solid color-mix(in srgb,var(--pm-quote-color,#3485f6) 36%,var(--pm-border,rgba(127,127,127,.16)));border-radius:7px;background:color-mix(in srgb,var(--pm-quote-color,#3485f6) 9%,transparent);color:inherit;font-size:10px}.pmm-wb-global-branch-actions button:first-child{background:var(--pm-quote-color,#3485f6);border-color:var(--pm-quote-color,#3485f6);color:#fff}.pmm-wb-global-branch-drop{min-height:100px;border:1px dashed color-mix(in srgb,var(--pm-quote-color,#3485f6) 38%,var(--pm-border,rgba(127,127,127,.2)));border-radius:10px;background:color-mix(in srgb,var(--pm-quote-color,#3485f6) 4%,transparent);overflow:hidden;transition:border-color .14s ease,background .14s ease,box-shadow .14s ease}.pmm-wb-global-branch-drop.is-dragover{border-color:var(--pm-quote-color,#3485f6);background:color-mix(in srgb,var(--pm-quote-color,#3485f6) 13%,transparent);box-shadow:0 0 0 2px color-mix(in srgb,var(--pm-quote-color,#3485f6) 16%,transparent)}.pmm-wb-global-branch-drop-head{min-height:29px;display:flex;align-items:center;justify-content:space-between;gap:8px;padding:0 8px;border-bottom:1px solid var(--pm-border,rgba(127,127,127,.11));font-size:9px}.pmm-wb-global-branch-drop-head span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:650}.pmm-wb-global-branch-drop-head span i{margin-right:3px;color:var(--pm-quote-color,#3485f6)}.pmm-wb-global-branch-drop-head small{flex:none;font-size:8px;opacity:.62}.pmm-wb-global-branch-books{padding:5px;display:flex;flex-direction:column;gap:4px}.pmm-wb-global-branch-book{min-height:30px;display:flex;align-items:center;gap:6px;padding:2px 4px 2px 7px;border:1px solid var(--pm-border,rgba(127,127,127,.12));border-radius:7px;background:var(--pm-card-bg,rgba(127,127,127,.04))}.pmm-wb-global-branch-book>i{width:11px;flex:none;color:var(--pm-quote-color,#3485f6);font-size:9px}.pmm-wb-global-branch-book>span{min-width:0;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:10px}.pmm-wb-global-branch-book button{width:22px;height:22px;flex:none;padding:0;border:0;border-radius:6px;background:transparent;color:inherit;opacity:.58}.pmm-wb-global-branch-empty{min-height:56px;display:flex;align-items:center;justify-content:center;padding:8px;text-align:center;font-size:9px;opacity:.56}
-#preset-manager-floating-panel .pmm-global-worldbook-branch-quick{min-width:0;gap:3px}#preset-manager-floating-panel .pmm-global-worldbook-branch-quick-icon{position:relative;width:15px;height:18px;display:inline-flex;align-items:center;justify-content:center;flex:none;color:var(--fp-text-color,currentColor);opacity:.88}#preset-manager-floating-panel .pmm-global-worldbook-branch-quick-icon>i:first-child{font-size:11px}#preset-manager-floating-panel .pmm-global-worldbook-branch-quick-icon>i:last-child{position:absolute;right:-1px;bottom:1px;font-size:5px;text-shadow:0 0 2px var(--fp-glass-bg,#fff)}#preset-manager-floating-panel .pmm-global-worldbook-branch-quick-select{min-width:58px;max-width:88px;padding-inline:5px;font-size:10px}
-@media(max-width:768px){.pmm-wb-global-heading{gap:4px;font-size:10px}.pmm-wb-global-heading small{display:none}.pmm-wb-global-library-search{padding:3px 6px}.pmm-wb-global-library-list{padding:5px}.pmm-wb-global-book{min-height:33px}.pmm-wb-global-book small{display:none}.pmm-wb-global-branch-body{padding:6px;gap:6px}.pmm-wb-global-branch-note{font-size:8px}.pmm-wb-global-branch-note>span{max-width:54%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.pmm-wb-global-branch-actions button{min-height:27px;font-size:9px}#preset-manager-floating-panel .pmm-global-worldbook-branch-quick{flex:0 1 82px}#preset-manager-floating-panel .pmm-global-worldbook-branch-quick-select{min-width:0!important;width:100%!important;max-width:none!important}}
 `;
     DOC.head.append(style);
   }
@@ -2975,10 +2311,6 @@
     }
     installStyle();
     state.open = true;
-    globalBranchPanelSession += 1;
-    globalBranchPanelReload = null;
-    globalBranchPanelRecoveryAttempts = 0;
-    globalBranchPanelRecoveryReported = false;
     state.host = host;
     state.container = container;
     state.mainWrapper = mainWrapper;
@@ -3004,27 +2336,12 @@
     hostObserver?.disconnect();
     hostObserver = new MutationObserver(() => {
       if (!state.host?.isConnected) return resetClosedState();
-      ensureWorldbookPanelAnchors();
       scheduleDecorate();
-      if (isGlobalWorldbookBranchMode() && !globalWorldbookBranchPanelsMounted()) {
-        scheduleGlobalWorldbookBranchPanelRecovery();
-      }
     });
     hostObserver.observe(host, { childList: true, subtree: true });
   }
 
   function resetClosedState() {
-    globalBranchPanelSession += 1;
-    if (globalBranchPanelRecoveryTimer) {
-      TOP.clearTimeout(globalBranchPanelRecoveryTimer);
-      globalBranchPanelRecoveryTimer = 0;
-    }
-    globalBranchPanelRecoveryTimerSession = null;
-    globalBranchPanelRecoveryBusy = false;
-    globalBranchPanelRecoveryBusySession = null;
-    globalBranchPanelRecoveryAttempts = 0;
-    globalBranchPanelRecoveryReported = false;
-    globalBranchPanelReload = null;
     state.open = false;
     state.busy = false;
     state.status = '已同步';
@@ -3035,8 +2352,6 @@
     state.bottomCard = null;
     state.topCard = null;
     state.bottomMode = 'world';
-    state.globalBranchSourceQuery = '';
-    state.globalBranchSourceScrollTop = 0;
     resetSide(state.top, true);
     resetSide(state.bottom, true);
     context = null;
@@ -3069,7 +2384,6 @@
 
   function cleanup() {
     close();
-    stopGlobalBranchQuickToolbar();
     DOC.querySelector('#preset-manager-main-panel .pmm-wb-editor-overlay')?.remove();
     DOC.getElementById(STYLE_ID)?.remove();
     DOC.removeEventListener('click', onPresetExpandClick, true);
@@ -3091,7 +2405,6 @@
     removeWorldMultiDragFloat();
     clearNativeDropIndicators();
     clearWorldDropIndicators();
-    clearGlobalWorldbookBranchDropIndicators();
   }
 
   try { TOP.__PMM_WORLDBOOK_STITCH_TEST2__?.cleanup?.(); } catch (_) {}
@@ -3108,7 +2421,6 @@
   DOC.addEventListener('drop', onDrop, true);
   DOC.addEventListener('dragend', clearDrag, true);
   TOP[API_KEY] = { open, close, cleanup, state };
-  scheduleGlobalBranchQuickToolbar();
   console.info('[预设工坊测试版] test.3 世界书已接入原生双卡片布局。');
   console.info('[预设工坊测试版] test.29 已加载：世界书条目按蓝色落点线插入目标位置。');
   console.info('[预设工坊测试版] test.30 已加载：手机三态主题按钮已移入世界书顶部工具栏。');
