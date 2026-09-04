@@ -2624,8 +2624,8 @@
 .pmm-wb-multi-drag-float[data-pmm-wb-multi-drag-forbidden="true"] .pmm-wb-multi-drag-float-back{border-color:rgba(222,106,120,.55);background:rgba(122,53,67,.45)}.pmm-wb-multi-drag-float[data-pmm-wb-multi-drag-forbidden="true"] .pmm-wb-multi-drag-float-face{border-color:rgba(237,150,160,.72);background:rgba(84,43,53,.90);color:#ffe8eb!important;-webkit-text-fill-color:#ffe8eb!important}.pmm-wb-multi-drag-float[data-pmm-wb-multi-drag-forbidden="true"] .pmm-wb-multi-drag-float-face i{color:#ff9daa!important;-webkit-text-fill-color:#ff9daa!important}.pmm-wb-multi-drag-float[data-pmm-wb-multi-drag-forbidden="true"] .pmm-wb-multi-drag-float-face b{background:rgba(163,75,90,.88);color:#fff0f2!important;-webkit-text-fill-color:#fff0f2!important}.pmm-wb-panel--drop-forbidden .pmm-wb-list{cursor:not-allowed}
 `;
     style.textContent += `
-.pmm-wb-entry-actions{display:inline-flex;flex:none;align-items:center;gap:8px;margin-left:5px}.pmm-wb-entry-action{width:27px;height:28px;min-width:27px;padding:0!important;display:inline-flex;align-items:center;justify-content:center;border:0!important;border-radius:7px;background:color-mix(in srgb,currentColor 8%,transparent)!important;color:inherit!important;opacity:.72}.pmm-wb-entry-action i{font-size:10px}.pmm-wb-entry-action:active{transform:scale(.94);opacity:1}
-@media(max-width:768px){.pmm-wb-entry-actions{gap:9px;margin-left:6px}.pmm-wb-entry-action{width:28px;height:29px;min-width:28px}}
+.pmm-wb-entry-actions{display:inline-flex;flex:none;align-items:center;gap:6px;margin:0 10px 0 5px}.pmm-wb-entry-action{width:23px;height:24px;min-width:23px;padding:0!important;display:inline-flex;align-items:center;justify-content:center;border:0!important;border-radius:6px;background:color-mix(in srgb,currentColor 8%,transparent)!important;color:inherit!important;opacity:.72}.pmm-wb-entry-action i{font-size:9px}.pmm-wb-entry-action:active{transform:scale(.94);opacity:1}
+@media(max-width:768px){.pmm-wb-entry-actions{gap:7px;margin:0 11px 0 6px}.pmm-wb-entry-action{width:24px;height:25px;min-width:24px}}
 `;
     DOC.head.append(style);
   }
