@@ -698,6 +698,43 @@
     return added;
   }
 
+  // `displayIndex` controls only the editor's card order. It deliberately
+  // does not touch `order`, which is SillyTavern's prompt-insertion priority.
+  function reorderWorldEntriesForDisplay(entries, keys, placement = null) {
+    const ordered = Array.isArray(entries) ? entries.slice() : [];
+    const wanted = new Set((keys || []).map(String));
+    const moving = ordered.filter(entry => wanted.has(entryKey(entry)));
+    if (!moving.length) return null;
+    if (placement?.targetKey && wanted.has(String(placement.targetKey))) return null;
+    const remaining = ordered.filter(entry => !wanted.has(entryKey(entry)));
+    const insertionIndex = worldInsertionIndex(remaining, placement);
+    const next = [
+      ...remaining.slice(0, insertionIndex),
+      ...moving,
+      ...remaining.slice(insertionIndex),
+    ];
+    if (next.every((entry, index) => entry === ordered[index])) return null;
+    const displayIndexes = ordered
+      .map(entry => Number(entry.displayIndex))
+      .filter(Number.isFinite);
+    const firstDisplayIndex = displayIndexes.length ? Math.min(...displayIndexes) : 0;
+    return next.map((entry, index) => ({ ...entry, displayIndex:firstDisplayIndex + index }));
+  }
+
+  async function reorderWorldEntries(sideName, keys, placement = null) {
+    const side = state[sideName];
+    if (!side?.data?.entries) return;
+    await enqueue('调整世界书显示顺序', async () => {
+      const next = reorderWorldEntriesForDisplay(side.entries, keys, placement);
+      if (!next) return;
+      pushUndo(side, '调整世界书显示顺序', { worldSides:[side] });
+      side.entries = next;
+      for (const entry of next) side.data.entries[String(entry.uid)] = entry;
+      markWorldDraftDirty(side);
+      renderPanels();
+    });
+  }
+
   function pushUndo(owner, label, options = {}) {
     if (!owner) return;
     const worlds = [];
@@ -2359,6 +2396,15 @@
     const customPanel = event.target.closest?.('[data-pmm-wb-panel]');
     const nativeList = state.topType === 'preset' && event.target.closest?.('.pm-main-wrapper > .preset-panel .prompt-panel__list');
     const targetSide = customList?.dataset.wbList || customPanel?.dataset.pmmWbPanel || (nativeList ? 'top' : '');
+    const sameWorldbookList = Boolean(customList && targetSide === dragPayload.from && state[targetSide]?.data?.entries);
+    if (sameWorldbookList) {
+      event.preventDefault();
+      if (event.dataTransfer) event.dataTransfer.dropEffect = 'move';
+      const placement = worldDropPlacement(event, targetSide);
+      if (placement?.targetKey && dragPayload.keys.includes(String(placement.targetKey))) clearWorldDropIndicators();
+      else showWorldDropIndicator(targetSide, placement);
+      return;
+    }
     if (isUnsupportedPresetToWorldDrop(targetSide)) {
       event.preventDefault();
       if (event.dataTransfer) event.dataTransfer.dropEffect = 'none';
@@ -2387,6 +2433,19 @@
     const customPanel = event.target.closest?.('[data-pmm-wb-panel]');
     const nativeList = state.topType === 'preset' && event.target.closest?.('.pm-main-wrapper > .preset-panel .prompt-panel__list');
     const targetSide = customList?.dataset.wbList || customPanel?.dataset.pmmWbPanel || (nativeList ? 'top' : '');
+    const sameWorldbookList = Boolean(customList && targetSide === dragPayload.from && state[targetSide]?.data?.entries);
+    if (sameWorldbookList) {
+      event.preventDefault();
+      event.stopPropagation();
+      const placement = worldDropPlacement(event, targetSide);
+      const payload = dragPayload;
+      dragPayload = null;
+      removeWorldMultiDragFloat();
+      clearNativeDropIndicators();
+      clearWorldDropIndicators();
+      if (placement) void reorderWorldEntries(targetSide, payload.keys, placement);
+      return;
+    }
     if (isUnsupportedPresetToWorldDrop(targetSide)) {
       event.preventDefault();
       event.stopPropagation();
