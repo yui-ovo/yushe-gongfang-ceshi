@@ -25,6 +25,9 @@ assert.ok(presetFloat.includes('pmmMultiDragPerf="lite"'), '预设浮卡没有�
 assert.ok(presetFloat.includes('D.style.webkitBackdropFilter="none"'), '预设安卓浮卡没有关闭后层毛玻璃');
 assert.ok(presetFloat.includes('E.style.webkitBackdropFilter="none"'), '预设安卓浮卡没有关闭前层毛玻璃');
 assert.ok(!presetFloat.includes('t.getBoundingClientRect()'), '预设浮卡仍在每次拖动时强制读取布局');
+assert.ok(presetFloat.includes('const c=a.x-99,d=a.y-29;'), '预设浮卡没有以手指为中心定位');
+assert.ok(!presetFloat.includes('i>=12?i:l'), '预设浮卡仍会在左右两侧切换');
+assert.ok(!presetFloat.includes('Math.max(12,o-198-20)'), '预设浮卡仍会为了留在屏幕内改变锚点');
 
 for (const marker of [
   'const MULTI_DRAG_FLOAT_WIDTH = 198;',
