@@ -41,4 +41,13 @@ for (const marker of [
 }
 assert.ok(!worldbook.includes('worldMultiDragFloat.getBoundingClientRect()'), '世界书浮卡仍在每次拖动时强制读取布局');
 
-console.log('test.38 回归通过：安卓多选拖动逐帧跟手、轻量浮卡与松手自动刹车均已覆盖。');
+const worldFloatStart = worldbook.indexOf('function positionWorldMultiDragFloat(event) {');
+const worldFloatEnd = worldbook.indexOf('function showWorldMultiDragFloat(', worldFloatStart);
+assert.ok(worldFloatStart >= 0 && worldFloatEnd > worldFloatStart, '无法定位世界书多选浮卡定位逻辑');
+const worldFloat = worldbook.slice(worldFloatStart, worldFloatEnd);
+assert.ok(worldFloat.includes('const horizontal = point.x - MULTI_DRAG_FLOAT_WIDTH / 2;'), '世界书浮卡没有以手指为水平中心');
+assert.ok(worldFloat.includes('const vertical = point.y - MULTI_DRAG_FLOAT_HEIGHT / 2;'), '世界书浮卡没有以手指为垂直中心');
+assert.ok(!worldFloat.includes('alternateLeft'), '世界书浮卡仍会在左右两侧切换');
+assert.ok(!worldFloat.includes('Math.max(12, Math.min('), '世界书浮卡仍会为了留在屏幕内而改变锚点');
+
+console.log('test.38 回归通过：安卓多选拖动逐帧跟手、居中浮卡、轻量样式与松手自动刹车均已覆盖。');

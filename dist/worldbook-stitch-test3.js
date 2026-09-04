@@ -2161,18 +2161,10 @@
       worldMultiDragPoint = null;
       const chip = worldMultiDragFloat;
       if (!chip || !point) return;
-      const width = Number(TOP.innerWidth) || DOC.documentElement?.clientWidth || 0;
-      const height = Number(TOP.innerHeight) || DOC.documentElement?.clientHeight || 0;
-      const left = point.x - MULTI_DRAG_FLOAT_WIDTH - 14;
-      const alternateLeft = point.x + 14;
-      const horizontal = Math.max(12, Math.min(
-        left >= 12 ? left : alternateLeft,
-        Math.max(12, width - MULTI_DRAG_FLOAT_WIDTH - 20),
-      ));
-      const vertical = Math.max(18, Math.min(
-        point.y - MULTI_DRAG_FLOAT_HEIGHT + 14,
-        Math.max(18, height - MULTI_DRAG_FLOAT_HEIGHT - 8),
-      ));
+      // Keep the finger at the centre of the badge.  Deliberately allow the
+      // badge to extend off-screen at the edges, rather than flipping sides.
+      const horizontal = point.x - MULTI_DRAG_FLOAT_WIDTH / 2;
+      const vertical = point.y - MULTI_DRAG_FLOAT_HEIGHT / 2;
       chip.style.transform = `translate3d(${horizontal}px, ${vertical}px, 0)`;
     };
     worldMultiDragFrame = typeof TOP.requestAnimationFrame === 'function'
