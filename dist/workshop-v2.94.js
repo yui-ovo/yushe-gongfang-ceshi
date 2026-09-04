@@ -11772,11 +11772,12 @@ html.pmm-dnd-compat-active #preset-manager-main-panel{user-select:none!important
 .pmm-preset-batch-delete:not(:disabled){border-color:rgba(239,68,68,.38)!important;color:#dc4545!important}
 /* 桌面浮动栏右侧的收起箭头原本只有 16px，难以准确点按。 */
 @media screen and (min-width:769px){
-  #preset-manager-floating-panel .floating-panel-root:not(.pmm-floating-mobile) .panel-header{
-    gap:4px!important;padding:4px 4px 4px 8px!important;
+  /* 收起区由 16px 扩到 30px，外框同步加宽 14px，避免箭头被 overflow 裁掉。 */
+  #preset-manager-floating-panel .floating-panel-root:not(.pmm-floating-mobile)>.panel-wrapper{
+    width:342px!important;
   }
   #preset-manager-floating-panel .floating-panel-root:not(.pmm-floating-mobile) .panel-collapse{
-    flex:0 0 30px!important;width:30px!important;height:34px!important;
+    flex:0 0 30px!important;width:30px!important;height:26px!important;
     margin:0!important;border-radius:0 7px 7px 0!important;
   }
 }
