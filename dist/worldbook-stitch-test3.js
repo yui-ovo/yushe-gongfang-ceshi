@@ -1509,6 +1509,10 @@
         <span class="pmm-wb-dot ${entry.constant === true ? 'is-blue' : 'is-green'}" title="${entry.constant === true ? '蓝灯：常驻' : '绿灯：关键词触发'}"></span>
         <button class="pmm-wb-entry-title" data-wb-action="expand" data-wb-side="${sideName}" data-wb-key="${safeId(key)}">${title}</button>
         ${entryMatches.length ? `<span class="pmm-wb-search-hit" title="找到 ${entryMatches.length} 处">${entryMatches.length}</span>` : ''}
+        ${expanded ? `<span class="pmm-wb-entry-actions" aria-label="条目操作">
+          <button type="button" class="pmm-wb-entry-action" data-wb-action="duplicate-entry" data-wb-side="${sideName}" data-wb-key="${safeId(key)}" title="复制条目" aria-label="复制条目"><i class="fa-solid fa-copy"></i></button>
+          <button type="button" class="pmm-wb-entry-action" data-wb-action="delete-entry" data-wb-side="${sideName}" data-wb-key="${safeId(key)}" title="删除条目" aria-label="删除条目"><i class="fa-solid fa-trash"></i></button>
+        </span>` : ''}
         <button class="pmm-wb-toggle${enabled ? ' is-on' : ''}" data-wb-action="toggle" data-wb-side="${sideName}" data-wb-key="${safeId(key)}" title="${enabled ? '已启用' : '已停用'}"><span></span></button>
       </div>
       ${expanded ? renderDetails(sideName, entry, key, search) : ''}
@@ -1747,6 +1751,34 @@
       side.selected.clear();
       renderPanels();
       notify('success', `已删除 ${keys.length} 条`);
+    });
+  }
+
+  async function duplicateWorldEntry(sideName, key) {
+    const side = state[sideName];
+    const sourceEntry = findEntry(side, key);
+    if (!sourceEntry) return;
+    await enqueue('复制世界书条目', async () => {
+      pushUndo(side, '复制世界书条目', { worldSides:[side] });
+      const [copy] = insertWorldEntries(side, 'world', [sourceEntry], { targetKey:key, position:'after' });
+      if (copy) side.expanded.add(entryKey(copy));
+      markWorldDraftDirty(side);
+      renderPanels();
+      notify('success', '已复制条目');
+    });
+  }
+
+  async function deleteWorldEntry(sideName, key) {
+    const side = state[sideName];
+    if (!findEntry(side, key)) return;
+    await enqueue('删除世界书条目', async () => {
+      pushUndo(side, '删除世界书条目', { worldSides:[side] });
+      removeWorldEntries(side, [key]);
+      side.selected.delete(String(key));
+      side.expanded.delete(String(key));
+      markWorldDraftDirty(side);
+      renderPanels();
+      notify('success', '已删除条目，可撤销');
     });
   }
 
@@ -2091,6 +2123,8 @@
     const key = decodeId(button.dataset.wbKey);
     const entry = side ? findEntry(side, key) : null;
     if (!entry) return;
+    if (action === 'duplicate-entry') return duplicateWorldEntry(sideName, key);
+    if (action === 'delete-entry') return deleteWorldEntry(sideName, key);
     if (action === 'select') {
       side.selected.has(key) ? side.selected.delete(key) : side.selected.add(key);
       return renderPanels();
@@ -2588,6 +2622,10 @@
 `;
     style.textContent += `
 .pmm-wb-multi-drag-float[data-pmm-wb-multi-drag-forbidden="true"] .pmm-wb-multi-drag-float-back{border-color:rgba(222,106,120,.55);background:rgba(122,53,67,.45)}.pmm-wb-multi-drag-float[data-pmm-wb-multi-drag-forbidden="true"] .pmm-wb-multi-drag-float-face{border-color:rgba(237,150,160,.72);background:rgba(84,43,53,.90);color:#ffe8eb!important;-webkit-text-fill-color:#ffe8eb!important}.pmm-wb-multi-drag-float[data-pmm-wb-multi-drag-forbidden="true"] .pmm-wb-multi-drag-float-face i{color:#ff9daa!important;-webkit-text-fill-color:#ff9daa!important}.pmm-wb-multi-drag-float[data-pmm-wb-multi-drag-forbidden="true"] .pmm-wb-multi-drag-float-face b{background:rgba(163,75,90,.88);color:#fff0f2!important;-webkit-text-fill-color:#fff0f2!important}.pmm-wb-panel--drop-forbidden .pmm-wb-list{cursor:not-allowed}
+`;
+    style.textContent += `
+.pmm-wb-entry-actions{display:inline-flex;flex:none;align-items:center;gap:8px;margin-left:5px}.pmm-wb-entry-action{width:27px;height:28px;min-width:27px;padding:0!important;display:inline-flex;align-items:center;justify-content:center;border:0!important;border-radius:7px;background:color-mix(in srgb,currentColor 8%,transparent)!important;color:inherit!important;opacity:.72}.pmm-wb-entry-action i{font-size:10px}.pmm-wb-entry-action:active{transform:scale(.94);opacity:1}
+@media(max-width:768px){.pmm-wb-entry-actions{gap:9px;margin-left:6px}.pmm-wb-entry-action{width:28px;height:29px;min-width:28px}}
 `;
     DOC.head.append(style);
   }
