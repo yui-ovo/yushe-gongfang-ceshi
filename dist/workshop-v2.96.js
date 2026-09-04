@@ -1351,6 +1351,42 @@ async function ce(){
     border-color: rgba(16,185,129,.18) !important;
   }
 
+  /* 对比详情从当前工坊卡片接收已解析的主题变量，不能退回白色默认值。 */
+  .pmm-content-diff {
+    background: var(--pmm-diff-panel, var(--pm-panel-bg,#fff)) !important;
+    color: var(--pmm-diff-text, var(--pm-text-primary,#111827)) !important;
+    border-color: var(--pmm-diff-border, var(--pm-border,#d1d5db)) !important;
+  }
+  .pmm-content-diff-head,
+  .pmm-content-diff-body {
+    background: var(--pmm-diff-panel, var(--pm-panel-bg,#fff)) !important;
+    color: var(--pmm-diff-text, var(--pm-text-primary,#111827)) !important;
+    border-color: var(--pmm-diff-border, var(--pm-border,#d1d5db)) !important;
+  }
+  .pmm-diff-side,
+  .pmm-diff-label,
+  .pmm-diff-preview {
+    background: var(--pmm-diff-card, var(--pm-card-bg,#fff)) !important;
+    color: var(--pmm-diff-text, var(--pm-text-primary,#111827)) !important;
+    border-color: var(--pmm-diff-border, var(--pm-border,#d1d5db)) !important;
+    -webkit-text-fill-color: var(--pmm-diff-text, var(--pm-text-primary,#111827)) !important;
+  }
+  .pmm-diff-edit-area {
+    background: var(--pmm-diff-card, var(--pm-card-bg,#fff)) !important;
+    color: var(--pmm-diff-text, var(--pm-text-primary,#111827)) !important;
+    caret-color: var(--pmm-diff-text, var(--pm-text-primary,#111827)) !important;
+    -webkit-text-fill-color: var(--pmm-diff-text, var(--pm-text-primary,#111827)) !important;
+  }
+  .pmm-diff-preset-name,
+  .pmm-diff-save-note { color: var(--pmm-diff-muted, var(--pm-text-secondary,#64748b)) !important; }
+  .pmm-diff-edit-btn {
+    color: var(--pmm-diff-muted, var(--pm-text-secondary,#64748b)) !important;
+    border-color: var(--pmm-diff-border, var(--pm-border,#d1d5db)) !important;
+  }
+  .pmm-diff-savebar {
+    background: linear-gradient(to bottom, transparent, var(--pmm-diff-panel, var(--pm-panel-bg,#fff)) 28%) !important;
+  }
+
   /* 像荧光笔一样，只涂真正不同的字符/词组 */
   .pmm-diff-mark {
     display: inline !important;
@@ -2818,6 +2854,63 @@ async function ce(){
     await new Promise(resolve => setTimeout(resolve, 450));
   }
 
+  /* 对比详情是后来插入的 portal，不能假设它会继承工坊卡片的 CSS 变量。
+     直接把当前卡片已解析出的调色板带过去，夜间与魔法棒主题都不会回退白底。 */
+  function applyContentDiffTheme(overlay, box, sourcePanel, mainRoot) {
+    const nodes = [
+      sourcePanel,
+      sourcePanel?.closest?.('.pm-panel-container'),
+      mainRoot?.querySelector?.('.pm-panel-container'),
+      mainRoot,
+    ].filter(Boolean);
+    const view = sourcePanel?.ownerDocument?.defaultView || mainRoot?.ownerDocument?.defaultView || window;
+    const styles = nodes.map(node => {
+      try { return view.getComputedStyle(node); } catch (_) { return null; }
+    }).filter(Boolean);
+    const usable = value => {
+      const text = String(value || '').trim();
+      return text && !/^(?:transparent|initial|inherit|unset|rgba\(0,\s*0,\s*0,\s*0\))$/i.test(text) ? text : '';
+    };
+    const read = name => {
+      for (const style of styles) {
+        const value = usable(style.getPropertyValue(name));
+        if (value) return value;
+      }
+      return '';
+    };
+    const readBackground = () => {
+      for (const style of styles) {
+        const value = usable(style.backgroundColor || style.getPropertyValue('background-color'));
+        if (value) return value;
+      }
+      return '';
+    };
+    const looksLight = value => {
+      const text = String(value || '');
+      const hex = text.match(/#([\da-f]{6}|[\da-f]{3})\b/i);
+      const rgb = text.match(/rgba?\(\s*([\d.]+)[,\s]+([\d.]+)[,\s]+([\d.]+)/i);
+      const parts = hex
+        ? (hex[1].length === 3 ? hex[1].split('').map(char => parseInt(char + char, 16)) : [hex[1].slice(0, 2), hex[1].slice(2, 4), hex[1].slice(4, 6)].map(part => parseInt(part, 16)))
+        : (rgb ? [Number(rgb[1]), Number(rgb[2]), Number(rgb[3])] : null);
+      return parts ? parts[0] + parts[1] + parts[2] > 420 : false;
+    };
+    const text = read('--pm-text-primary') || styles[0]?.color || '';
+    const panel = read('--pm-panel-bg') || readBackground();
+    const dark = looksLight(text) || (!panel && view.matchMedia?.('(prefers-color-scheme: dark)')?.matches);
+    const palette = {
+      panel: panel || (dark ? '#17191f' : '#ffffff'),
+      card: read('--pm-card-bg') || (dark ? '#20232c' : '#f8fafc'),
+      text: text || (dark ? '#f3f4f6' : '#111827'),
+      muted: read('--pm-text-secondary') || (dark ? '#b8c0ce' : '#64748b'),
+      border: read('--pm-border') || (dark ? '#3c4656' : '#d1d5db'),
+      accent: read('--pm-quote-color') || (dark ? '#6ea8ff' : '#3b82f6'),
+    };
+    for (const [name, value] of Object.entries(palette)) {
+      box.style.setProperty(`--pmm-diff-${name}`, value, 'important');
+    }
+    overlay.dataset.pmmDiffTheme = dark ? 'dark' : 'light';
+  }
+
   function showContentDiff(doc, name, a, b, ctx = {}) {
     /* 1.3.17：内容编辑页也挂在主面板 root 内，不再跨 document。 */
     const sourcePanel = ctx.leftPanel || ctx.rightPanel || null;
@@ -2894,6 +2987,7 @@ async function ce(){
 
     overlay.appendChild(box);
     host.appendChild(overlay);
+    applyContentDiffTheme(overlay, box, sourcePanel, mainRoot);
 
     const noteSlot = box.querySelector('.pmm-diff-summary-slot');
     const leftSide = box.querySelector('[data-side="left"]');
