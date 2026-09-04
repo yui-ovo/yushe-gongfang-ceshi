@@ -11059,7 +11059,15 @@ html.pmm-dnd-compat-active #preset-manager-main-panel{user-select:none!important
   const SELF = window;
   const TOP = (() => { try { return window.top || window; } catch (_) { return window; } })();
   const DOC = document;
-  const MEDIA = SELF.matchMedia?.('(max-width: 768px)');
+  // 脚本运行在 iframe 时，iframe 的窄宽度不代表酒馆页面是移动端。
+  // 能访问顶层页面时，以顶层视口决定入口形态；跨域时再退回自身视口。
+  const MEDIA = (() => {
+    try {
+      return TOP.matchMedia?.('(max-width: 768px)') || SELF.matchMedia?.('(max-width: 768px)');
+    } catch (_) {
+      return SELF.matchMedia?.('(max-width: 768px)');
+    }
+  })();
   const CLEANUP_KEY = '__PMM_FLOATING_PANEL_BATCH_CLEANUP__';
   const STYLE_ID = 'pmm-floating-panel-batch-style';
   const POSITION_KEY = 'pmm_mobile_floating_dock_v1';
@@ -11080,7 +11088,8 @@ html.pmm-dnd-compat-active #preset-manager-main-panel{user-select:none!important
 
   function isMobile() {
     if (MEDIA) return MEDIA.matches;
-    return Math.min(SELF.innerWidth || 9999, SELF.innerHeight || 9999) <= 768;
+    const view = TOP || SELF;
+    return Math.min(view.innerWidth || 9999, view.innerHeight || 9999) <= 768;
   }
 
   function documents() {
