@@ -46,7 +46,6 @@
     busy: false,
     status: '已同步',
     topType: 'preset',
-    bottomMode: 'world',
     worldNames: [],
     worldBindings: new Map(),
     top: emptyWorldSide(),
@@ -1344,17 +1343,6 @@
     </span>`;
   }
 
-  function isWorldbookBranchMode() {
-    return state.bottomMode === 'branches';
-  }
-
-  function bottomModeSwitchMarkup() {
-    return `<span class="pmm-wb-kind-switch pmm-wb-branch-mode-switch" data-pmm-wb-branch-mode-switch>
-      <button type="button" data-wb-action="bottom-mode" data-wb-bottom-mode="world" class="${state.bottomMode === 'world' ? 'is-active' : ''}" title="下方显示世界书"><i class="fa-solid fa-book-atlas"></i></button>
-      <button type="button" data-wb-action="bottom-mode" data-wb-bottom-mode="branches" class="${isWorldbookBranchMode() ? 'is-active' : ''}" title="世界书分支（准备中）"><i class="fa-solid fa-globe"></i><i class="fa-solid fa-code-branch pmm-wb-branch-mode-glyph"></i></button>
-    </span>`;
-  }
-
   function themeToolbarSlotMarkup() {
     return '<span class="pmm-wb-theme-slot" data-pmm-theme-toolbar-slot></span>';
   }
@@ -1403,7 +1391,6 @@
           <div class="pmm-wb-header-right">
              <span class="pmm-wb-status">${h(state.status)}</span>
              ${sideName === 'top' ? typeSwitchMarkup() : ''}
-             ${sideName === 'bottom' ? bottomModeSwitchMarkup() : ''}
              ${sideName === 'top' ? themeToolbarSlotMarkup() : ''}
              ${toolbarButton('multi', side.multi ? '退出多选' : '多选', 'fa-check-double', `data-wb-side="${sideName}"`)}
             ${side.multi
@@ -1420,24 +1407,6 @@
           <div class="pmm-wb-list" data-wb-list="${sideName}">
             ${renderWorldListMarkup(sideName, side, view)}
           </div>
-        </div>
-      </div>
-    </section>`;
-  }
-
-  function renderWorldbookBranchSkeletonCard() {
-    return `<section class="preset-panel pmm-wb-inline-panel pmm-wb-branch-shell" data-pmm-wb-branch-shell>
-      <div class="pmm-wb-main-content">
-        <header class="pmm-wb-header">
-          <div class="pmm-wb-header-left">
-            <span class="pmm-wb-title-row pmm-wb-branch-shell-title"><span class="pmm-wb-branch-shell-icon"><i class="fa-solid fa-globe"></i><i class="fa-solid fa-code-branch"></i></span><strong>世界书分支</strong></span>
-          </div>
-          <div class="pmm-wb-header-right">${bottomModeSwitchMarkup()}${toolbarButton('exit', '关闭', 'fa-xmark')}</div>
-        </header>
-        <div class="pmm-wb-branch-shell-body">
-          <span class="pmm-wb-branch-shell-mark"><i class="fa-solid fa-code-branch"></i></span>
-          <strong>世界书分支功能准备中</strong>
-          <small>这一页目前不会读取、保存或改变任何世界书；我们会从这里慢慢把功能加回来。</small>
         </div>
       </div>
     </section>`;
@@ -1533,9 +1502,7 @@
       state.topCard = createCard('top', state.top);
       state.mainWrapper.insertBefore(state.topCard, state.mainWrapper.querySelector('.side-panel-root'));
     }
-    state.bottomCard = isWorldbookBranchMode()
-      ? createWorldbookBranchSkeletonCard()
-      : createCard('bottom', state.bottom);
+    state.bottomCard = createCard('bottom', state.bottom);
     state.container.append(state.bottomCard);
     placeThemeToolbarButton(themeToggle);
     markWorldbookButton();
@@ -1869,18 +1836,11 @@
     }
   }
 
-  function switchBottomMode(mode) {
-    if (!['world', 'branches'].includes(mode) || state.bottomMode === mode) return;
-    state.bottomMode = mode;
-    renderPanels();
-  }
-
   async function handleAction(button) {
     const action = button.dataset.wbAction;
     const sideName = button.dataset.wbSide;
     const side = sideName ? state[sideName] : null;
     if (action === 'top-kind') return switchTopKind(button.dataset.wbKind);
-    if (action === 'bottom-mode') return switchBottomMode(button.dataset.wbBottomMode);
     if (action === 'source-picker') return openSourcePicker(sideName);
     if (action === 'rename-source') return renameWorldSource(sideName);
     if (action === 'select-source') return;
@@ -2254,7 +2214,6 @@
 .pmm-wb-source-select{width:auto!important;min-width:0!important;max-width:none!important;flex:1 1 auto!important}.pmm-wb-source-action{width:25px;height:25px;min-width:25px;padding:0;border:0;border-radius:5px;background:transparent;color:var(--pm-text-secondary,currentColor);display:inline-flex;align-items:center;justify-content:center;opacity:.68}.pmm-wb-source-action i{font-size:9px}.pmm-wb-source-action:active{transform:scale(.94)}.pmm-wb-kind-switch{display:inline-flex;align-items:center;gap:1px;padding:2px;border-radius:7px;background:color-mix(in srgb,currentColor 6%,transparent)}
 .pmm-wb-kind-switch button{width:25px;height:23px;padding:0;border:0;border-radius:5px;background:transparent;color:var(--pm-text-secondary,currentColor);opacity:.62;display:inline-flex;align-items:center;justify-content:center}.pmm-wb-kind-switch button.is-active{background:var(--pm-quote-color,#3b82f6);color:#fff;opacity:1}.pmm-wb-kind-switch button:active{transform:scale(.94)}.pmm-wb-kind-switch i{font-size:10px}
 #preset-manager-main-panel .pmm-wb-kind-switch--toolbar button.is-active,#preset-manager-main-panel .pmm-wb-kind-switch--toolbar button.is-active>i,#preset-manager-main-panel .pmm-wb-kind-switch--toolbar button.is-active>i::before{color:#fff!important;opacity:1!important;-webkit-text-fill-color:#fff!important}#preset-manager-main-panel .pmm-wb-kind-switch--toolbar button[data-wb-kind="world"].is-active>i{filter:drop-shadow(0 1px 1px rgba(0,0,0,.26))}
-.pmm-wb-branch-mode-switch button[data-wb-bottom-mode="branches"]{position:relative}.pmm-wb-branch-mode-glyph{position:absolute;right:2px;bottom:1px;font-size:6px!important;text-shadow:0 0 2px var(--pm-toolbar-bg,var(--pm-panel-bg,#fff))}.pmm-wb-branch-shell-title{gap:6px;color:var(--pm-text-primary,currentColor)}.pmm-wb-branch-shell-title strong{font-size:11px;font-weight:650}.pmm-wb-branch-shell-icon{position:relative;width:15px;height:19px;display:inline-flex;align-items:center;justify-content:center;color:var(--pm-quote-color,#3485f6)}.pmm-wb-branch-shell-icon>i:first-child{font-size:12px}.pmm-wb-branch-shell-icon>i:last-child{position:absolute;right:-1px;bottom:1px;font-size:6px;text-shadow:0 0 2px var(--pm-toolbar-bg,var(--pm-panel-bg,#fff))}.pmm-wb-branch-shell-body{flex:1;min-height:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:24px;text-align:center}.pmm-wb-branch-shell-mark{width:58px;height:58px;display:inline-flex;align-items:center;justify-content:center;border:1px solid color-mix(in srgb,var(--pm-text-secondary,currentColor) 20%,transparent);border-radius:16px;background:color-mix(in srgb,var(--pm-text-secondary,currentColor) 5%,transparent);color:var(--pm-text-secondary,currentColor);opacity:.72}.pmm-wb-branch-shell-mark i{font-size:23px}.pmm-wb-branch-shell-body>strong{font-size:13px;font-weight:650}.pmm-wb-branch-shell-body>small{max-width:270px;font-size:10px;line-height:1.55;opacity:.58}
 #preset-manager-main-panel[data-pmm-wb-search-theme="light"] .pmm-wb-search-highlight{border-color:transparent!important;background:#d6eefc!important;color:#183f5c!important;-webkit-text-fill-color:#183f5c!important}#preset-manager-main-panel[data-pmm-wb-search-theme="light"] .pmm-wb-search-highlight.is-current{border-color:transparent!important;background:#75bee8!important;color:#163d59!important;-webkit-text-fill-color:#163d59!important;box-shadow:none!important}
 #preset-manager-main-panel[data-pmm-wb-search-theme="light"] .pmm-wb-replace-row:focus-within .pmm-wb-replace-action{background:color-mix(in srgb,var(--pm-text-primary,#1f2937) 48%,var(--pm-panel-bg,#fff))!important;color:var(--pm-text-primary,#1f2937)!important;-webkit-text-fill-color:var(--pm-text-primary,#1f2937)!important;opacity:.9!important}
 .pmm-wb-tool{width:27px;height:27px;min-width:27px;padding:0;border:0;border-radius:5px;background:transparent;color:var(--pm-text-secondary,currentColor);display:inline-flex;align-items:center;justify-content:center;opacity:.72}.pmm-wb-tool:active:not(:disabled){transform:scale(.94)}.pmm-wb-tool:disabled{opacity:.22}.pmm-wb-tool i{font-size:10px}.pmm-wb-status{font-size:9px;opacity:.5;white-space:nowrap}
@@ -2351,7 +2310,6 @@
     state.nativeTop = null;
     state.bottomCard = null;
     state.topCard = null;
-    state.bottomMode = 'world';
     resetSide(state.top, true);
     resetSide(state.bottom, true);
     context = null;
