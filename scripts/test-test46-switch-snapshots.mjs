@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
-const source = await readFile(new URL('../dist/workshop-v2.95.js', import.meta.url), 'utf8');
+const source = await readFile(new URL('../dist/workshop-v2.97.js', import.meta.url), 'utf8');
 
 function section(startMarker, endMarker) {
   const start = source.indexOf(startMarker);
@@ -11,10 +11,10 @@ function section(startMarker, endMarker) {
 }
 
 for (const marker of [
-  'PMM_SWITCH_SNAPSHOTS_TEST46',
+  'PMM_SWITCH_SNAPSHOTS_TEST49',
   "const STORAGE_KEY = 'pmm.switch-snapshots.v1'",
   "const TRIGGER_CLASS = 'pmm-switch-snapshot-trigger'",
-  'function saveNewSnapshot()',
+  'function saveNewSnapshot(inputName)',
   'async function applySnapshot(id)',
   'function overwriteSnapshot(id)',
   'function bindSnapshotToCurrentCharacter(id)',
@@ -38,7 +38,7 @@ assert.ok(apply.includes("await setPreset(presetName, { prompts: clone(nextPromp
 assert.ok(apply.includes("await setPreset('in_use', { prompts: clone(nextPrompts) })"), '应用当前预设时没有即时更新运行中的开关');
 assert.ok(apply.includes('context.eventSource.emit(eventType'), '应用快照后没有刷新工坊当前卡片');
 
-const snapshotCreation = section('function saveNewSnapshot()', 'function findSnapshot(id)');
+const snapshotCreation = section('function saveNewSnapshot(inputName)', 'function findSnapshot(id)');
 assert.ok(snapshotCreation.includes('states: makeStates(prompts)'), '新快照没有冻结当前全部条目状态');
 assert.ok(snapshotCreation.includes('character: character ? { ...character } : null'), '新快照没有记录当前角色绑定');
 assert.ok(snapshotCreation.includes('writeStore(store)'), '新快照没有持久化');
@@ -53,8 +53,8 @@ assert.ok(apply.includes('isBranchMode()'), '分支模式下仍能错误应用�
 
 const trigger = section('function mountTrigger()', 'function installStyle()');
 assert.ok(trigger.includes("button.title = '开关快照'"), '顶部入口没有明确的开关快照标签');
-assert.ok(trigger.includes("host.querySelector('[title=\"导出\"]')"), '快照入口没有放在导出按钮右侧');
-assert.ok(trigger.includes('host.insertBefore(button, exportButton.nextSibling)'), '快照入口没有紧随导出按钮');
+assert.ok(trigger.includes("host.querySelector('[title=\"导入\"]')"), '快照入口没有定位导入按钮');
+assert.ok(trigger.includes('host.insertBefore(button, importButton)'), '快照入口没有放在导入／导出的左边');
 
 assert.ok(source.includes('@media (max-width:768px)'), '快照面板缺少手机端底部弹层布局');
 assert.ok(source.includes('快照只保存开关；正文、分组、顺序和条目本身不会变化。'), '快照面板没有说明其不会改变正文或排序');

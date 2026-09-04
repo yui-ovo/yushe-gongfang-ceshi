@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
-const source = await readFile(new URL('../dist/workshop-v2.96.js', import.meta.url), 'utf8');
+const source = await readFile(new URL('../dist/workshop-v2.97.js', import.meta.url), 'utf8');
 
 function section(startMarker, endMarker) {
   const start = source.indexOf(startMarker);
@@ -11,7 +11,7 @@ function section(startMarker, endMarker) {
 }
 
 for (const marker of [
-  'PMM_SWITCH_SNAPSHOTS_TEST47',
+  'PMM_SWITCH_SNAPSHOTS_TEST49',
   "const STORAGE_KEY = 'pmm.switch-snapshots.v1'",
   "const TRIGGER_CLASS = 'pmm-switch-snapshot-trigger'",
   'function saveNewSnapshot(inputName)',
