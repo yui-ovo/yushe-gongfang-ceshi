@@ -672,33 +672,48 @@
   // Vue only leaves its component reference on a child. A BaiBai card may belong
   // to BaiBai's own Vue app, so always prefer PMM's PromptPanel: it owns the
   // cross-panel-drop listener that can preserve the target section id.
-  function nativePresetPanelComponent() {
+  function nativePresetDropDispatcher() {
+    const panel = state.nativeTop;
+    if (!panel) return null;
     const seen = new Set();
-    const roots = [
-      state.nativeTop?.querySelector?.('.prompt-panel'),
-      state.nativeTop,
-    ].filter(Boolean);
+    const roots = [panel, ...panel.querySelectorAll('.prompt-panel, .prompt-panel *')];
+    let promptPanelFallback = null;
     for (const root of roots) {
-      for (let element = root; element; element = element.parentElement) {
+      for (let element = root; element && panel.contains(element); element = element.parentElement) {
         let component = element.__vueParentComponent || null;
         for (let depth = 0; component && depth < 24; depth++, component = component.parent) {
           if (seen.has(component)) continue;
           seen.add(component);
           if (typeof component.emit !== 'function') continue;
-          const props = component.vnode?.props || component.props || {};
-          const handlesCrossPanelDrop = typeof props.onCrossPanelDrop === 'function'
-            || typeof props['onCross-panel-drop'] === 'function';
-          if (handlesCrossPanelDrop) return component;
+          const props = [component.vnode?.props, component.props, component.attrs].filter(Boolean);
+          const handlers = props.flatMap(source => [
+            source.onCrossPanelDrop,
+            source['onCross-panel-drop'],
+            source.onCrossPanelDropOnce,
+          ]).flat().filter(handler => typeof handler === 'function');
+          const name = String(component.type?.__name || component.vnode?.type?.__name || '');
+          if (handlers.length) {
+            return {
+              component,
+              drop: async (...args) => {
+                for (const handler of handlers) await handler(...args);
+              },
+            };
+          }
+          if (!promptPanelFallback && name === 'PromptPanel') promptPanelFallback = component;
         }
-        if (element === state.nativeTop) break;
       }
     }
-    return null;
+    return promptPanelFallback ? { component:promptPanelFallback, drop:null } : null;
+  }
+
+  function nativePresetPanelComponent() {
+    return nativePresetDropDispatcher()?.component || null;
   }
 
   function nativePresetSnapshot() {
     const panel = state.nativeTop;
-    if (!panel) return { name: '', prompts: [], selected: new Set(), runtimePrompts: null, panelComponent: null };
+    if (!panel) return { name: '', prompts: [], selected: new Set(), runtimePrompts: null, panelComponent: null, panelDropHandler: null };
     let prompts = null;
     let runtimePrompts = null;
     let panelComponent = null;
@@ -718,7 +733,8 @@
       if (found.size) selected = found;
       if (prompts && selected.size) break;
     }
-    panelComponent = nativePresetPanelComponent() || panelComponent;
+    const dispatcher = nativePresetDropDispatcher();
+    panelComponent = dispatcher?.component || panelComponent;
     prompts = clone(prompts || []);
     if (!selected.size) {
       panel.querySelectorAll('.prompt-item[data-prompt-id],.prompt-card[data-prompt-id]').forEach(item => {
@@ -729,27 +745,29 @@
     }
     const select = panel.querySelector('.title-select');
     const name = String(select?.value || select?.selectedOptions?.[0]?.textContent || getLoadedPresetNameSafe() || '').trim();
-    return { name, prompts, selected, runtimePrompts, panelComponent };
+    return { name, prompts, selected, runtimePrompts, panelComponent, panelDropHandler:dispatcher?.drop || null };
   }
 
   async function emitNativePresetDrop(target, additions, placement = null) {
     const targetSectionId = String(placement?.targetSectionId || '');
     const component = placement?.targetPanelComponent || target?.panelComponent;
+    const dropHandler = placement?.targetDropHandler || target?.panelDropHandler;
     if (targetSectionId) {
-      if (!component || typeof component.emit !== 'function' || !additions.length) {
+      if (((!component || typeof component.emit !== 'function') && typeof dropHandler !== 'function') || !additions.length) {
         console.warn('[世界书缝合] 未取得目标分组对应的原生预设面板，已取消拖入以免条目掉到分组外');
         return false;
       }
       try {
-        component.emit(
-          'cross-panel-drop',
+        const args = [
           additions,
           placement?.targetId || '',
           placement?.position || 'after',
           targetSectionId,
           undefined,
           false,
-        );
+        ];
+        if (typeof dropHandler === 'function') await dropHandler(...args);
+        else component.emit('cross-panel-drop', ...args);
         return true;
       } catch (error) {
         console.warn('[世界书缝合] 分组拖入组件事件不可用，取消直接保存以免条目掉到分组外', error);
@@ -2004,7 +2022,8 @@
   function nativeDropPlacement(event) {
     const card = event.target?.closest?.('.prompt-item[data-prompt-id],.prompt-card[data-prompt-id],[data-pm-identifier]');
     const { section, targetSectionId } = nativeDropSectionFromNode(card || event.target);
-    const targetPanelComponent = nativePresetPanelComponent();
+    const targetDispatcher = nativePresetDropDispatcher();
+    const targetPanelComponent = targetDispatcher?.component || null;
     const cardId = nativeDropTargetId(card?.dataset?.promptId || card?.dataset?.pmIdentifier || '');
     if (cardId) {
       const rect = card.getBoundingClientRect();
@@ -2013,6 +2032,7 @@
         position: Number(event.clientY) < rect.top + rect.height / 2 ? 'before' : 'after',
         targetSectionId,
         targetPanelComponent,
+        targetDropHandler: targetDispatcher?.drop || null,
       };
     }
     if (!targetSectionId) return null;
@@ -2024,6 +2044,7 @@
       position: 'after',
       targetSectionId,
       targetPanelComponent,
+      targetDropHandler: targetDispatcher?.drop || null,
     };
   }
 

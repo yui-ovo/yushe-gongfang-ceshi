@@ -3,7 +3,7 @@
 > 这是个人开发测试通道，功能可能尚未完成。正式用户请安装
 > [🧩预设工坊](https://github.com/yui-ovo/ST-Preset-Workshop)。
 
-适用于 SillyTavern 的双端预设管理扩展，首个扩展版本由酒馆助手脚本 **v2.53** 无损迁移而来，当前测试版本为 **v2.94.0-test.64**。
+适用于 SillyTavern 的双端预设管理扩展，首个扩展版本由酒馆助手脚本 **v2.53** 无损迁移而来，当前测试版本为 **v2.94.0-test.65**。
 
 本仓库从正常浏览器版复制，用于在大功能完成前独立开发和验证，不包含 Gecko 后台 iframe 实验补丁。Firefox、雨见等 Gecko／GeckoView 手机浏览器请改用 [Gecko 兼容版](https://github.com/yui-ovo/ST-Preset-Workshop-Gecko)。
 
@@ -26,7 +26,7 @@
 
 ## 当前版本
 
-- 扩展版本：`2.94.0-test.64`
+- 扩展版本：`2.94.0-test.65`
 - 迁移基准：`🧩预设工坊｜双端适配v2.53`
 - 第一阶段保持原脚本行为，不在迁移过程中重写业务逻辑。
 - iOS、iPadOS 与 TauriTavern（WKWebView）会自动启用稳定滚动模式；安卓继续使用原有离屏渲染优化。

@@ -19,8 +19,10 @@ for (const marker of [
   "const targetSectionId = String(placement?.targetSectionId || '');",
   'function nativePresetPanelComponent()',
   'placement?.targetPanelComponent || target?.panelComponent',
-  "state.nativeTop?.querySelector?.('.prompt-panel')",
-  'const handlesCrossPanelDrop = typeof props.onCrossPanelDrop === \'function\'',
+  "...panel.querySelectorAll('.prompt-panel, .prompt-panel *')",
+  "name === 'PromptPanel'",
+  'source.onCrossPanelDrop',
+  'targetDropHandler',
   'TOP.__PMM_WORLDBOOK_PRESET_DROP_BRIDGE__',
   'const result = await bridge.drop({',
   'if (await emitNativePresetDrop(target, additions, placement))',
@@ -56,7 +58,8 @@ assert.ok(nativeTarget.includes('return nativeIds.has(candidate) ? candidate : \
 for (const marker of [
   '[data-pm-identifier]',
   'targetSectionId',
-  'const targetPanelComponent = nativePresetPanelComponent();',
+  'const targetDispatcher = nativePresetDropDispatcher();',
+  'const targetPanelComponent = targetDispatcher?.component || null;',
   'targetPanelComponent,',
   'nativeDropTargetId(card?.dataset?.promptId || card?.dataset?.pmIdentifier || \'\')',
   "section.querySelectorAll('.prompt-item[data-prompt-id],.prompt-card[data-prompt-id],[data-pm-identifier]')",
@@ -72,7 +75,8 @@ const groupedDrop = worldbook.slice(
 );
 assert.ok(groupedDrop.includes('if (targetSectionId) {'), '分组落点应优先走原生组件事件');
 assert.ok(groupedDrop.includes('placement?.targetPanelComponent || target?.panelComponent'), '分组落点必须优先使用工坊的原生拖入组件');
-assert.ok(groupedDrop.includes("'cross-panel-drop',\n          additions,\n          placement?.targetId || '',\n          placement?.position || 'after',\n          targetSectionId,"), '分组落点没有把所属分组传给预设面板');
+assert.ok(groupedDrop.includes("if (typeof dropHandler === 'function') await dropHandler(...args);"), '分组落点必须直接调用已发现的工坊拖入处理器');
+assert.ok(groupedDrop.includes("placement?.position || 'after',\n          targetSectionId,\n          undefined,"), '分组落点没有把所属分组传给预设面板');
 assert.ok(groupedDrop.indexOf('if (targetSectionId)') < groupedDrop.indexOf('let bridge ='), '分组落点不得先走丢失分组信息的旧桥接');
 assert.ok(groupedDrop.includes('未取得目标分组对应的原生预设面板'), '无法取得原生处理器时必须取消拖入，而不是写到组外');
 
