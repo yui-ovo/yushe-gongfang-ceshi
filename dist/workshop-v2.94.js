@@ -11434,6 +11434,42 @@ html.pmm-dnd-compat-active #preset-manager-main-panel{user-select:none!important
     }
   }
 
+  // The original free-floating desktop tab starts on mousedown, then waits
+  // for mouseup on its parent document. When the tab itself remains inside
+  // the script iframe, native mouseup does not cross that document boundary,
+  // leaving a normal click incomplete. Relay only that final mouseup on
+  // desktop; the original handler still decides whether it was a click or a
+  // drag and therefore keeps its existing drag behaviour intact.
+  function legacyFloatingReleaseDocument(ownerDocument) {
+    try { return SELF.frameElement ? SELF.parent.document : ownerDocument; } catch (_) { return ownerDocument; }
+  }
+
+  function bindDesktopEdgeReleaseBridge(root) {
+    const edge = root?.querySelector?.(':scope > .edge-tab');
+    if (!edge || edge.dataset.pmmDesktopEdgeReleaseBound === '1') return;
+    edge.dataset.pmmDesktopEdgeReleaseBound = '1';
+    edge.addEventListener('mouseup', event => {
+      if (isMobile() || (event.button != null && event.button !== 0)) return;
+      const ownerDocument = edge.ownerDocument || DOC;
+      const releaseDocument = legacyFloatingReleaseDocument(ownerDocument);
+      if (!releaseDocument || releaseDocument === ownerDocument) return;
+      const eventView = releaseDocument.defaultView || TOP;
+      const MouseEventCtor = eventView?.MouseEvent || TOP.MouseEvent;
+      if (typeof MouseEventCtor !== 'function') return;
+      releaseDocument.dispatchEvent(new MouseEventCtor('mouseup', {
+        bubbles:true,
+        cancelable:true,
+        view:eventView,
+        button:0,
+        buttons:0,
+        clientX:Number(event.clientX) || 0,
+        clientY:Number(event.clientY) || 0,
+        screenX:Number(event.screenX) || 0,
+        screenY:Number(event.screenY) || 0,
+      }));
+    }, true);
+  }
+
   function syncSelectOptions(root) {
     const manager = getPresetManagerSafe();
     const select = getPresetSelect(root);
@@ -11696,6 +11732,7 @@ html.pmm-dnd-compat-active #preset-manager-main-panel{user-select:none!important
     bindPresetSwitchNotice(root);
     bindBranchSwitchNotice(root);
     bindAutoCollapseOnEdit(root);
+    bindDesktopEdgeReleaseBridge(root);
     syncSelectOptions(root);
     if (isMobile()) {
       const entryEnabled = floatingEntryEnabled();
