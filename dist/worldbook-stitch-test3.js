@@ -668,6 +668,34 @@
       : new Set();
   }
 
+  // `state.nativeTop` is the outer preset-panel element. On some mobile WebViews
+  // Vue only leaves its component reference on a child. A BaiBai card may belong
+  // to BaiBai's own Vue app, so always prefer PMM's PromptPanel: it owns the
+  // cross-panel-drop listener that can preserve the target section id.
+  function nativePresetPanelComponent() {
+    const seen = new Set();
+    const roots = [
+      state.nativeTop?.querySelector?.('.prompt-panel'),
+      state.nativeTop,
+    ].filter(Boolean);
+    for (const root of roots) {
+      for (let element = root; element; element = element.parentElement) {
+        let component = element.__vueParentComponent || null;
+        for (let depth = 0; component && depth < 24; depth++, component = component.parent) {
+          if (seen.has(component)) continue;
+          seen.add(component);
+          if (typeof component.emit !== 'function') continue;
+          const props = component.vnode?.props || component.props || {};
+          const handlesCrossPanelDrop = typeof props.onCrossPanelDrop === 'function'
+            || typeof props['onCross-panel-drop'] === 'function';
+          if (handlesCrossPanelDrop) return component;
+        }
+        if (element === state.nativeTop) break;
+      }
+    }
+    return null;
+  }
+
   function nativePresetSnapshot() {
     const panel = state.nativeTop;
     if (!panel) return { name: '', prompts: [], selected: new Set(), runtimePrompts: null, panelComponent: null };
@@ -690,6 +718,7 @@
       if (found.size) selected = found;
       if (prompts && selected.size) break;
     }
+    panelComponent = nativePresetPanelComponent() || panelComponent;
     prompts = clone(prompts || []);
     if (!selected.size) {
       panel.querySelectorAll('.prompt-item[data-prompt-id],.prompt-card[data-prompt-id]').forEach(item => {
@@ -705,10 +734,10 @@
 
   async function emitNativePresetDrop(target, additions, placement = null) {
     const targetSectionId = String(placement?.targetSectionId || '');
-    const component = target?.panelComponent;
+    const component = placement?.targetPanelComponent || target?.panelComponent;
     if (targetSectionId) {
       if (!component || typeof component.emit !== 'function' || !additions.length) {
-        console.warn('[世界书缝合] 无法取得目标分组的原生预设面板，已取消拖入以免条目掉到分组外');
+        console.warn('[世界书缝合] 未取得目标分组对应的原生预设面板，已取消拖入以免条目掉到分组外');
         return false;
       }
       try {
@@ -834,7 +863,7 @@
         return;
       }
       if (placement?.targetSectionId) {
-        notify('error', '没有确认目标分组，已取消拖入，避免条目掉到分组外');
+        notify('error', '目标分组已识别，但未取得工坊拖入处理器；已取消拖入以避免条目掉到组外');
         return;
       }
       pushUndo(source, move ? '从世界书移动到预设' : '从世界书拖入预设', {
@@ -1948,29 +1977,53 @@
   }
 
   function nativePromptIdFromDrag(target) {
-    const card = target?.closest?.('.prompt-item[data-prompt-id],.prompt-card[data-prompt-id]');
-    return card?.dataset?.promptId ? String(card.dataset.promptId) : '';
+    const card = target?.closest?.('.prompt-item[data-prompt-id],.prompt-card[data-prompt-id],[data-pm-identifier]');
+    return String(card?.dataset?.promptId || card?.dataset?.pmIdentifier || '');
+  }
+
+  function nativeDropSectionFromNode(node) {
+    const section = node?.closest?.('[data-section-id],[data-preset-group-id]');
+    const savedSectionId = String(section?.dataset?.sectionId || '');
+    const rawBaiBaiGroupId = String(section?.dataset?.presetGroupId || '');
+    const targetSectionId = savedSectionId || (rawBaiBaiGroupId
+      ? (rawBaiBaiGroupId.startsWith('baibai_') ? rawBaiBaiGroupId : `baibai_${rawBaiBaiGroupId}`)
+      : '');
+    return { section, targetSectionId };
+  }
+
+  function nativeDropTargetId(id) {
+    const candidate = String(id || '');
+    if (!candidate) return '';
+    const nativeIds = new Set(nativePresetSnapshot().prompts.map(prompt => String(prompt?.id || '')));
+    // A BaiBai row can expose a UI-only id. Passing that to PMM's handler makes
+    // it stop before inserting, whereas an empty target correctly appends in
+    // the confirmed section.
+    return nativeIds.has(candidate) ? candidate : '';
   }
 
   function nativeDropPlacement(event) {
-    const card = event.target?.closest?.('.prompt-item[data-prompt-id],.prompt-card[data-prompt-id]');
-    const section = (card || event.target)?.closest?.('[data-section-id]');
-    const targetSectionId = String(section?.dataset?.sectionId || '');
-    if (card?.dataset?.promptId) {
+    const card = event.target?.closest?.('.prompt-item[data-prompt-id],.prompt-card[data-prompt-id],[data-pm-identifier]');
+    const { section, targetSectionId } = nativeDropSectionFromNode(card || event.target);
+    const targetPanelComponent = nativePresetPanelComponent();
+    const cardId = nativeDropTargetId(card?.dataset?.promptId || card?.dataset?.pmIdentifier || '');
+    if (cardId) {
       const rect = card.getBoundingClientRect();
       return {
-        targetId: String(card.dataset.promptId),
+        targetId: cardId,
         position: Number(event.clientY) < rect.top + rect.height / 2 ? 'before' : 'after',
         targetSectionId,
+        targetPanelComponent,
       };
     }
     if (!targetSectionId) return null;
-    const cards = Array.from(section.querySelectorAll('.prompt-item[data-prompt-id],.prompt-card[data-prompt-id]'));
+    const cards = Array.from(section.querySelectorAll('.prompt-item[data-prompt-id],.prompt-card[data-prompt-id],[data-pm-identifier]'))
+      .filter(item => nativeDropSectionFromNode(item).section === section);
     const lastCard = cards[cards.length - 1];
     return {
-      targetId: lastCard?.dataset?.promptId ? String(lastCard.dataset.promptId) : '',
+      targetId: nativeDropTargetId(lastCard?.dataset?.promptId || lastCard?.dataset?.pmIdentifier || ''),
       position: 'after',
       targetSectionId,
+      targetPanelComponent,
     };
   }
 
