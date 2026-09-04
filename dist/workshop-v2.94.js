@@ -11075,6 +11075,7 @@ html.pmm-dnd-compat-active #preset-manager-main-panel{user-select:none!important
   let batchDialogDocument = null;
   let batchViewportCleanup = null;
   let currentRoot = null;
+  let desktopEntryCleanups = [];
 
   try { SELF[CLEANUP_KEY]?.(); } catch (_) {}
 
@@ -11689,6 +11690,93 @@ html.pmm-dnd-compat-active #preset-manager-main-panel{user-select:none!important
     });
   }
 
+  // Desktop SillyTavern can host the legacy floating panel across document
+  // boundaries. Its own mousedown/mouseup pair then occasionally never
+  // completes. This listener sits on each real document instead of the Vue
+  // component, so a short click always opens the same toolbar. A drag is
+  // deliberately left to the original component.
+  function bindDesktopDirectEntry(currentDocument) {
+    if (!currentDocument || currentDocument.documentElement?.dataset.pmmDesktopDirectEntryBound === '1') return;
+    currentDocument.documentElement.dataset.pmmDesktopDirectEntryBound = '1';
+    let press = null;
+    const pointDistance = (event, start) => Math.hypot(Number(event.clientX) - start.x, Number(event.clientY) - start.y);
+    const elementFor = event => {
+      const target = event?.target;
+      return target?.closest ? target : target?.parentElement;
+    };
+    const edgeRootFor = event => {
+      const edge = elementFor(event)?.closest?.('#preset-manager-floating-panel .floating-panel-root > .edge-tab');
+      return edge?.parentElement?.classList?.contains('floating-panel-root') ? edge.parentElement : null;
+    };
+    const collapseRootFor = event => {
+      const collapse = elementFor(event)?.closest?.('#preset-manager-floating-panel .floating-panel-root > .panel-wrapper .panel-collapse');
+      return collapse?.closest?.('.floating-panel-root') || null;
+    };
+    const start = event => {
+      if (isMobile() || (event.button != null && event.button !== 0)) return;
+      const root = edgeRootFor(event);
+      if (!root) return;
+      press = { pointerId:event.pointerId, root, x:Number(event.clientX) || 0, y:Number(event.clientY) || 0, moved:false, usePointer:event.type === 'pointerdown' };
+    };
+    const move = event => {
+      if (!press || (press.usePointer && event.pointerId !== press.pointerId)) return;
+      if (pointDistance(event, press) > 6) press.moved = true;
+    };
+    const cancel = () => { press = null; };
+    const finish = event => {
+      if (isMobile() || !press || (press.usePointer && event.pointerId !== press.pointerId)) return;
+      const activePress = press;
+      if (pointDistance(event, activePress) > 6) activePress.moved = true;
+      press = null;
+      if (activePress.moved) return;
+      activePress.root.classList.add('pmm-desktop-direct-open');
+      // Prevent the legacy document mouseup handler from flipping a separate
+      // internal state after this independent open has already happened.
+      if (event.type === 'mouseup') {
+        event.preventDefault();
+        event.stopPropagation();
+        event.stopImmediatePropagation();
+      }
+    };
+    const click = event => {
+      if (isMobile()) return;
+      const root = edgeRootFor(event);
+      if (root) {
+        root.classList.add('pmm-desktop-direct-open');
+        return;
+      }
+      const collapseRoot = collapseRootFor(event);
+      if (!collapseRoot?.classList.contains('pmm-desktop-direct-open')) return;
+      event.preventDefault();
+      event.stopPropagation();
+      event.stopImmediatePropagation();
+      collapseRoot.classList.remove('pmm-desktop-direct-open');
+    };
+    const ownerWindow = currentDocument.defaultView || SELF;
+    if (typeof ownerWindow?.PointerEvent === 'function') {
+      currentDocument.addEventListener('pointerdown', start, true);
+      currentDocument.addEventListener('pointermove', move, true);
+      currentDocument.addEventListener('pointerup', finish, true);
+      currentDocument.addEventListener('pointercancel', cancel, true);
+    } else {
+      currentDocument.addEventListener('mousedown', start, true);
+      currentDocument.addEventListener('mousemove', move, true);
+      currentDocument.addEventListener('mouseup', finish, true);
+    }
+    currentDocument.addEventListener('click', click, true);
+    desktopEntryCleanups.push(() => {
+      currentDocument.documentElement?.removeAttribute('data-pmm-desktop-direct-entry-bound');
+      currentDocument.removeEventListener('pointerdown', start, true);
+      currentDocument.removeEventListener('pointermove', move, true);
+      currentDocument.removeEventListener('pointerup', finish, true);
+      currentDocument.removeEventListener('pointercancel', cancel, true);
+      currentDocument.removeEventListener('mousedown', start, true);
+      currentDocument.removeEventListener('mousemove', move, true);
+      currentDocument.removeEventListener('mouseup', finish, true);
+      currentDocument.removeEventListener('click', click, true);
+    });
+  }
+
   function syncRoot(root) {
     if (!root) return;
     currentRoot = root;
@@ -11707,6 +11795,7 @@ html.pmm-dnd-compat-active #preset-manager-main-panel{user-select:none!important
         root.dataset.pmmFloatingMobileInitialized = '1';
       }
       if (!entryEnabled) root.classList.remove('pmm-floating-mobile-open', 'pmm-floating-dragging');
+      root.classList.remove('pmm-desktop-direct-open');
       root.classList.add('pmm-floating-mobile');
       const saved = readPosition();
       setDock(root, root.dataset.pmmFloatingDock || saved.dock, parseFloat(root.style.getPropertyValue('--pmm-mobile-floating-top')) || saved.top, false);
@@ -11776,6 +11865,8 @@ html.pmm-dnd-compat-active #preset-manager-main-panel{user-select:none!important
   }
   html.pmm-mobile-toolbar-ready #pm-mobile-fab-standalone{display:none!important}
   #preset-manager-floating-panel .floating-panel-root.pmm-floating-entry-disabled{display:none!important;visibility:hidden!important;pointer-events:none!important}
+  #preset-manager-floating-panel .floating-panel-root.pmm-desktop-direct-open>.panel-wrapper{display:flex!important}
+  #preset-manager-floating-panel .floating-panel-root.pmm-desktop-direct-open>.edge-tab{display:none!important}
   #preset-manager-floating-panel .floating-panel-root.pmm-floating-mobile{
     position:fixed!important;top:var(--pmm-mobile-floating-top,38vh)!important;bottom:auto!important;
     width:auto!important;max-width:calc(100vw - 4px)!important;height:auto!important;z-index:80!important;
@@ -11817,7 +11908,10 @@ html.pmm-dnd-compat-active #preset-manager-main-panel{user-select:none!important
   }
 
   function install() {
-    for (const currentDocument of documents()) installStyle(currentDocument);
+    for (const currentDocument of documents()) {
+      installStyle(currentDocument);
+      bindDesktopDirectEntry(currentDocument);
+    }
     observers = documents().map(currentDocument => {
       const currentObserver = new MutationObserverCtor(scheduleSync);
       currentObserver.observe(currentDocument.documentElement, { childList:true, subtree:true, attributes:true, attributeFilter:['style', 'class'] });
@@ -11831,6 +11925,7 @@ html.pmm-dnd-compat-active #preset-manager-main-panel{user-select:none!important
 
   SELF[CLEANUP_KEY] = () => {
     endActiveDrag();
+    for (const cleanup of desktopEntryCleanups.splice(0)) cleanup();
     closeBatchDialog();
     for (const currentObserver of observers) currentObserver.disconnect();
     observers = [];
