@@ -34,7 +34,7 @@
 
   function emptyWorldSide() {
     return {
-      kind: 'world', name: '', data: null, entries: [], selected: new Set(), expanded: new Set(),
+      kind: 'world', name: '', data: null, savedData: null, dirty: false, entries: [], selected: new Set(), expanded: new Set(),
       limit: PAGE_SIZE, multi: false, query: '', searchOpen: false, searchScope: 'all', searchIndex: 0,
       replaceOpen: false, replaceValue: '',
       scrollTop: 0, history: [],
@@ -361,7 +361,7 @@
       setStatus(`${label}…`);
       try {
         await task();
-        setStatus('已同步');
+        syncWorldDraftStatus();
       } catch (error) {
         console.error(`[世界书缝合] ${label}失败`, error);
         setStatus('同步失败');
@@ -524,25 +524,14 @@
     side.scrollTop = 0;
     if (!side.name) {
       side.data = null;
+      side.savedData = null;
+      side.dirty = false;
       side.entries = [];
       return;
     }
-    side.data = await context.loadWorldInfo(side.name);
-    side.entries = entriesFromWorld(side.data);
-  }
-
-  async function loadWorldInfoFresh(name) {
-    if (!name) throw new Error('没有选择世界书');
-    const response = await SELF.fetch('/api/worldinfo/get', {
-      method: 'POST',
-      headers: context?.getRequestHeaders?.() || { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name }),
-      cache: 'no-cache',
-    });
-    if (!response.ok) throw new Error(`重新读取世界书失败（${response.status}）`);
-    const data = await response.json();
-    if (!data?.entries || typeof data.entries !== 'object') throw new Error('世界书数据格式无效');
-    return data;
+    applyWorldData(side, await context.loadWorldInfo(side.name));
+    side.savedData = clone(side.data);
+    side.dirty = false;
   }
 
   function applyWorldData(side, data) {
@@ -550,14 +539,95 @@
     side.entries = entriesFromWorld(side.data);
   }
 
+  function worldDraftChanged(side) {
+    if (!side?.data || !side?.savedData) return Boolean(side?.dirty);
+    return JSON.stringify(side.data) !== JSON.stringify(side.savedData);
+  }
+
+  function refreshWorldDraftState(side) {
+    if (!side) return false;
+    side.dirty = worldDraftChanged(side);
+    return side.dirty;
+  }
+
+  function worldSideName(side) {
+    return side === state.top ? 'top' : side === state.bottom ? 'bottom' : '';
+  }
+
+  function mirrorSameWorldDraft(side) {
+    if (state.topType !== 'world' || !side?.name) return;
+    const other = side === state.top ? state.bottom : state.top;
+    if (!other || other.name !== side.name) return;
+    other.data = clone(side.data);
+    other.savedData = clone(side.savedData);
+    other.entries = entriesFromWorld(other.data);
+    other.dirty = side.dirty;
+  }
+
+  function hasWorldDraftChanges() {
+    return [state.top, state.bottom].some(side => side?.dirty);
+  }
+
+  function syncWorldSaveButton(sideName) {
+    const side = state[sideName];
+    const button = state.host?.querySelector?.(`[data-pmm-wb-panel="${sideName}"] [data-wb-action="save"]`);
+    if (!side || !button) return false;
+    button.toggleAttribute('data-wb-dirty', side.dirty === true);
+    button.classList.toggle('is-dirty', side.dirty === true);
+    return true;
+  }
+
+  function syncWorldDraftStatus() {
+    setStatus(hasWorldDraftChanges() ? '' : '已同步');
+  }
+
+  function markWorldDraftDirty(side) {
+    if (!side?.data) return;
+    side.dirty = side.savedData ? worldDraftChanged(side) : true;
+    mirrorSameWorldDraft(side);
+    const sideName = worldSideName(side);
+    if (sideName) syncWorldSaveButton(sideName);
+    const otherName = sideName === 'top' ? 'bottom' : 'top';
+    if (state[otherName]?.name === side.name) syncWorldSaveButton(otherName);
+    syncWorldDraftStatus();
+  }
+
+  function discardWorldDraft(side) {
+    if (!side?.dirty) return;
+    if (side.savedData) {
+      side.data = clone(side.savedData);
+      side.entries = entriesFromWorld(side.data);
+    }
+    side.dirty = false;
+    side.selected.clear();
+    side.history.length = 0;
+    mirrorSameWorldDraft(side);
+    syncWorldSaveButton('top');
+    syncWorldSaveButton('bottom');
+    syncWorldDraftStatus();
+  }
+
+  async function reloadOpenNativeWorldbook(name) {
+    const worldName = String(name || '').trim();
+    if (!worldName || nativeWorldEditorSelectedName() !== worldName || typeof context?.reloadWorldInfoEditor !== 'function') return false;
+    try {
+      await context.reloadWorldInfoEditor(worldName, true);
+      return true;
+    } catch (error) {
+      console.warn(`[世界书缝合] 已保存“${worldName}”，但原生世界书页面刷新失败`, error);
+      return false;
+    }
+  }
+
   async function saveWorldSide(side) {
     if (!side.data?.entries) throw new Error('世界书数据尚未载入');
     await context.saveWorldInfo(side.name, clone(side.data), true);
-    const other = side === state.top ? state.bottom : state.top;
-    if (state.topType === 'world' && other.name === side.name) {
-      other.data = clone(side.data);
-      other.entries = entriesFromWorld(other.data);
-    }
+    side.savedData = clone(side.data);
+    side.dirty = false;
+    mirrorSameWorldDraft(side);
+    await reloadOpenNativeWorldbook(side.name);
+    syncWorldSaveButton(worldSideName(side));
+    syncWorldDraftStatus();
   }
 
   async function savePresetEntries(name, prompts) {
@@ -642,15 +712,18 @@
     if (!snapshot) return notify('info', '目前没有可以撤销的世界书操作');
     await enqueue(`撤销${snapshot.label ? `：${snapshot.label}` : ''}`, async () => {
       for (const preset of snapshot.presets) await savePresetEntries(preset.name, preset.prompts);
-      for (const world of snapshot.worlds) await context.saveWorldInfo(world.name, clone(world.data), true);
       for (const target of [state.top, state.bottom]) {
         const restored = snapshot.worlds.find(world => world.name === target.name);
         if (!restored) continue;
         target.data = clone(restored.data);
         target.entries = entriesFromWorld(target.data);
         target.selected.clear();
+        refreshWorldDraftState(target);
       }
       side.history.pop();
+      mirrorSameWorldDraft(side);
+      syncWorldSaveButton('top');
+      syncWorldSaveButton('bottom');
       renderPanels();
       notify('success', `已撤销：${snapshot.label || '上一步世界书操作'}`);
     });
@@ -861,11 +934,10 @@
         presetSnapshots:move ? [source] : [],
       });
       insertWorldEntries(state.bottom, 'preset', entries, placement);
-      await saveWorldSide(state.bottom);
+      markWorldDraftDirty(state.bottom);
       if (move) {
         await savePresetEntries(source.name, source.prompts.filter(prompt => !wanted.has(String(prompt.id))));
       }
-      await loadWorldSide(state.bottom);
       renderPanels();
       notify('success', `已${move ? '移动' : '复制'} ${entries.length} 条`);
     });
@@ -884,10 +956,9 @@
         if (move) {
           pushUndo(source, '从世界书移动到预设', { worldSides:[source] });
           removeWorldEntries(source, keys);
-          await saveWorldSide(source);
+          markWorldDraftDirty(source);
         }
         source.selected.clear();
-        if (move) await loadWorldSide(source);
         renderPanels();
         return;
       }
@@ -902,10 +973,9 @@
       await savePresetEntries(target.name, insertPresetEntries(target.prompts, additions, placement));
       if (move) {
         removeWorldEntries(source, keys);
-        await saveWorldSide(source);
+        markWorldDraftDirty(source);
       }
       source.selected.clear();
-      await loadWorldSide(source);
       renderPanels();
       notify('success', `已${move ? '移动' : '复制'} ${entries.length} 条`);
     });
@@ -918,35 +988,17 @@
     if (!keys.length) return notify('warning', '请先勾选需要缝合的世界书条目');
     if (move && source.name === target.name) return notify('warning', '同一本世界书内不需要移动');
     await enqueue(move ? '移动世界书条目' : '复制世界书条目', async () => {
-      const sameBook = source.name === target.name;
-      const latestSource = await loadWorldInfoFresh(source.name);
-      const latestTarget = sameBook ? latestSource : await loadWorldInfoFresh(target.name);
-      applyWorldData(source, latestSource);
-      applyWorldData(target, latestTarget);
       const wanted = new Set(keys);
       const entries = source.entries.filter(entry => wanted.has(entryKey(entry))).map(clone);
       if (!entries.length) throw new Error('没有从来源世界书读取到所选条目');
       pushUndo(source, move ? '在世界书之间移动条目' : '在世界书之间拖入条目', {
         worldSides:move ? [source, target] : [target],
       });
-      const additions = insertWorldEntries(target, 'world', entries, placement);
-      const addedUids = additions.map(entry => String(entry.uid));
-      await saveWorldSide(target);
+      insertWorldEntries(target, 'world', entries, placement);
+      markWorldDraftDirty(target);
       if (move) {
         removeWorldEntries(source, keys);
-        await saveWorldSide(source);
-      }
-      const persistedTarget = await loadWorldInfoFresh(target.name);
-      if (!addedUids.every(uid => persistedTarget.entries?.[uid])) {
-        throw new Error('目标世界书保存后未找到新条目');
-      }
-      applyWorldData(target, persistedTarget);
-      if (move) {
-        const persistedSource = await loadWorldInfoFresh(source.name);
-        if (keys.some(key => persistedSource.entries?.[key])) throw new Error('来源世界书仍保留着待移动条目');
-        applyWorldData(source, persistedSource);
-      } else if (sameBook) {
-        applyWorldData(source, persistedTarget);
+        markWorldDraftDirty(source);
       }
       source.selected.clear();
       renderPanels();
@@ -1275,10 +1327,8 @@
         pushUndo(side, '编辑世界书正文', { worldSides:[side] });
         entry.content = next;
         side.data.entries[String(entry.uid)] = entry;
-        void enqueue('保存世界书正文', async () => {
-          await saveWorldSide(side);
-          renderPanels();
-        });
+        markWorldDraftDirty(side);
+        renderPanels();
       },
     });
   }
@@ -1481,7 +1531,7 @@
               ? toolbarButton('batch-delete', '删除所选', 'fa-trash', `data-wb-side="${sideName}" ${side.selected.size ? '' : 'disabled'}`)
               : toolbarButton('undo', side.history.length ? `撤销：${side.history[side.history.length - 1].label}` : '暂无可撤销操作', 'fa-rotate-left', `data-wb-side="${sideName}" ${side.history.length ? '' : 'disabled'}`)}
             ${toolbarButton('entry-search', '搜索条目', 'fa-magnifying-glass', `data-wb-side="${sideName}"`)}
-            ${toolbarButton('save', '保存', 'fa-floppy-disk', `data-wb-side="${sideName}"`)}
+            ${toolbarButton('save', '保存', 'fa-floppy-disk', `data-wb-side="${sideName}"${side.dirty ? ' data-wb-dirty="true"' : ''}`)}
             ${toolbarButton(sideName === 'top' ? 'close-main' : 'exit', '关闭', 'fa-xmark')}
           </div>
         </header>
@@ -1632,10 +1682,8 @@
       entry[fieldName] = parseFieldValue(target, fieldName);
     }
     side.data.entries[String(entry.uid)] = entry;
-    await enqueue('保存条目', async () => {
-      await saveWorldSide(side);
-      renderPanels();
-    });
+    markWorldDraftDirty(side);
+    renderPanels();
   }
 
   async function deleteSelected(sideName) {
@@ -1646,9 +1694,8 @@
     await enqueue('批量删除', async () => {
       pushUndo(side, '批量删除世界书条目', { worldSides:[side] });
       removeWorldEntries(side, keys);
-      await saveWorldSide(side);
+      markWorldDraftDirty(side);
       side.selected.clear();
-      await loadWorldSide(side);
       renderPanels();
       notify('success', `已删除 ${keys.length} 条`);
     });
@@ -1817,7 +1864,7 @@
       const changed = replaceWorldSearchMatch(entry, match, replacement);
       if (!changed) return notify('info', '当前命中已变化，请重新查找');
       side.data.entries[String(entry.uid)] = entry;
-      await saveWorldSide(side);
+      markWorldDraftDirty(side);
       refreshAfterWorldReplacement(sideName);
       notify('success', replacement ? '已替换 1 处' : '已删除 1 处匹配文字');
     });
@@ -1841,7 +1888,7 @@
         side.data.entries[String(entry.uid)] = entry;
       }
       if (!changed) return notify('info', '当前命中已变化，请重新查找');
-      await saveWorldSide(side);
+      markWorldDraftDirty(side);
       refreshAfterWorldReplacement(sideName);
       notify('success', replacement ? `已替换 ${changed} 处` : `已删除 ${changed} 处匹配文字`);
     });
@@ -1894,7 +1941,10 @@
       }
       const button = event.target.closest('[data-wb-picker-name]');
       if (!button) return;
-      if (side.name !== button.dataset.wbPickerName) side.history.length = 0;
+      if (side.name !== button.dataset.wbPickerName) {
+        discardWorldDraft(side);
+        side.history.length = 0;
+      }
       side.name = button.dataset.wbPickerName;
       removeSourcePicker(overlay);
       void enqueue('载入世界书', async () => { await loadWorldSide(side); renderPanels(); });
@@ -1915,6 +1965,7 @@
         renderPanels();
       });
     } else {
+      discardWorldDraft(state.top);
       resetSide(state.top, true);
       renderPanels();
     }
@@ -1966,7 +2017,14 @@
     if (action === 'transfer-copy') return transfer(sideName, false);
     if (action === 'transfer-move') return transfer(sideName, true);
     if (action === 'batch-delete') return deleteSelected(sideName);
-    if (action === 'save') return enqueue('保存世界书', async () => { await saveWorldSide(side); notify('success', '世界书已保存'); });
+    if (action === 'save') {
+      if (!side?.dirty) return;
+      return enqueue('保存世界书', async () => {
+        await saveWorldSide(side);
+        renderPanels();
+        notify('success', '世界书已保存');
+      });
+    }
     if (action === 'exit') return close();
     if (action === 'close-main') {
       const nativeClose = state.nativeTop?.querySelector('.header-right .fa-xmark')?.closest('button');
@@ -1994,14 +2052,16 @@
       pushUndo(side, '切换世界书条目开关', { worldSides:[side] });
       entry.disable = entry.disable !== true;
       side.data.entries[String(entry.uid)] = entry;
-      return enqueue('切换条目开关', async () => { await saveWorldSide(side); renderPanels(); });
+      markWorldDraftDirty(side);
+      return renderPanels();
     }
     if (action === 'strategy') {
       pushUndo(side, '切换世界书蓝绿灯', { worldSides:[side] });
       entry.constant = entry.constant !== true;
       if (entry.constant) entry.vectorized = false;
       side.data.entries[String(entry.uid)] = entry;
-      return enqueue('切换蓝绿灯', async () => { await saveWorldSide(side); renderPanels(); });
+      markWorldDraftDirty(side);
+      return renderPanels();
     }
   }
 
@@ -2363,7 +2423,10 @@
     const target = event.target;
     if (target.matches?.('[data-wb-action="select-source"]')) {
       const side = state[target.dataset.wbSide];
-      if (side.name !== target.value) side.history.length = 0;
+      if (side.name !== target.value) {
+        discardWorldDraft(side);
+        side.history.length = 0;
+      }
       side.name = target.value;
       void enqueue('载入世界书', async () => { await loadWorldSide(side); renderPanels(); });
       return;
@@ -2426,7 +2489,7 @@
 #preset-manager-main-panel .pmm-wb-kind-switch--toolbar button.is-active,#preset-manager-main-panel .pmm-wb-kind-switch--toolbar button.is-active>i,#preset-manager-main-panel .pmm-wb-kind-switch--toolbar button.is-active>i::before{color:#fff!important;opacity:1!important;-webkit-text-fill-color:#fff!important}#preset-manager-main-panel .pmm-wb-kind-switch--toolbar button[data-wb-kind="world"].is-active>i{filter:drop-shadow(0 1px 1px rgba(0,0,0,.26))}
 #preset-manager-main-panel[data-pmm-wb-search-theme="light"] .pmm-wb-search-highlight{border-color:transparent!important;background:#d6eefc!important;color:#183f5c!important;-webkit-text-fill-color:#183f5c!important}#preset-manager-main-panel[data-pmm-wb-search-theme="light"] .pmm-wb-search-highlight.is-current{border-color:transparent!important;background:#75bee8!important;color:#163d59!important;-webkit-text-fill-color:#163d59!important;box-shadow:none!important}
 #preset-manager-main-panel[data-pmm-wb-search-theme="light"] .pmm-wb-replace-row:focus-within .pmm-wb-replace-action{background:color-mix(in srgb,var(--pm-text-primary,#1f2937) 48%,var(--pm-panel-bg,#fff))!important;color:var(--pm-text-primary,#1f2937)!important;-webkit-text-fill-color:var(--pm-text-primary,#1f2937)!important;opacity:.9!important}
-.pmm-wb-tool{width:27px;height:27px;min-width:27px;padding:0;border:0;border-radius:5px;background:transparent;color:var(--pm-text-secondary,currentColor);display:inline-flex;align-items:center;justify-content:center;opacity:.72}.pmm-wb-tool:active:not(:disabled){transform:scale(.94)}.pmm-wb-tool:disabled{opacity:.22}.pmm-wb-tool i{font-size:10px}.pmm-wb-status{font-size:9px;opacity:.5;white-space:nowrap}
+.pmm-wb-tool{width:27px;height:27px;min-width:27px;padding:0;border:0;border-radius:5px;background:transparent;color:var(--pm-text-secondary,currentColor);display:inline-flex;align-items:center;justify-content:center;opacity:.72}.pmm-wb-tool:active:not(:disabled){transform:scale(.94)}.pmm-wb-tool:disabled{opacity:.22}.pmm-wb-tool i{font-size:10px}.pmm-wb-tool[data-wb-action="save"][data-wb-dirty="true"]{background:var(--pm-quote-color,#3485f6)!important;color:#fff!important;-webkit-text-fill-color:#fff!important;opacity:1;box-shadow:0 0 0 1px color-mix(in srgb,var(--pm-quote-color,#3485f6) 70%,transparent),0 0 10px color-mix(in srgb,var(--pm-quote-color,#3485f6) 46%,transparent)}.pmm-wb-tool[data-wb-action="save"][data-wb-dirty="true"] i{color:#fff!important;-webkit-text-fill-color:#fff!important}.pmm-wb-status{font-size:9px;opacity:.5;white-space:nowrap}
 .pmm-wb-search-bar{display:flex;flex-direction:column;gap:4px;padding:4px 7px;border-bottom:1px solid var(--pm-border,rgba(127,127,127,.12))}.pmm-wb-search-primary{min-height:26px;display:flex;align-items:center;gap:4px;min-width:0}.pmm-wb-search-primary>i{width:13px;flex:none;font-size:10px;opacity:.62;text-align:center}.pmm-wb-search-input-wrap{position:relative;min-width:48px;flex:1;display:block}.pmm-wb-search-input-wrap input{box-sizing:border-box;width:100%;height:26px;padding:0 37px 0 6px;border:1px solid var(--pm-border,rgba(127,127,127,.16));border-radius:6px;background:var(--pm-card-bg,rgba(127,127,127,.05));color:inherit;font-size:11px}.pmm-wb-search-count{position:absolute;right:6px;top:50%;transform:translateY(-50%);min-width:27px;font-size:9px;line-height:1;opacity:.58;text-align:right;white-space:nowrap;pointer-events:none}.pmm-wb-replace-toggle{width:22px;height:23px;min-width:22px;padding:0;border:0;border-radius:4px;background:transparent;color:inherit;opacity:.34}.pmm-wb-replace-toggle i{font-size:9px}.pmm-wb-replace-toggle.is-active{background:color-mix(in srgb,currentColor 10%,transparent);opacity:.9}.pmm-wb-search-nav{width:19px;height:23px;min-width:19px;padding:0;border:0;border-radius:4px;background:transparent;color:inherit;opacity:.68}.pmm-wb-search-nav:disabled{opacity:.22}.pmm-wb-search-nav i{font-size:8px}.pmm-wb-search-scope{flex:none;display:inline-flex;align-items:center;overflow:hidden;border-left:1px solid var(--pm-border,rgba(127,127,127,.16));border-radius:6px;background:color-mix(in srgb,currentColor 5%,transparent)}.pmm-wb-search-scope button{height:25px;padding:0 5px;border:0;border-right:1px solid var(--pm-border,rgba(127,127,127,.12));background:transparent;color:inherit;font-size:9px;white-space:nowrap;opacity:.66}.pmm-wb-search-scope button:last-child{border-right:0}.pmm-wb-search-scope button.is-active{background:var(--pm-quote-color,#3485f6);color:#fff;opacity:1}.pmm-wb-replace-row{display:none;align-items:center;gap:4px;min-width:0}.pmm-wb-replace-row.is-open{display:flex}.pmm-wb-replace-row input{box-sizing:border-box;min-width:0;flex:1;height:26px;padding:0 6px;border:1px solid var(--pm-border,rgba(127,127,127,.16));border-radius:6px;background:var(--pm-card-bg,rgba(127,127,127,.05));color:inherit;font-size:11px}.pmm-wb-replace-action{height:26px;min-width:42px;padding:0 7px;border:0;border-radius:6px;background:color-mix(in srgb,currentColor 9%,transparent);color:inherit;font-size:9px;opacity:.38;white-space:nowrap}.pmm-wb-replace-action:last-child{min-width:57px}.pmm-wb-replace-row:focus-within .pmm-wb-replace-action{background:var(--pm-text-primary,currentColor);color:var(--pm-panel-bg,#fff);opacity:.93}.pmm-wb-search-highlight{padding:0 1px;border:1px solid color-mix(in srgb,var(--pm-quote-color,#3485f6) 55%,transparent);border-radius:2px;background:color-mix(in srgb,var(--pm-quote-color,#3485f6) 38%,transparent);color:inherit}.pmm-wb-search-highlight.is-current{border-color:var(--pm-quote-color,#3485f6);background:color-mix(in srgb,var(--pm-quote-color,#3485f6) 82%,transparent);box-shadow:0 0 0 1px color-mix(in srgb,var(--pm-quote-color,#3485f6) 80%,transparent),0 0 9px color-mix(in srgb,var(--pm-quote-color,#3485f6) 72%,transparent);font-weight:750}.pmm-wb-search-hit{flex:none;min-width:14px;padding:1px 3px;border-radius:5px;background:color-mix(in srgb,var(--pm-quote-color,#3485f6) 13%,transparent);color:var(--pm-quote-color,#3485f6);font-size:8px;text-align:center}.pmm-wb-entry--search-current{border-color:var(--pm-quote-color,#3485f6)!important;box-shadow:0 0 0 1px color-mix(in srgb,var(--pm-quote-color,#3485f6) 28%,transparent)}
 .pmm-wb-content{flex:1;min-height:0;overflow:hidden}.pmm-wb-list{height:100%;min-height:0;overflow:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;padding:7px;display:flex;flex-direction:column;gap:var(--pmm-user-item-gap,5px)}
 .pmm-wb-entry{position:relative;flex:none;border:1px solid var(--pm-border,rgba(127,127,127,.14));border-radius:10px;background:var(--pm-card-bg,rgba(255,255,255,.68));overflow:hidden}.pmm-wb-entry.is-expanded{border-color:color-mix(in srgb,var(--pm-quote-color,#3485f6) 58%,transparent)}.pmm-wb-entry.pmm-wb-entry--drop-before,.pmm-wb-entry.pmm-wb-entry--drop-after{overflow:visible}.pmm-wb-entry--drop-before::before,.pmm-wb-entry--drop-after::after{content:"";position:absolute;left:8px;right:8px;height:2px;border-radius:2px;background:var(--pm-quote-color,#3485f6);box-shadow:0 0 5px color-mix(in srgb,var(--pm-quote-color,#3485f6) 70%,transparent);z-index:30;pointer-events:none}.pmm-wb-entry--drop-before::before{top:-4px}.pmm-wb-entry--drop-after::after{bottom:-4px}.pmm-wb-list.pmm-wb-list--drop-empty{position:relative}.pmm-wb-list.pmm-wb-list--drop-empty::before{content:"";position:absolute;top:7px;left:15px;right:15px;height:2px;border-radius:2px;background:var(--pm-quote-color,#3485f6);box-shadow:0 0 5px color-mix(in srgb,var(--pm-quote-color,#3485f6) 70%,transparent);z-index:30;pointer-events:none}.pmm-wb-entry-head{min-height:var(--pmm-user-item-height,43px);display:flex;align-items:center;gap:6px;padding:3px 8px}.pmm-wb-entry-head button{border:0;background:transparent;color:inherit}.pmm-wb-check,.pmm-wb-expand{width:27px;height:29px;padding:0;opacity:.68}.pmm-wb-check.is-selected{color:var(--pm-quote-color,#3485f6);opacity:1}.pmm-wb-entry-title{min-width:0;flex:1;text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:var(--pmm-user-item-font,12px)}
