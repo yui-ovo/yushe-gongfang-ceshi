@@ -1342,8 +1342,8 @@ async function ce(){
     font-size: 8.5px !important;
     line-height: 1.35 !important;
     color: var(--pm-text-secondary, #64748b) !important;
-    background: rgba(250, 204, 21, .08) !important;
-    border: 1px solid rgba(250, 204, 21, .18) !important;
+    background: color-mix(in srgb, var(--pmm-diff-text, var(--pm-text-primary,#111827)) 8%, transparent) !important;
+    border: 1px solid color-mix(in srgb, var(--pmm-diff-text, var(--pm-text-primary,#111827)) 20%, transparent) !important;
   }
 
   .pmm-diff-summary-note.is-equal {
@@ -1393,13 +1393,13 @@ async function ce(){
     padding: 0 1px !important;
     margin: 0 !important;
     border-radius: 2px !important;
-    color: #111827 !important;
+    color: var(--pmm-diff-text, var(--pm-text-primary,#111827)) !important;
     background:
       linear-gradient(
         to bottom,
         transparent 12%,
-        rgba(253, 224, 71, .78) 12%,
-        rgba(253, 224, 71, .78) 91%,
+        color-mix(in srgb, var(--pmm-diff-text, var(--pm-text-primary,#111827)) 24%, transparent) 12%,
+        color-mix(in srgb, var(--pmm-diff-text, var(--pm-text-primary,#111827)) 24%, transparent) 91%,
         transparent 91%
       ) !important;
     box-decoration-break: clone !important;
@@ -1407,11 +1407,11 @@ async function ce(){
   }
 
   .pmm-diff-mark-a {
-    box-shadow: inset 0 -1px 0 rgba(239,68,68,.55) !important;
+    box-shadow: inset 0 -1px 0 rgba(216,165,173,.62) !important;
   }
 
   .pmm-diff-mark-b {
-    box-shadow: inset 0 -1px 0 rgba(59,130,246,.55) !important;
+    box-shadow: inset 0 -1px 0 rgba(155,181,203,.62) !important;
   }
 
   .pmm-clickable-diff {
@@ -3028,7 +3028,7 @@ async function ce(){
           '<div class="pmm-diff-summary-note is-equal"><i class="fa-solid fa-wand-magic-sparkles" style="margin-right:5px;color:#10b981"></i>可见正文一致，差异仅来自换行格式、尾部空格、NBSP 或零宽字符。</div>';
       } else {
         noteSlot.innerHTML =
-          '<div class="pmm-diff-summary-note"><i class="fa-solid fa-highlighter" style="margin-right:5px;color:#eab308"></i>黄色荧光标记 = 两侧真正不同的文字。点击正文即可直接编辑。</div>';
+          '<div class="pmm-diff-summary-note"><i class="fa-solid fa-highlighter" style="margin-right:5px"></i>荧光标记 = 两侧真正不同的文字。点击正文即可直接编辑。</div>';
       }
 
       leftPreview.innerHTML = leftRaw ? diff.leftHtml : '（未读取到内容）';
