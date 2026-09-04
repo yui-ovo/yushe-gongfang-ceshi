@@ -704,6 +704,29 @@
   }
 
   async function emitNativePresetDrop(target, additions, placement = null) {
+    const targetSectionId = String(placement?.targetSectionId || '');
+    const component = target?.panelComponent;
+    if (targetSectionId) {
+      if (!component || typeof component.emit !== 'function' || !additions.length) {
+        console.warn('[世界书缝合] 无法取得目标分组的原生预设面板，已取消拖入以免条目掉到分组外');
+        return false;
+      }
+      try {
+        component.emit(
+          'cross-panel-drop',
+          additions,
+          placement?.targetId || '',
+          placement?.position || 'after',
+          targetSectionId,
+          undefined,
+          false,
+        );
+        return true;
+      } catch (error) {
+        console.warn('[世界书缝合] 分组拖入组件事件不可用，取消直接保存以免条目掉到分组外', error);
+        return false;
+      }
+    }
     let bridge = SELF.__PMM_WORLDBOOK_PRESET_DROP_BRIDGE__;
     try {
       bridge = bridge || TOP.__PMM_WORLDBOOK_PRESET_DROP_BRIDGE__;
@@ -720,7 +743,6 @@
         console.warn('[世界书缝合] 工坊显式拖入桥调用失败，尝试组件事件', error);
       }
     }
-    const component = target?.panelComponent;
     if (!component || typeof component.emit !== 'function' || !additions.length) return false;
     try {
       component.emit(
@@ -728,7 +750,7 @@
         additions,
         placement?.targetId || '',
         placement?.position || 'after',
-        undefined,
+        targetSectionId || undefined,
         undefined,
         false,
       );
@@ -809,6 +831,10 @@
         source.selected.clear();
         if (move) await loadWorldSide(source);
         renderPanels();
+        return;
+      }
+      if (placement?.targetSectionId) {
+        notify('error', '没有确认目标分组，已取消拖入，避免条目掉到分组外');
         return;
       }
       pushUndo(source, move ? '从世界书移动到预设' : '从世界书拖入预设', {
@@ -1928,11 +1954,23 @@
 
   function nativeDropPlacement(event) {
     const card = event.target?.closest?.('.prompt-item[data-prompt-id],.prompt-card[data-prompt-id]');
-    if (!card?.dataset?.promptId) return null;
-    const rect = card.getBoundingClientRect();
+    const section = (card || event.target)?.closest?.('[data-section-id]');
+    const targetSectionId = String(section?.dataset?.sectionId || '');
+    if (card?.dataset?.promptId) {
+      const rect = card.getBoundingClientRect();
+      return {
+        targetId: String(card.dataset.promptId),
+        position: Number(event.clientY) < rect.top + rect.height / 2 ? 'before' : 'after',
+        targetSectionId,
+      };
+    }
+    if (!targetSectionId) return null;
+    const cards = Array.from(section.querySelectorAll('.prompt-item[data-prompt-id],.prompt-card[data-prompt-id]'));
+    const lastCard = cards[cards.length - 1];
     return {
-      targetId: String(card.dataset.promptId),
-      position: Number(event.clientY) < rect.top + rect.height / 2 ? 'before' : 'after',
+      targetId: lastCard?.dataset?.promptId ? String(lastCard.dataset.promptId) : '',
+      position: 'after',
+      targetSectionId,
     };
   }
 
