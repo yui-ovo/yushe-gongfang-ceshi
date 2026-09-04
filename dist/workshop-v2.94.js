@@ -11434,88 +11434,6 @@ html.pmm-dnd-compat-active #preset-manager-main-panel{user-select:none!important
     }
   }
 
-  // The original free-floating desktop tab starts on mousedown, then waits
-  // for mouseup on its parent document. When the tab itself remains inside
-  // the script iframe, that final mouse event can stay inside the iframe and
-  // leave a normal click incomplete. Use the tab's own pointerup as the
-  // reliable desktop release signal, then relay the mouseup to the original
-  // handler. The fallback mouseup listener covers older non-PointerEvent
-  // environments.
-  function legacyFloatingReleaseDocument(ownerDocument) {
-    try { return SELF.frameElement ? SELF.parent.document : ownerDocument; } catch (_) { return ownerDocument; }
-  }
-
-  function relayDesktopEdgeRelease(ownerDocument, event) {
-    const releaseDocument = legacyFloatingReleaseDocument(ownerDocument);
-    if (!releaseDocument || releaseDocument === ownerDocument) return;
-    const eventView = releaseDocument.defaultView || TOP;
-    const MouseEventCtor = eventView?.MouseEvent || TOP.MouseEvent;
-    if (typeof MouseEventCtor !== 'function') return;
-    releaseDocument.dispatchEvent(new MouseEventCtor('mouseup', {
-      bubbles:true,
-      cancelable:true,
-      view:eventView,
-      button:0,
-      buttons:0,
-      clientX:Number(event.clientX) || 0,
-      clientY:Number(event.clientY) || 0,
-      screenX:Number(event.screenX) || 0,
-      screenY:Number(event.screenY) || 0,
-    }));
-  }
-
-  function bindDesktopEdgeReleaseBridge(root) {
-    const edge = root?.querySelector?.(':scope > .edge-tab');
-    if (!edge || edge.dataset.pmmDesktopEdgeReleaseBound === '1') return;
-    edge.dataset.pmmDesktopEdgeReleaseBound = '1';
-    const isPrimaryDesktopPress = event => !isMobile() && event.isPrimary !== false && (event.button == null || event.button === 0);
-    const release = event => {
-      if (isMobile() || (event.button != null && event.button !== 0)) return;
-      const ownerDocument = edge.ownerDocument || DOC;
-      relayDesktopEdgeRelease(ownerDocument, event);
-    };
-    const ownerWindow = edge.ownerDocument?.defaultView || SELF;
-    const ensureExpanded = event => {
-      release(event);
-      const schedule = typeof ownerWindow?.requestAnimationFrame === 'function'
-        ? ownerWindow.requestAnimationFrame.bind(ownerWindow)
-        : callback => setTimeout(callback, 0);
-      schedule(() => {
-        // The original Vue state should normally have opened by now. Some
-        // desktop hosts swallow its full press/release path, so leave a
-        // visual fallback that keeps the toolbar usable rather than making
-        // the only desktop entrance inert.
-        if (!isMobile() && !panelExpanded(root)) root.classList.add('pmm-desktop-forced-open');
-      });
-    };
-    if (typeof ownerWindow?.PointerEvent === 'function') {
-      let pointerId = null;
-      edge.addEventListener('pointerdown', event => {
-        pointerId = isPrimaryDesktopPress(event) ? event.pointerId : null;
-      }, true);
-      edge.addEventListener('pointerup', event => {
-        if (pointerId !== event.pointerId) return;
-        pointerId = null;
-        ensureExpanded(event);
-      }, true);
-      edge.addEventListener('pointercancel', () => { pointerId = null; }, true);
-    } else {
-      edge.addEventListener('mouseup', ensureExpanded, true);
-    }
-    edge.addEventListener('click', ensureExpanded, true);
-    const collapse = root.querySelector(':scope > .panel-wrapper .panel-collapse');
-    if (collapse && collapse.dataset.pmmDesktopFallbackCollapseBound !== '1') {
-      collapse.dataset.pmmDesktopFallbackCollapseBound = '1';
-      collapse.addEventListener('click', event => {
-        if (!root.classList.contains('pmm-desktop-forced-open')) return;
-        event.preventDefault();
-        event.stopPropagation();
-        event.stopImmediatePropagation();
-        root.classList.remove('pmm-desktop-forced-open');
-      }, true);
-    }
-  }
-
   function syncSelectOptions(root) {
     const manager = getPresetManagerSafe();
     const select = getPresetSelect(root);
@@ -11778,7 +11696,6 @@ html.pmm-dnd-compat-active #preset-manager-main-panel{user-select:none!important
     bindPresetSwitchNotice(root);
     bindBranchSwitchNotice(root);
     bindAutoCollapseOnEdit(root);
-    bindDesktopEdgeReleaseBridge(root);
     syncSelectOptions(root);
     if (isMobile()) {
       const entryEnabled = floatingEntryEnabled();
@@ -11790,7 +11707,6 @@ html.pmm-dnd-compat-active #preset-manager-main-panel{user-select:none!important
         root.dataset.pmmFloatingMobileInitialized = '1';
       }
       if (!entryEnabled) root.classList.remove('pmm-floating-mobile-open', 'pmm-floating-dragging');
-      root.classList.remove('pmm-desktop-forced-open');
       root.classList.add('pmm-floating-mobile');
       const saved = readPosition();
       setDock(root, root.dataset.pmmFloatingDock || saved.dock, parseFloat(root.style.getPropertyValue('--pmm-mobile-floating-top')) || saved.top, false);
@@ -11860,8 +11776,6 @@ html.pmm-dnd-compat-active #preset-manager-main-panel{user-select:none!important
   }
   html.pmm-mobile-toolbar-ready #pm-mobile-fab-standalone{display:none!important}
   #preset-manager-floating-panel .floating-panel-root.pmm-floating-entry-disabled{display:none!important;visibility:hidden!important;pointer-events:none!important}
-  #preset-manager-floating-panel .floating-panel-root.pmm-desktop-forced-open>.panel-wrapper{display:flex!important}
-  #preset-manager-floating-panel .floating-panel-root.pmm-desktop-forced-open>.edge-tab{display:none!important}
   #preset-manager-floating-panel .floating-panel-root.pmm-floating-mobile{
     position:fixed!important;top:var(--pmm-mobile-floating-top,38vh)!important;bottom:auto!important;
     width:auto!important;max-width:calc(100vw - 4px)!important;height:auto!important;z-index:80!important;
