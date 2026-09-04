@@ -752,9 +752,31 @@
     const targetSectionId = String(placement?.targetSectionId || '');
     const component = placement?.targetPanelComponent || target?.panelComponent;
     const dropHandler = placement?.targetDropHandler || target?.panelDropHandler;
+    let bridge = SELF.__PMM_WORLDBOOK_PRESET_DROP_BRIDGE__;
+    try {
+      bridge = bridge || TOP.__PMM_WORLDBOOK_PRESET_DROP_BRIDGE__;
+    } catch (_) {}
+    if (typeof bridge?.drop === 'function' && additions.length) {
+      try {
+        const result = await bridge.drop({
+          entries: additions,
+          targetId: placement?.targetId || '',
+          position: placement?.position || 'after',
+          targetSectionId,
+        });
+        if (result?.ok !== false) return true;
+      } catch (error) {
+        console.warn(
+          targetSectionId
+            ? '[世界书缝合] 分组原生桥调用失败，尝试组件事件'
+            : '[世界书缝合] 工坊显式拖入桥调用失败，尝试组件事件',
+          error,
+        );
+      }
+    }
     if (targetSectionId) {
       if (((!component || typeof component.emit !== 'function') && typeof dropHandler !== 'function') || !additions.length) {
-        console.warn('[世界书缝合] 未取得目标分组对应的原生预设面板，已取消拖入以免条目掉到分组外');
+        console.warn('[世界书缝合] 未取得目标分组对应的工坊原生桥或预设面板，已取消拖入以免条目掉到组外');
         return false;
       }
       try {
@@ -772,22 +794,6 @@
       } catch (error) {
         console.warn('[世界书缝合] 分组拖入组件事件不可用，取消直接保存以免条目掉到分组外', error);
         return false;
-      }
-    }
-    let bridge = SELF.__PMM_WORLDBOOK_PRESET_DROP_BRIDGE__;
-    try {
-      bridge = bridge || TOP.__PMM_WORLDBOOK_PRESET_DROP_BRIDGE__;
-    } catch (_) {}
-    if (typeof bridge?.drop === 'function' && additions.length) {
-      try {
-        const result = await bridge.drop({
-          entries: additions,
-          targetId: placement?.targetId || '',
-          position: placement?.position || 'after',
-        });
-        if (result?.ok !== false) return true;
-      } catch (error) {
-        console.warn('[世界书缝合] 工坊显式拖入桥调用失败，尝试组件事件', error);
       }
     }
     if (!component || typeof component.emit !== 'function' || !additions.length) return false;

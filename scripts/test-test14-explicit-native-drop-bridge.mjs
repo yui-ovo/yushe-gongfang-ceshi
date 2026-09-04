@@ -7,7 +7,8 @@ const worldbook = await readFile(new URL('../dist/worldbook-stitch-test3.js', im
 for (const marker of [
   'const _pmmWorldbookPresetDropBridge=',
   '__PMM_WORLDBOOK_PRESET_DROP_BRIDGE__',
-  'await E(n,String(e.targetId||\'\')',
+  "const n=Array.isArray(e.entries)?e.entries:[],t=String(e.targetSectionId||'');",
+  "await E(n,String(e.targetId||''),'before'===e.position?'before':'after',t||void 0,void 0,!1)",
   'let _pmmSectionId=o;',
   'moveItemsToSectionById(_pmmCopiedIds,_pmmSectionId',
 ]) {
@@ -17,7 +18,6 @@ for (const marker of [
 for (const marker of [
   'async function emitNativePresetDrop(target, additions, placement = null)',
   "const targetSectionId = String(placement?.targetSectionId || '');",
-  'function nativePresetPanelComponent()',
   'placement?.targetPanelComponent || target?.panelComponent',
   "...panel.querySelectorAll('.prompt-panel, .prompt-panel *')",
   "name === 'PromptPanel'",
@@ -33,7 +33,7 @@ for (const marker of [
 const bridgeCall = worldbook.indexOf('const result = await bridge.drop({');
 const groupedComponent = worldbook.indexOf('if (targetSectionId)');
 const saveFallback = worldbook.indexOf('await savePresetEntries(target.name, insertPresetEntries', bridgeCall);
-assert.ok(groupedComponent >= 0 && bridgeCall > groupedComponent, '分组落点必须优先于旧显式桥处理');
+assert.ok(groupedComponent >= 0 && bridgeCall >= 0 && bridgeCall < groupedComponent, '分组落点必须优先通过工坊核心桥处理');
 assert.ok(saveFallback > bridgeCall, '组外直接保存兜底必须保留在显式桥之后');
 
 const nativePlacement = worldbook.slice(
@@ -73,12 +73,13 @@ const groupedDrop = worldbook.slice(
   worldbook.indexOf('async function emitNativePresetDrop(target, additions, placement = null)'),
   worldbook.indexOf('function syncVisiblePresetEntries', worldbook.indexOf('async function emitNativePresetDrop(target, additions, placement = null)')),
 );
-assert.ok(groupedDrop.includes('if (targetSectionId) {'), '分组落点应优先走原生组件事件');
-assert.ok(groupedDrop.includes('placement?.targetPanelComponent || target?.panelComponent'), '分组落点必须优先使用工坊的原生拖入组件');
+assert.ok(groupedDrop.includes('if (targetSectionId) {'), '核心桥不可用时，分组落点应保留原生组件事件兜底');
+assert.ok(groupedDrop.includes('placement?.targetPanelComponent || target?.panelComponent'), '核心桥失败时，分组落点必须能回退到工坊的原生拖入组件');
+assert.ok(groupedDrop.includes('targetSectionId,'), '分组落点必须把分组 ID 交给工坊核心桥');
 assert.ok(groupedDrop.includes("if (typeof dropHandler === 'function') await dropHandler(...args);"), '分组落点必须直接调用已发现的工坊拖入处理器');
 assert.ok(groupedDrop.includes("placement?.position || 'after',\n          targetSectionId,\n          undefined,"), '分组落点没有把所属分组传给预设面板');
-assert.ok(groupedDrop.indexOf('if (targetSectionId)') < groupedDrop.indexOf('let bridge ='), '分组落点不得先走丢失分组信息的旧桥接');
-assert.ok(groupedDrop.includes('未取得目标分组对应的原生预设面板'), '无法取得原生处理器时必须取消拖入，而不是写到组外');
+assert.ok(groupedDrop.indexOf('let bridge =') < groupedDrop.indexOf('if (targetSectionId)'), '分组落点必须先走携带分组 ID 的工坊核心桥');
+assert.ok(groupedDrop.includes('未取得目标分组对应的工坊原生桥或预设面板'), '无法取得原生处理器时必须取消拖入，而不是写到组外');
 
 const transfer = worldbook.slice(
   worldbook.indexOf('async function transferToNativeTop(move, forcedKeys = null, placement = null)'),
@@ -86,4 +87,4 @@ const transfer = worldbook.slice(
 );
 assert.ok(transfer.includes("if (placement?.targetSectionId) {\n        notify('error', '目标分组已识别，但未取得工坊拖入处理器；已取消拖入以避免条目掉到组外');"), '分组拖入失败时不应落入直接保存兜底');
 
-console.log('test.14 回归通过：世界书拖入能把柏宝箱分组落点交给原生预设处理器。');
+console.log('test.14 回归通过：世界书拖入会把柏宝箱分组 ID 交给与预设拖入共用的工坊核心桥。');
