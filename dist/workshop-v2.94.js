@@ -11776,6 +11776,14 @@ html.pmm-dnd-compat-active #preset-manager-main-panel{user-select:none!important
   #preset-manager-floating-panel .floating-panel-root:not(.pmm-floating-mobile)>.panel-wrapper{
     width:342px!important;
   }
+  /* 预设名较长时优先让选择框弹性收窄，不能再把收起区挤出外框。 */
+  #preset-manager-floating-panel .floating-panel-root:not(.pmm-floating-mobile) .panel-section:has(.panel-select--preset){
+    flex:1 1 100px!important;min-width:100px!important;
+  }
+  #preset-manager-floating-panel .floating-panel-root:not(.pmm-floating-mobile) .panel-select--preset{
+    box-sizing:border-box!important;width:100%!important;min-width:0!important;max-width:160px!important;
+    overflow:hidden!important;text-overflow:ellipsis!important;
+  }
   #preset-manager-floating-panel .floating-panel-root:not(.pmm-floating-mobile) .panel-collapse{
     flex:0 0 30px!important;width:30px!important;height:26px!important;
     margin:0!important;border-radius:0 7px 7px 0!important;
