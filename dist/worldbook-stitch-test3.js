@@ -2180,13 +2180,14 @@
       : TOP.setTimeout(render, 16);
   }
 
-  function showWorldMultiDragFloat(event, count) {
+  function showWorldMultiDragFloat(event, count, options = {}) {
     removeWorldMultiDragFloat();
-    if (!Number.isFinite(count) || count < 2) return;
+    if (!Number.isFinite(count) || count < 1 || (count < 2 && !options.force)) return;
     const chip = DOC.createElement('div');
     chip.className = 'pmm-wb-multi-drag-float';
     chip.setAttribute('aria-hidden', 'true');
     chip.dataset.pmmWbMultiDragTone = resolveWorldMultiDragTone();
+    if (options.forbiddenOnly) chip.dataset.pmmWbMultiDragForbiddenOnly = 'true';
     if (IS_ANDROID) chip.dataset.pmmWbMultiDragPerf = 'lite';
     const back = DOC.createElement('span');
     back.className = 'pmm-wb-multi-drag-float-back';
@@ -2211,6 +2212,39 @@
     DOC.body.append(image);
     worldMultiDragGhost = image;
     try { transfer.setDragImage(image, 0, 0); } catch (_) {}
+  }
+
+  function setUnsupportedPresetToWorldDrop(event, unsupported) {
+    const bottomPanel = state.host?.querySelector?.('[data-pmm-wb-panel="bottom"]');
+    bottomPanel?.classList.toggle('pmm-wb-panel--drop-forbidden', Boolean(unsupported));
+    const chip = worldMultiDragFloat;
+    if (!unsupported) {
+      if (chip?.dataset.pmmWbMultiDragForbiddenOnly === 'true') removeWorldMultiDragFloat();
+      else if (chip) {
+        delete chip.dataset.pmmWbMultiDragForbidden;
+        const icon = chip.querySelector('i');
+        const label = chip.querySelector('.pmm-wb-multi-drag-float-face span');
+        const count = dragPayload?.keys?.length || 1;
+        if (icon) icon.className = 'fa-solid fa-up-down';
+        if (label) label.textContent = `拖动 ${count} 条`;
+      }
+      return;
+    }
+    if (!worldMultiDragFloat) {
+      showWorldMultiDragFloat(event, dragPayload?.keys?.length || 1, { force:true, forbiddenOnly:true });
+    }
+    const activeChip = worldMultiDragFloat;
+    if (!activeChip) return;
+    activeChip.dataset.pmmWbMultiDragForbidden = 'true';
+    const icon = activeChip.querySelector('i');
+    const label = activeChip.querySelector('.pmm-wb-multi-drag-float-face span');
+    if (icon) icon.className = 'fa-solid fa-ban';
+    if (label) label.textContent = '不支持拖入';
+    positionWorldMultiDragFloat(event);
+  }
+
+  function isUnsupportedPresetToWorldDrop(targetSide) {
+    return state.topType === 'preset' && dragPayload?.from === 'top' && targetSide === 'bottom';
   }
 
   function showWorldDropIndicator(sideName, placement) {
@@ -2258,6 +2292,14 @@
     const customPanel = event.target.closest?.('[data-pmm-wb-panel]');
     const nativeList = state.topType === 'preset' && event.target.closest?.('.pm-main-wrapper > .preset-panel .prompt-panel__list');
     const targetSide = customList?.dataset.wbList || customPanel?.dataset.pmmWbPanel || (nativeList ? 'top' : '');
+    if (isUnsupportedPresetToWorldDrop(targetSide)) {
+      event.preventDefault();
+      if (event.dataTransfer) event.dataTransfer.dropEffect = 'none';
+      clearWorldDropIndicators();
+      setUnsupportedPresetToWorldDrop(event, true);
+      return;
+    }
+    setUnsupportedPresetToWorldDrop(event, false);
     if (!targetSide || targetSide === dragPayload.from) {
       clearWorldDropIndicators();
       return;
@@ -2278,6 +2320,18 @@
     const customPanel = event.target.closest?.('[data-pmm-wb-panel]');
     const nativeList = state.topType === 'preset' && event.target.closest?.('.pm-main-wrapper > .preset-panel .prompt-panel__list');
     const targetSide = customList?.dataset.wbList || customPanel?.dataset.pmmWbPanel || (nativeList ? 'top' : '');
+    if (isUnsupportedPresetToWorldDrop(targetSide)) {
+      event.preventDefault();
+      event.stopPropagation();
+      dragPayload = null;
+      setUnsupportedPresetToWorldDrop(event, false);
+      removeWorldMultiDragFloat();
+      clearNativeDropIndicators();
+      clearWorldDropIndicators();
+      notify('info', '当前仅支持世界书条目拖入预设');
+      return;
+    }
+    setUnsupportedPresetToWorldDrop(event, false);
     if (!targetSide || targetSide === dragPayload.from) return;
     event.preventDefault();
     event.stopPropagation();
@@ -2403,6 +2457,9 @@
     style.textContent += `
 .pmm-wb-editor-search-primary{flex-wrap:nowrap!important}.pmm-wb-editor-search-input-wrap input{padding:0 7px!important}.pmm-wb-editor-search-count{position:static!important;top:auto!important;right:auto!important;transform:none!important;display:block;flex:0 0 28px;min-width:28px;font-size:9px;line-height:26px;opacity:.58;text-align:center;white-space:nowrap;pointer-events:none}
 `;
+    style.textContent += `
+.pmm-wb-multi-drag-float[data-pmm-wb-multi-drag-forbidden="true"] .pmm-wb-multi-drag-float-back{border-color:rgba(222,106,120,.55);background:rgba(122,53,67,.45)}.pmm-wb-multi-drag-float[data-pmm-wb-multi-drag-forbidden="true"] .pmm-wb-multi-drag-float-face{border-color:rgba(237,150,160,.72);background:rgba(84,43,53,.90);color:#ffe8eb!important;-webkit-text-fill-color:#ffe8eb!important}.pmm-wb-multi-drag-float[data-pmm-wb-multi-drag-forbidden="true"] .pmm-wb-multi-drag-float-face i{color:#ff9daa!important;-webkit-text-fill-color:#ff9daa!important}.pmm-wb-multi-drag-float[data-pmm-wb-multi-drag-forbidden="true"] .pmm-wb-multi-drag-float-face b{background:rgba(163,75,90,.88);color:#fff0f2!important;-webkit-text-fill-color:#fff0f2!important}.pmm-wb-panel--drop-forbidden .pmm-wb-list{cursor:not-allowed}
+`;
     DOC.head.append(style);
   }
 
@@ -2524,6 +2581,7 @@
 
   function clearDrag() {
     dragPayload = null;
+    setUnsupportedPresetToWorldDrop(null, false);
     removeWorldMultiDragFloat();
     clearNativeDropIndicators();
     clearWorldDropIndicators();

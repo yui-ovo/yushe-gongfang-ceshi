@@ -39,7 +39,7 @@ for (const marker of [
   'function selectedWorldEntryKeys(side)',
   'function toggleWorldSelectAll(sideName)',
   'data-wb-action="select-all"',
-  'function showWorldMultiDragFloat(event, count)',
+  'function showWorldMultiDragFloat(event, count, options = {})',
   'function positionWorldMultiDragFloat(event)',
   'function resolveWorldMultiDragTone()',
   'chip.dataset.pmmWbMultiDragTone = resolveWorldMultiDragTone();',
