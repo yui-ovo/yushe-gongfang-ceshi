@@ -11770,6 +11770,13 @@ html.pmm-dnd-compat-active #preset-manager-main-panel{user-select:none!important
 .pmm-preset-batch-footer button{min-height:36px;padding:0 15px;border:1px solid var(--SmartThemeBorderColor,rgba(148,163,184,.32));border-radius:999px;background:rgba(127,127,127,.08);color:inherit;font:inherit}
 .pmm-preset-batch-footer button:disabled{opacity:.42}
 .pmm-preset-batch-delete:not(:disabled){border-color:rgba(239,68,68,.38)!important;color:#dc4545!important}
+/* 桌面浮动栏右侧的收起箭头原本只有 16px，难以准确点按。 */
+@media screen and (min-width:769px){
+  #preset-manager-floating-panel .floating-panel-root:not(.pmm-floating-mobile) .panel-collapse{
+    flex:0 0 30px!important;width:30px!important;height:34px!important;
+    margin:-4px -4px -4px 0!important;border-radius:0 7px 7px 0!important;
+  }
+}
 @media screen and (max-width:768px){
   /*
    * 旧版为了显示独立圆形悬浮球，会把原生预设＋分支工具条整个隐藏。
