@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import vm from 'node:vm';
 import { readFile } from 'node:fs/promises';
 
-const source = await readFile(new URL('../dist/workshop-v2.97.js', import.meta.url), 'utf8');
+const source = await readFile(new URL('../dist/workshop-v2.98.js', import.meta.url), 'utf8');
 
 for (const marker of [
   "prompts:()=>A.prompts,update:(e,n)=>a('update',e,n)",

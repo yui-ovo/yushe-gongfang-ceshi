@@ -2,7 +2,7 @@ import { readFile } from 'node:fs/promises';
 
 const entry = await readFile(new URL('../dist/index.js', import.meta.url), 'utf8');
 const source = await readFile(new URL('../dist/worldbook-stitch-test3.js', import.meta.url), 'utf8');
-const workshop = await readFile(new URL('../dist/workshop-v2.97.js', import.meta.url), 'utf8');
+const workshop = await readFile(new URL('../dist/workshop-v2.98.js', import.meta.url), 'utf8');
 
 for (const marker of [
   '__PMM_WORLDBOOK_STITCH_TEST3__',
