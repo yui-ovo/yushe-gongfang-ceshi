@@ -229,7 +229,17 @@ async function ce(){
     }
   })();
 
-  const docs = parentDoc === document ? [document] : [document, parentDoc];
+  /*
+   * 桌面端的 TavernHelper 有时会再套一层同源 iframe。手机入口原本只
+   * 需要当前页和父页；把真正顶层页面也作为宿主，独立入口就不会再落到
+   * 一个看得到、却收不到点击的中间容器里。
+   */
+  const topDoc = (() => {
+    try { return window.top?.document || parentDoc; }
+    catch (_) { return parentDoc; }
+  })();
+
+  const docs = [...new Set([document, parentDoc, topDoc].filter(Boolean))];
 
   const CSS = `
 /* 桌面 / 手机共用：防止酒馆美化隐藏悬浮面板左侧的“打开编辑面板”。 */
@@ -284,6 +294,68 @@ async function ce(){
   transform: none !important;
 }
 
+/*
+ * 桌面也使用手机已验证过的独立入口。旧浮动面板的边缘箭头在部分桌面
+ * iframe 容器中无法接收完整的按下／松开链路，保留它只会造成两个入口
+ * 互相遮挡；手机端仍由后面的媒体查询保留原有布局。
+ */
+@media screen and (min-width: 769px) {
+  #preset-manager-floating-panel {
+    display: none !important;
+    visibility: hidden !important;
+    pointer-events: none !important;
+  }
+}
+
+/* ===== 桌面 / 手机共用独立入口 ===== */
+#pm-mobile-fab-standalone {
+  position: fixed !important;
+  left: 0;
+  top: calc(var(--pmm-safe-top, 8px) + 8px);
+  width: 22px !important;
+  height: 44px !important;
+  border: 1px solid rgba(255,255,255,.18) !important;
+  border-radius: 0 9px 9px 0 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  background: var(--SmartThemeBlurTintColor, rgba(31,40,52,.92)) !important;
+  color: var(--SmartThemeBodyColor, #fff) !important;
+  box-shadow: 0 5px 18px rgba(0,0,0,.24) !important;
+  z-index: 2147483000 !important;
+  padding: 0 !important;
+  opacity: .78 !important;
+  -webkit-tap-highlight-color: transparent !important;
+  touch-action: none !important;
+  pointer-events: auto !important;
+  isolation: isolate !important;
+  user-select: none !important;
+  -webkit-user-select: none !important;
+  cursor: grab !important;
+  transition: left .22s ease, top .22s ease, opacity .22s ease, box-shadow .22s ease !important;
+  will-change: left, top !important;
+}
+
+#pm-mobile-fab-standalone i {
+  font-size: 11px !important;
+  pointer-events: none !important;
+}
+
+#pm-mobile-fab-standalone.pmm-fab-dragging {
+  cursor: grabbing !important;
+  transition: none !important;
+  opacity: 1 !important;
+  box-shadow: 0 10px 28px rgba(0,0,0,.38) !important;
+}
+
+#pm-mobile-fab-standalone.pmm-fab-snap-left {
+  border-radius: 0 9px 9px 0 !important;
+}
+
+#pm-mobile-fab-standalone.pmm-fab-snap-right {
+  border-radius: 9px 0 0 9px !important;
+}
+
 @media screen and (max-width: 768px) {
   :root {
     --pmm-safe-top: max(env(safe-area-inset-top, 0px), 8px);
@@ -298,55 +370,6 @@ async function ce(){
     visibility: hidden !important;
     pointer-events: none !important;
   }
-
-  #pm-mobile-fab-standalone {
-    position: fixed !important;
-    left: 0;
-    top: calc(var(--pmm-safe-top) + 8px);
-    width: 22px !important;
-    height: 44px !important;
-    border: 1px solid rgba(255,255,255,.18) !important;
-    border-radius: 0 9px 9px 0 !important;
-    display: flex !important;
-    align-items: center !important;
-    justify-content: center !important;
-    background: var(--SmartThemeBlurTintColor, rgba(31,40,52,.92)) !important;
-    color: var(--SmartThemeBodyColor, #fff) !important;
-    box-shadow: 0 5px 18px rgba(0,0,0,.24) !important;
-    z-index: 2147483000 !important;
-    padding: 0 !important;
-    opacity: .78 !important;
-    -webkit-tap-highlight-color: transparent !important;
-    touch-action: none !important;
-    pointer-events: auto !important;
-    isolation: isolate !important;
-    user-select: none !important;
-    -webkit-user-select: none !important;
-    cursor: grab !important;
-    transition: left .22s ease, top .22s ease, opacity .22s ease, box-shadow .22s ease !important;
-    will-change: left, top !important;
-  }
-
-  #pm-mobile-fab-standalone i {
-    font-size: 11px !important;
-    pointer-events: none !important;
-  }
-
-  #pm-mobile-fab-standalone.pmm-fab-dragging {
-    cursor: grabbing !important;
-    transition: none !important;
-    opacity: 1 !important;
-    box-shadow: 0 10px 28px rgba(0,0,0,.38) !important;
-  }
-
-  #pm-mobile-fab-standalone.pmm-fab-snap-left {
-    border-radius: 0 9px 9px 0 !important;
-  }
-
-  #pm-mobile-fab-standalone.pmm-fab-snap-right {
-    border-radius: 9px 0 0 9px !important;
-  }
-
 
   /* 1.3.11：主面板根节点强制占据顶层 viewport。
      解决脚本 iframe 中只出现一小块黑色遮罩、真正面板被裁掉的问题。 */
@@ -2125,7 +2148,7 @@ async function ce(){
   }
 
   function makeFab(doc) {
-    if (!isMobile() || !doc || !doc.body || !fabRuntimeIsCurrent() || !fabIsEnabled()) return;
+    if (!doc || !doc.body || !fabRuntimeIsCurrent() || !fabIsEnabled()) return;
 
     /*
      * 安卓 WebView / iOS Safari 在刷新、热重载或后台恢复后，可能保留旧 DOM，
@@ -2246,7 +2269,7 @@ async function ce(){
 
     function getMainPanelCandidates() {
       try {
-        const roots = [...new Set([parentDoc, doc, document].filter(Boolean))];
+        const roots = [...new Set([topDoc, parentDoc, doc, document].filter(Boolean))];
         const candidates = roots.flatMap(root =>
           Array.from(root.querySelectorAll?.('#preset-manager-main-panel') || [])
         );
@@ -2282,10 +2305,11 @@ async function ce(){
     function ensureMainPanelInTopDocument() {
       try {
         const panel = chooseMainPanel();
-        if (!panel || !parentDoc?.body) return panel || null;
+        const hostDoc = topDoc?.body ? topDoc : parentDoc;
+        if (!panel || !hostDoc?.body) return panel || null;
 
-        if (panel.ownerDocument !== parentDoc || panel.parentNode !== parentDoc.body) {
-          parentDoc.body.appendChild(panel);
+        if (panel.ownerDocument !== hostDoc || panel.parentNode !== hostDoc.body) {
+          hostDoc.body.appendChild(panel);
         }
 
         panel.style.setProperty('position', 'fixed', 'important');
@@ -2397,6 +2421,9 @@ async function ce(){
 
     try {
       parentDoc.__pmmWorkshopOpenBridge = { token: FAB_RUNTIME_TOKEN, open: openManager };
+      if (topDoc && topDoc !== parentDoc) {
+        topDoc.__pmmWorkshopOpenBridge = { token: FAB_RUNTIME_TOKEN, open: openManager };
+      }
     } catch (_) {}
 
     function onPointerDown(ev) {
@@ -3703,9 +3730,11 @@ async function ce(){
     ensureFloatingPanelEditButton(doc);
     ensureWandEntry(doc);
 
-    /* 悬浮球和手机紧凑布局仍只在手机宽度启用。 */
-    if (!isMobile()) return;
+    /* 入口在桌面和手机都使用同一套独立、可拖拽的实现。 */
     makeFab(doc);
+
+    /* 手机紧凑布局仍只在手机宽度启用。 */
+    if (!isMobile()) return;
     ensureWorkshopControls(doc);
     try { ensureMainPanelInTopDocument(); } catch (_) {}
     ensurePresetSearchButtons(doc);
@@ -3740,7 +3769,7 @@ async function ce(){
     };
     const boot = () => {
       injectStyle(doc);
-      if (doc === parentDoc) scan(doc);
+      if (doc === parentDoc || doc === topDoc) scan(doc);
       else fixDiffDetail(doc);
       if (!doc.body) return;
       const mo = new MutationObserver(requestScan);
@@ -11075,7 +11104,6 @@ html.pmm-dnd-compat-active #preset-manager-main-panel{user-select:none!important
   let batchDialogDocument = null;
   let batchViewportCleanup = null;
   let currentRoot = null;
-  let desktopEntryCleanups = [];
 
   try { SELF[CLEANUP_KEY]?.(); } catch (_) {}
 
@@ -11085,30 +11113,10 @@ html.pmm-dnd-compat-active #preset-manager-main-panel{user-select:none!important
   }
 
   function documents() {
-    // TavernHelper can place a script inside an iframe that itself is nested
-    // under the actual SillyTavern page. The floating root may therefore be
-    // in the immediate parent rather than in SELF or TOP. Walk every
-    // accessible same-origin frame so listeners and styles land where the
-    // visible arrow really lives.
-    const result = [];
-    const seen = new Set();
-    const addWindow = currentWindow => {
-      if (!currentWindow || seen.has(currentWindow)) return;
-      seen.add(currentWindow);
-      try {
-        const currentDocument = currentWindow.document;
-        if (currentDocument && !result.includes(currentDocument)) result.push(currentDocument);
-      } catch (_) { return; }
-      try {
-        if (currentWindow.parent && currentWindow.parent !== currentWindow) addWindow(currentWindow.parent);
-      } catch (_) {}
-      try {
-        for (let index = 0; index < currentWindow.frames.length; index += 1) addWindow(currentWindow.frames[index]);
-      } catch (_) {}
-    };
-    addWindow(SELF);
-    addWindow(TOP);
-    if (!result.includes(DOC)) result.unshift(DOC);
+    const result = [DOC];
+    try {
+      if (SELF.document && SELF.document !== DOC) result.push(SELF.document);
+    } catch (_) {}
     return result;
   }
 
@@ -11712,93 +11720,6 @@ html.pmm-dnd-compat-active #preset-manager-main-panel{user-select:none!important
     });
   }
 
-  // Desktop SillyTavern can host the legacy floating panel across document
-  // boundaries. Its own mousedown/mouseup pair then occasionally never
-  // completes. This listener sits on each real document instead of the Vue
-  // component, so a short click always opens the same toolbar. A drag is
-  // deliberately left to the original component.
-  function bindDesktopDirectEntry(currentDocument) {
-    if (!currentDocument || currentDocument.documentElement?.dataset.pmmDesktopDirectEntryBound === '1') return;
-    currentDocument.documentElement.dataset.pmmDesktopDirectEntryBound = '1';
-    let press = null;
-    const pointDistance = (event, start) => Math.hypot(Number(event.clientX) - start.x, Number(event.clientY) - start.y);
-    const elementFor = event => {
-      const target = event?.target;
-      return target?.closest ? target : target?.parentElement;
-    };
-    const edgeRootFor = event => {
-      const edge = elementFor(event)?.closest?.('#preset-manager-floating-panel .floating-panel-root > .edge-tab');
-      return edge?.parentElement?.classList?.contains('floating-panel-root') ? edge.parentElement : null;
-    };
-    const collapseRootFor = event => {
-      const collapse = elementFor(event)?.closest?.('#preset-manager-floating-panel .floating-panel-root > .panel-wrapper .panel-collapse');
-      return collapse?.closest?.('.floating-panel-root') || null;
-    };
-    const start = event => {
-      if (isMobile() || (event.button != null && event.button !== 0)) return;
-      const root = edgeRootFor(event);
-      if (!root) return;
-      press = { pointerId:event.pointerId, root, x:Number(event.clientX) || 0, y:Number(event.clientY) || 0, moved:false, usePointer:event.type === 'pointerdown' };
-    };
-    const move = event => {
-      if (!press || (press.usePointer && event.pointerId !== press.pointerId)) return;
-      if (pointDistance(event, press) > 6) press.moved = true;
-    };
-    const cancel = () => { press = null; };
-    const finish = event => {
-      if (isMobile() || !press || (press.usePointer && event.pointerId !== press.pointerId)) return;
-      const activePress = press;
-      if (pointDistance(event, activePress) > 6) activePress.moved = true;
-      press = null;
-      if (activePress.moved) return;
-      activePress.root.classList.add('pmm-desktop-direct-open');
-      // Prevent the legacy document mouseup handler from flipping a separate
-      // internal state after this independent open has already happened.
-      if (event.type === 'mouseup') {
-        event.preventDefault();
-        event.stopPropagation();
-        event.stopImmediatePropagation();
-      }
-    };
-    const click = event => {
-      if (isMobile()) return;
-      const root = edgeRootFor(event);
-      if (root) {
-        root.classList.add('pmm-desktop-direct-open');
-        return;
-      }
-      const collapseRoot = collapseRootFor(event);
-      if (!collapseRoot?.classList.contains('pmm-desktop-direct-open')) return;
-      event.preventDefault();
-      event.stopPropagation();
-      event.stopImmediatePropagation();
-      collapseRoot.classList.remove('pmm-desktop-direct-open');
-    };
-    const ownerWindow = currentDocument.defaultView || SELF;
-    if (typeof ownerWindow?.PointerEvent === 'function') {
-      currentDocument.addEventListener('pointerdown', start, true);
-      currentDocument.addEventListener('pointermove', move, true);
-      currentDocument.addEventListener('pointerup', finish, true);
-      currentDocument.addEventListener('pointercancel', cancel, true);
-    } else {
-      currentDocument.addEventListener('mousedown', start, true);
-      currentDocument.addEventListener('mousemove', move, true);
-      currentDocument.addEventListener('mouseup', finish, true);
-    }
-    currentDocument.addEventListener('click', click, true);
-    desktopEntryCleanups.push(() => {
-      currentDocument.documentElement?.removeAttribute('data-pmm-desktop-direct-entry-bound');
-      currentDocument.removeEventListener('pointerdown', start, true);
-      currentDocument.removeEventListener('pointermove', move, true);
-      currentDocument.removeEventListener('pointerup', finish, true);
-      currentDocument.removeEventListener('pointercancel', cancel, true);
-      currentDocument.removeEventListener('mousedown', start, true);
-      currentDocument.removeEventListener('mousemove', move, true);
-      currentDocument.removeEventListener('mouseup', finish, true);
-      currentDocument.removeEventListener('click', click, true);
-    });
-  }
-
   function syncRoot(root) {
     if (!root) return;
     currentRoot = root;
@@ -11817,7 +11738,6 @@ html.pmm-dnd-compat-active #preset-manager-main-panel{user-select:none!important
         root.dataset.pmmFloatingMobileInitialized = '1';
       }
       if (!entryEnabled) root.classList.remove('pmm-floating-mobile-open', 'pmm-floating-dragging');
-      root.classList.remove('pmm-desktop-direct-open');
       root.classList.add('pmm-floating-mobile');
       const saved = readPosition();
       setDock(root, root.dataset.pmmFloatingDock || saved.dock, parseFloat(root.style.getPropertyValue('--pmm-mobile-floating-top')) || saved.top, false);
@@ -11887,8 +11807,6 @@ html.pmm-dnd-compat-active #preset-manager-main-panel{user-select:none!important
   }
   html.pmm-mobile-toolbar-ready #pm-mobile-fab-standalone{display:none!important}
   #preset-manager-floating-panel .floating-panel-root.pmm-floating-entry-disabled{display:none!important;visibility:hidden!important;pointer-events:none!important}
-  #preset-manager-floating-panel .floating-panel-root.pmm-desktop-direct-open>.panel-wrapper{display:flex!important}
-  #preset-manager-floating-panel .floating-panel-root.pmm-desktop-direct-open>.edge-tab{display:none!important}
   #preset-manager-floating-panel .floating-panel-root.pmm-floating-mobile{
     position:fixed!important;top:var(--pmm-mobile-floating-top,38vh)!important;bottom:auto!important;
     width:auto!important;max-width:calc(100vw - 4px)!important;height:auto!important;z-index:80!important;
@@ -11932,7 +11850,6 @@ html.pmm-dnd-compat-active #preset-manager-main-panel{user-select:none!important
   function install() {
     for (const currentDocument of documents()) {
       installStyle(currentDocument);
-      bindDesktopDirectEntry(currentDocument);
     }
     observers = documents().map(currentDocument => {
       const currentObserver = new MutationObserverCtor(scheduleSync);
@@ -11947,7 +11864,6 @@ html.pmm-dnd-compat-active #preset-manager-main-panel{user-select:none!important
 
   SELF[CLEANUP_KEY] = () => {
     endActiveDrag();
-    for (const cleanup of desktopEntryCleanups.splice(0)) cleanup();
     closeBatchDialog();
     for (const currentObserver of observers) currentObserver.disconnect();
     observers = [];

@@ -10,31 +10,36 @@ function section(startMarker, endMarker) {
   return source.slice(start, end);
 }
 
-const documentLookup = section('function documents()', 'function floatingEntryEnabled()');
+const standalone = section("const PMM_ID = 'pm-standalone-mobile-v1';", '/* ===== 个人测试通道：底部工具栏“世界书”入口 ===== */');
+const makeFab = section('function makeFab(doc)', 'function visiblePanelContainer(doc)');
+const scan = section('function scan(doc)', 'docs.forEach(doc => {');
+
 for (const snippet of [
-  'currentWindow.parent',
-  'currentWindow.frames.length',
-  'addWindow(SELF);',
-  'addWindow(TOP);',
+  'const topDoc = (() => {',
+  'const docs = [...new Set([document, parentDoc, topDoc].filter(Boolean))];',
+  '@media screen and (min-width: 769px)',
+  '#pm-mobile-fab-standalone {',
+  '#preset-manager-floating-panel {',
 ]) {
-  assert.ok(documentLookup.includes(snippet), `桌面入口没有扫描嵌套 frame：${snippet}`);
+  assert.ok(standalone.includes(snippet), `桌面没有复用独立入口：${snippet}`);
 }
 
-const syncRoot = section('function syncRoot(root)', 'function sync()');
-assert.ok(!source.includes('pmmDesktopEdgeReleaseBound'), '电脑端残留了旧的跨文件 mouseup 桥接');
-assert.ok(!source.includes('pmm-desktop-forced-open'), '电脑端残留了旧的根节点强制展开样式');
-const desktopDirect = section('function bindDesktopDirectEntry(currentDocument)', 'function syncRoot(root)');
-for (const snippet of [
-  "currentDocument.addEventListener('pointerup', finish, true)",
-  "currentDocument.addEventListener('click', click, true)",
-  "activePress.root.classList.add('pmm-desktop-direct-open')",
-  "collapseRoot.classList.remove('pmm-desktop-direct-open')",
-  'if (activePress.moved) return;',
-]) {
-  assert.ok(desktopDirect.includes(snippet), `桌面独立入口缺少关键行为：${snippet}`);
-}
-assert.ok(source.includes('.pmm-desktop-direct-open>.panel-wrapper{display:flex!important}'), '桌面独立入口没有显示工具栏');
-assert.ok(source.includes('.pmm-desktop-direct-open>.edge-tab{display:none!important}'), '桌面独立入口展开后没有隐藏箭头');
-assert.ok(syncRoot.includes("root.classList.remove('pmm-desktop-direct-open');"), '切到手机端时没有清除电脑入口状态');
+assert.ok(
+  makeFab.includes('if (!doc || !doc.body || !fabRuntimeIsCurrent() || !fabIsEnabled()) return;'),
+  '独立入口仍被错误限制为手机宽度',
+);
+assert.ok(makeFab.includes('[topDoc, parentDoc, doc, document]'), '独立入口没有在顶层页面查找主面板');
+assert.ok(makeFab.includes('const hostDoc = topDoc?.body ? topDoc : parentDoc;'), '独立入口没有把主面板挂到顶层页面');
+assert.ok(scan.indexOf('makeFab(doc);') < scan.indexOf('if (!isMobile()) return;'), '桌面扫描没有创建独立入口');
 
-console.log('test.44 回归通过：电脑端会扫描嵌套 frame，并在实际箭头所属页面绑定独立短按入口。');
+for (const obsoleteSnippet of [
+  'pmmDesktopEdgeReleaseBound',
+  'pmm-desktop-forced-open',
+  'pmm-desktop-direct-open',
+  'bindDesktopDirectEntry',
+  'pmmDesktopDirectEntryBound',
+]) {
+  assert.ok(!source.includes(obsoleteSnippet), `仍残留旧桌面箭头补丁：${obsoleteSnippet}`);
+}
+
+console.log('test.44 回归通过：桌面已复用手机独立入口，旧悬浮面板箭头不再参与交互。');
