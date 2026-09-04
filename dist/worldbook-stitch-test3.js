@@ -373,16 +373,39 @@
     return operationTail;
   }
 
+  async function getLegacyWorldInfoNames() {
+    if (typeof context?.getRequestHeaders !== 'function') {
+      throw new Error('旧版酒馆缺少世界书列表读取所需的请求接口');
+    }
+    const response = await TOP.fetch('/api/settings/get', {
+      method: 'POST',
+      headers: context.getRequestHeaders(),
+      body: JSON.stringify({}),
+    });
+    if (!response.ok) {
+      throw new Error(`旧版酒馆世界书列表读取失败（HTTP ${response.status}）`);
+    }
+    const data = await response.json();
+    return Array.isArray(data?.world_names) ? data.world_names : [];
+  }
+
+  async function getWorldInfoNamesCompatible() {
+    if (typeof context?.getWorldInfoNames === 'function') {
+      return await context.getWorldInfoNames();
+    }
+    return await getLegacyWorldInfoNames();
+  }
+
   async function refreshWorldNames() {
     context = getContext();
     if (!context?.loadWorldInfo || !context?.saveWorldInfo) {
       throw new Error('当前酒馆没有提供世界书读写接口');
     }
-    let names = await context.getWorldInfoNames?.();
+    let names = await getWorldInfoNamesCompatible();
     state.worldNames = [...(names || [])].map(String);
     if (!state.worldNames.length && context.updateWorldInfoList) {
       await context.updateWorldInfoList();
-      names = await context.getWorldInfoNames?.();
+      names = await getWorldInfoNamesCompatible();
       state.worldNames = [...(names || [])].map(String);
     }
     if (!state.bottom.name || !state.worldNames.includes(state.bottom.name)) {
@@ -2823,4 +2846,5 @@
   console.info('[预设工坊测试版] test.35 已加载：世界书搜索输入不会重建输入框，兼容 iOS 中文输入法。');
   console.info('[预设工坊测试版] test.36 已加载：世界书搜索支持范围替换、空替换删除和单步撤销。');
   console.info('[预设工坊测试版] test.37 已加载：世界书正文高亮区分当前命中，并跟随日夜间和魔法棒主题。');
+  console.info('[预设工坊测试版] test.48 已加载：SillyTavern 1.14 可从原生设置接口读取世界书列表。');
 })();
