@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
 const worldbook = await readFile(new URL('../dist/worldbook-stitch-test3.js', import.meta.url), 'utf8');
-const workshop = await readFile(new URL('../dist/workshop-v2.98.js', import.meta.url), 'utf8');
+const workshop = await readFile(new URL('../dist/workshop-v2.99.js', import.meta.url), 'utf8');
 
 const autoStart = workshop.indexOf('let _pmmAutoScrollSpeed=0,_pmmAutoScrollHeartbeat=0;function Z(e){');
 const autoEnd = workshop.indexOf('function ae(e){', autoStart);

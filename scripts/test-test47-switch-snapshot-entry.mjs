@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
-const source = await readFile(new URL('../dist/workshop-v2.98.js', import.meta.url), 'utf8');
+const source = await readFile(new URL('../dist/workshop-v2.99.js', import.meta.url), 'utf8');
 
 function section(startMarker, endMarker) {
   const start = source.indexOf(startMarker);
@@ -11,10 +11,10 @@ function section(startMarker, endMarker) {
 }
 
 for (const marker of [
-  'PMM_SWITCH_SNAPSHOTS_TEST50',
+  'PMM_SWITCH_SNAPSHOTS_TEST51',
   "const STORAGE_KEY = 'pmm.switch-snapshots.v1'",
   "const TRIGGER_CLASS = 'pmm-switch-snapshot-trigger'",
-  'function saveNewSnapshot(inputName)',
+  'function saveNewSnapshot(inputName, afterSave = null)',
   'async function applySnapshot(id)',
   'function overwriteSnapshot(id)',
   'function bindSnapshotToCurrentCharacter(id)',
@@ -40,7 +40,7 @@ assert.ok(apply.includes("await setPreset(presetName, { prompts: clone(nextPromp
 assert.ok(apply.includes("await setPreset('in_use', { prompts: clone(nextPrompts) })"), '应用当前预设时没有即时更新运行中的开关');
 assert.ok(apply.includes('context.eventSource.emit(eventType'), '应用快照后没有刷新工坊当前卡片');
 
-const snapshotCreation = section('function saveNewSnapshot(inputName)', 'function findSnapshot(id)');
+const snapshotCreation = section('function saveNewSnapshot(inputName, afterSave = null)', 'function findSnapshot(id)');
 assert.ok(snapshotCreation.includes('states: makeStates(prompts)'), '新快照没有冻结当前全部条目状态');
 assert.ok(snapshotCreation.includes('character: character ? { ...character } : null'), '新快照没有记录当前角色绑定');
 assert.ok(snapshotCreation.includes('writeStore(store)'), '新快照没有持久化');
@@ -54,7 +54,7 @@ assert.ok(snapshotCreation.includes('isBranchMode()'), '分支模式下仍能错
 assert.ok(apply.includes('isBranchMode()'), '分支模式下仍能错误应用快照');
 
 const trigger = section('function mountTrigger()', 'function installStyle()');
-assert.ok(trigger.includes("button.title = '开关快照'"), '顶部入口没有明确的开关快照标签');
+assert.ok(trigger.includes("button.title = captureActive ? '保存快照' : '开关快照'"), '顶部入口没有在快照模式中明确切换为保存');
 assert.ok(trigger.includes("host.querySelector('[title=\"导入\"]')"), '快照入口没有定位导入按钮');
 assert.ok(trigger.includes('host.insertBefore(button, importButton)'), '快照入口没有放在导入／导出的左边');
 assert.ok(trigger.includes("button.dataset.pmmSnapshotTrigger = 'true'"), '快照入口没有稳定的顶层事件标记');
@@ -65,7 +65,7 @@ assert.ok(delegatedClick.includes("closest?.('[data-pmm-snapshot-trigger]')"), '
 assert.ok(delegatedClick.includes('openOverlay();'), '顶层点击没有打开快照面板');
 
 const overlay = section('function closeOverlay()', 'function normalTitleActions()');
-assert.ok(overlay.includes('function openComposer()'), '点击新建后没有进入工坊内命名界面');
+assert.ok(overlay.includes("action === 'new') enterCaptureMode()"), '点击新建后没有返回预设进入快照模式');
 assert.ok(overlay.includes('data-pmm-snapshot-name'), '快照名称没有使用工坊内输入框');
 assert.ok(overlay.includes('data-pmm-snapshot-action="create"'), '命名界面没有保存快照按钮');
 assert.ok(!overlay.includes('TOP.prompt'), '命名不应依赖浏览器原生 prompt');

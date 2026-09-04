@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
-const source = await readFile(new URL('../dist/workshop-v2.98.js', import.meta.url), 'utf8');
+const source = await readFile(new URL('../dist/workshop-v2.99.js', import.meta.url), 'utf8');
 
 function section(startMarker, endMarker) {
   const start = source.indexOf(startMarker);
@@ -11,7 +11,7 @@ function section(startMarker, endMarker) {
 }
 
 for (const marker of [
-  'PMM_SWITCH_SNAPSHOTS_TEST50',
+  'PMM_SWITCH_SNAPSHOTS_TEST51',
   'function isDefaultSnapshot(snapshot)',
   'function defaultSnapshotForCurrentPreset()',
   'function saveDefaultSnapshot()',
@@ -23,7 +23,7 @@ for (const marker of [
   assert.ok(source.includes(marker), `test.49 缺少预设默认功能：${marker}`);
 }
 
-const saveDefault = section('function saveDefaultSnapshot()', 'function saveNewSnapshot(inputName)');
+const saveDefault = section('function saveDefaultSnapshot()', 'function saveNewSnapshot(inputName, afterSave = null)');
 assert.ok(saveDefault.includes("name: '预设默认'"), '预设默认没有使用固定名称');
 assert.ok(saveDefault.includes("kind: 'default'"), '预设默认没有与角色快照隔离');
 assert.ok(saveDefault.includes('isDefault: true'), '预设默认没有持久化默认标记');
