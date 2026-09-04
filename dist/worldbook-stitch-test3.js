@@ -1703,7 +1703,10 @@
 
   function nativeWorldEditorSelectedName() {
     const select = DOC.querySelector('#world_editor_select');
-    return String(select?.value ?? select?.selectedOptions?.[0]?.textContent ?? '');
+    // SillyTavern stores the option's numeric list index in `value`; the
+    // visible option text is the actual world-book filename.  Comparing the
+    // index to a filename silently skipped the native-editor reload on save.
+    return String(select?.selectedOptions?.[0]?.textContent ?? select?.options?.[select.selectedIndex]?.textContent ?? '').trim();
   }
 
   function watchNativeWorldRename(oldName) {
