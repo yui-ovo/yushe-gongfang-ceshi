@@ -43,6 +43,11 @@ const nativeSelection = section('function nativeWorldEditorSelectedName()', 'fun
 assert.ok(nativeSelection.includes('selectedOptions?.[0]?.textContent'), '原生世界书当前选择应读取选项名称，而非数值索引');
 assert.ok(!nativeSelection.includes('select?.value'), '原生世界书当前选择不能拿数值索引与世界书名称比较');
 
+const nativeReload = section('async function reloadOpenNativeWorldbook(name)', 'async function saveWorldSide(side)');
+assert.ok(nativeReload.includes("DOC.querySelector('#world_editor_select')"), '保存后没有定位当前原生世界书选择框');
+assert.ok(nativeReload.includes("jQuery(select).trigger('change')"), '保存后没有复用原生世界书的 change 重载路径');
+assert.ok(nativeReload.includes("select.dispatchEvent(new TOP.Event('change'"), '无 jQuery 时没有原生 change 重载兜底');
+
 const close = section('function close()', 'function cleanup()');
 assert.ok(!close.includes('saveWorldSide('), '关闭工坊时不应自动保存草稿');
 

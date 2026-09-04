@@ -609,9 +609,21 @@
 
   async function reloadOpenNativeWorldbook(name) {
     const worldName = String(name || '').trim();
-    if (!worldName || nativeWorldEditorSelectedName() !== worldName || typeof context?.reloadWorldInfoEditor !== 'function') return false;
+    if (!worldName || nativeWorldEditorSelectedName() !== worldName) return false;
     try {
-      await context.reloadWorldInfoEditor(worldName, true);
+      const select = DOC.querySelector('#world_editor_select');
+      const option = [...(select?.options || [])].find(item => String(item.textContent || '').trim() === worldName);
+      if (!select || !option) return false;
+      // This is the exact native SillyTavern reload path.  Do not rely on
+      // TavernHelper's optional context bridge: some host versions expose the
+      // method but do not repaint an already-open editor through that bridge.
+      select.value = option.value;
+      const jQuery = TOP.jQuery || TOP.$;
+      if (typeof jQuery === 'function') {
+        jQuery(select).trigger('change');
+      } else {
+        select.dispatchEvent(new TOP.Event('change', { bubbles: true }));
+      }
       return true;
     } catch (error) {
       console.warn(`[世界书缝合] 已保存“${worldName}”，但原生世界书页面刷新失败`, error);
