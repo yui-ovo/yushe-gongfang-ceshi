@@ -761,10 +761,15 @@
         const result = await bridge.drop({
           entries: additions,
           targetId: placement?.targetId || '',
+          targetName: placement?.targetName || '',
           position: placement?.position || 'after',
           targetSectionId,
         });
         if (result?.ok !== false) return true;
+        if (targetSectionId && result?.reason === 'target-not-resolved') {
+          console.warn('[世界书缝合] 未能识别手指所在的目标条目，已取消拖入以免条目被追加到分组末尾');
+          return false;
+        }
       } catch (error) {
         console.warn(
           targetSectionId
@@ -2015,14 +2020,52 @@
     return { section, targetSectionId };
   }
 
-  function nativeDropTargetId(id) {
+  function normalizedNativePromptText(value) {
+    return String(value || '').replace(/\s+/g, ' ').trim();
+  }
+
+  function nativeDropTargetName(node) {
+    if (!node) return '';
+    const prompts = nativePresetSnapshot().prompts;
+    const names = [...new Set(prompts
+      .map(prompt => normalizedNativePromptText(prompt?.name))
+      .filter(Boolean))];
+    const directCandidates = [
+      node.dataset?.promptName,
+      node.dataset?.pmName,
+      node.dataset?.name,
+      node.getAttribute?.('data-prompt-name'),
+      node.getAttribute?.('data-pm-name'),
+      ...Array.from(node.querySelectorAll?.('[data-prompt-name],[data-pm-name],.prompt-item__name,.prompt-card__name,.prompt-card__title,.completion_prompt_manager_prompt_name,.prompt_name,.name') || [])
+        .map(item => item.dataset?.promptName || item.dataset?.pmName || item.textContent),
+    ].map(normalizedNativePromptText).filter(Boolean);
+    const candidates = [...directCandidates, normalizedNativePromptText(node.textContent)].filter(Boolean);
+    for (const candidate of candidates) {
+      if (names.includes(candidate)) return candidate;
+      const contained = names.filter(name => candidate.includes(name));
+      if (contained.length === 1) return contained[0];
+      if (contained.length > 1) {
+        contained.sort((left, right) => right.length - left.length);
+        if (contained[0].length > contained[1].length) return contained[0];
+      }
+    }
+    return directCandidates[0] || '';
+  }
+
+  function nativeDropTargetId(id, node = null) {
     const candidate = String(id || '');
     if (!candidate) return '';
-    const nativeIds = new Set(nativePresetSnapshot().prompts.map(prompt => String(prompt?.id || '')));
+    const prompts = nativePresetSnapshot().prompts;
+    const nativeIds = new Set(prompts.map(prompt => String(prompt?.id || '')));
     // A BaiBai row can expose a UI-only id. Passing that to PMM's handler makes
     // it stop before inserting, whereas an empty target correctly appends in
     // the confirmed section.
-    return nativeIds.has(candidate) ? candidate : '';
+    if (nativeIds.has(candidate)) return candidate;
+    const targetName = nativeDropTargetName(node);
+    const nameMatches = targetName
+      ? prompts.filter(prompt => normalizedNativePromptText(prompt?.name) === targetName)
+      : [];
+    return nameMatches.length === 1 ? String(nameMatches[0]?.id || '') : '';
   }
 
   function nativeDropPlacement(event) {
@@ -2030,11 +2073,13 @@
     const { section, targetSectionId } = nativeDropSectionFromNode(card || event.target);
     const targetDispatcher = nativePresetDropDispatcher();
     const targetPanelComponent = targetDispatcher?.component || null;
-    const cardId = nativeDropTargetId(card?.dataset?.promptId || card?.dataset?.pmIdentifier || '');
-    if (cardId) {
+    const cardName = nativeDropTargetName(card);
+    const cardId = nativeDropTargetId(card?.dataset?.promptId || card?.dataset?.pmIdentifier || '', card);
+    if (cardId || cardName) {
       const rect = card.getBoundingClientRect();
       return {
         targetId: cardId,
+        targetName: cardName,
         position: Number(event.clientY) < rect.top + rect.height / 2 ? 'before' : 'after',
         targetSectionId,
         targetPanelComponent,
@@ -2046,7 +2091,8 @@
       .filter(item => nativeDropSectionFromNode(item).section === section);
     const lastCard = cards[cards.length - 1];
     return {
-      targetId: nativeDropTargetId(lastCard?.dataset?.promptId || lastCard?.dataset?.pmIdentifier || ''),
+      targetId: nativeDropTargetId(lastCard?.dataset?.promptId || lastCard?.dataset?.pmIdentifier || '', lastCard),
+      targetName: nativeDropTargetName(lastCard),
       position: 'after',
       targetSectionId,
       targetPanelComponent,
