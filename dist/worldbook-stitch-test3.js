@@ -970,6 +970,37 @@
     return next;
   }
 
+  async function fallbackBaiBaiGroupedPresetDrop(target, additions, placement = null) {
+    const targetSectionId = String(placement?.targetSectionId || '');
+    if (!targetSectionId.startsWith('baibai_') || !target?.name || !additions.length) return false;
+    let compat = SELF.__PMM_BAIBAI_COMPAT__;
+    try {
+      compat = compat || TOP.__PMM_BAIBAI_COMPAT__;
+    } catch (_) {}
+    if (typeof compat?.queue !== 'function' || typeof compat?.flushPreset !== 'function') return false;
+    const newIds = additions.map(item => String(item?.id || '')).filter(Boolean);
+    if (!newIds.length) return false;
+    const nextPrompts = insertPresetEntries(target.prompts, additions, placement);
+    const queued = compat.queue({
+      presetName: target.name,
+      targetId: String(placement?.targetId || ''),
+      targetPosition: placement?.position === 'before' ? 'before' : 'after',
+      targetSectionId,
+      targetGroupTitle: String(placement?.targetGroupTitle || ''),
+      newIds,
+    });
+    if (!queued) return false;
+    try {
+      await savePresetEntries(target.name, nextPrompts);
+      await compat.flushPreset?.(target.name);
+      syncVisiblePresetEntries(target.name, nextPrompts);
+      return true;
+    } catch (error) {
+      console.warn('[世界书缝合] 柏宝箱分组直连保存失败，已保留安全取消', error);
+      return false;
+    }
+  }
+
   async function transferFromNativeTop(move, forcedIds = null, placement = null) {
     const source = nativePresetSnapshot();
     const ids = forcedIds?.length ? forcedIds.map(String) : [...source.selected];
@@ -1012,6 +1043,20 @@
         return;
       }
       if (placement?.targetSectionId) {
+        if (await fallbackBaiBaiGroupedPresetDrop(target, additions, placement)) {
+          pushUndo(source, move ? '从世界书移动到预设' : '从世界书拖入预设', {
+            worldSides:move ? [source] : [],
+            presetSnapshots:[target],
+          });
+          if (move) {
+            removeWorldEntries(source, keys);
+            markWorldDraftDirty(source);
+          }
+          source.selected.clear();
+          renderPanels();
+          notify('success', `已${move ? '移动' : '复制'} ${entries.length} 条`);
+          return;
+        }
         notify('error', '目标分组已识别，但未取得工坊拖入处理器；已取消拖入以避免条目掉到组外');
         return;
       }

@@ -91,6 +91,15 @@ const transfer = worldbook.slice(
   worldbook.indexOf('async function transferToNativeTop(move, forcedKeys = null, placement = null)'),
   worldbook.indexOf('async function transferWorldToWorld', worldbook.indexOf('async function transferToNativeTop(move, forcedKeys = null, placement = null)')),
 );
-assert.ok(transfer.includes("if (placement?.targetSectionId) {\n        notify('error', '目标分组已识别，但未取得工坊拖入处理器；已取消拖入以避免条目掉到组外');"), '分组拖入失败时不应落入直接保存兜底');
+for (const marker of [
+  'async function fallbackBaiBaiGroupedPresetDrop(target, additions, placement = null)',
+  "targetSectionId.startsWith('baibai_')",
+  'const queued = compat.queue({',
+  'await compat.flushPreset?.(target.name);',
+  'if (await fallbackBaiBaiGroupedPresetDrop(target, additions, placement))',
+]) {
+  assert.ok(worldbook.includes(marker), `test.14 柏宝箱分组直连兜底缺少实现：${marker}`);
+}
+assert.ok(transfer.indexOf('if (await fallbackBaiBaiGroupedPresetDrop(target, additions, placement))') < transfer.indexOf("notify('error', '目标分组已识别，但未取得工坊拖入处理器；已取消拖入以避免条目掉到组外')"), '柏宝箱直连兜底必须先于安全取消提示执行');
 
-console.log('test.14 回归通过：世界书拖入会把柏宝箱分组 ID 交给与预设拖入共用的工坊核心桥。');
+console.log('test.14 回归通过：世界书拖入优先交给工坊核心桥，柏宝箱分组在桥未挂载时会安全直连归组。');
