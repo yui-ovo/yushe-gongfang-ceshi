@@ -11475,6 +11475,19 @@ html.pmm-dnd-compat-active #preset-manager-main-panel{user-select:none!important
       relayDesktopEdgeRelease(ownerDocument, event);
     };
     const ownerWindow = edge.ownerDocument?.defaultView || SELF;
+    const ensureExpanded = event => {
+      release(event);
+      const schedule = typeof ownerWindow?.requestAnimationFrame === 'function'
+        ? ownerWindow.requestAnimationFrame.bind(ownerWindow)
+        : callback => setTimeout(callback, 0);
+      schedule(() => {
+        // The original Vue state should normally have opened by now. Some
+        // desktop hosts swallow its full press/release path, so leave a
+        // visual fallback that keeps the toolbar usable rather than making
+        // the only desktop entrance inert.
+        if (!isMobile() && !panelExpanded(root)) root.classList.add('pmm-desktop-forced-open');
+      });
+    };
     if (typeof ownerWindow?.PointerEvent === 'function') {
       let pointerId = null;
       edge.addEventListener('pointerdown', event => {
@@ -11483,11 +11496,23 @@ html.pmm-dnd-compat-active #preset-manager-main-panel{user-select:none!important
       edge.addEventListener('pointerup', event => {
         if (pointerId !== event.pointerId) return;
         pointerId = null;
-        release(event);
+        ensureExpanded(event);
       }, true);
       edge.addEventListener('pointercancel', () => { pointerId = null; }, true);
     } else {
-      edge.addEventListener('mouseup', release, true);
+      edge.addEventListener('mouseup', ensureExpanded, true);
+    }
+    edge.addEventListener('click', ensureExpanded, true);
+    const collapse = root.querySelector(':scope > .panel-wrapper .panel-collapse');
+    if (collapse && collapse.dataset.pmmDesktopFallbackCollapseBound !== '1') {
+      collapse.dataset.pmmDesktopFallbackCollapseBound = '1';
+      collapse.addEventListener('click', event => {
+        if (!root.classList.contains('pmm-desktop-forced-open')) return;
+        event.preventDefault();
+        event.stopPropagation();
+        event.stopImmediatePropagation();
+        root.classList.remove('pmm-desktop-forced-open');
+      }, true);
     }
   }
 
@@ -11765,6 +11790,7 @@ html.pmm-dnd-compat-active #preset-manager-main-panel{user-select:none!important
         root.dataset.pmmFloatingMobileInitialized = '1';
       }
       if (!entryEnabled) root.classList.remove('pmm-floating-mobile-open', 'pmm-floating-dragging');
+      root.classList.remove('pmm-desktop-forced-open');
       root.classList.add('pmm-floating-mobile');
       const saved = readPosition();
       setDock(root, root.dataset.pmmFloatingDock || saved.dock, parseFloat(root.style.getPropertyValue('--pmm-mobile-floating-top')) || saved.top, false);
@@ -11834,6 +11860,8 @@ html.pmm-dnd-compat-active #preset-manager-main-panel{user-select:none!important
   }
   html.pmm-mobile-toolbar-ready #pm-mobile-fab-standalone{display:none!important}
   #preset-manager-floating-panel .floating-panel-root.pmm-floating-entry-disabled{display:none!important;visibility:hidden!important;pointer-events:none!important}
+  #preset-manager-floating-panel .floating-panel-root.pmm-desktop-forced-open>.panel-wrapper{display:flex!important}
+  #preset-manager-floating-panel .floating-panel-root.pmm-desktop-forced-open>.edge-tab{display:none!important}
   #preset-manager-floating-panel .floating-panel-root.pmm-floating-mobile{
     position:fixed!important;top:var(--pmm-mobile-floating-top,38vh)!important;bottom:auto!important;
     width:auto!important;max-width:calc(100vw - 4px)!important;height:auto!important;z-index:80!important;

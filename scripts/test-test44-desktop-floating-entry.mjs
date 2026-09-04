@@ -33,13 +33,18 @@ for (const snippet of [
   'if (isMobile()',
   "typeof ownerWindow?.PointerEvent === 'function'",
   'relayDesktopEdgeRelease(ownerDocument, event);',
-  "edge.addEventListener('mouseup', release, true)",
+  "edge.addEventListener('mouseup', ensureExpanded, true)",
+  "edge.addEventListener('click', ensureExpanded, true)",
+  "root.classList.add('pmm-desktop-forced-open')",
+  "root.classList.remove('pmm-desktop-forced-open')",
 ]) {
   assert.ok(bridge.includes(snippet), `桌面悬浮入口缺少关键桥接行为：${snippet}`);
 }
 assert.ok(!bridge.includes('pmm-floating-mobile-open'), '桌面入口桥接不应接管手机的展开状态');
+assert.ok(source.includes('.pmm-desktop-forced-open>.panel-wrapper{display:flex!important}'), '桌面入口缺少无法触发原回调时的面板显示兜底');
+assert.ok(source.includes('.pmm-desktop-forced-open>.edge-tab{display:none!important}'), '桌面入口展开兜底后没有隐藏箭头');
 
 const syncRoot = section('function syncRoot(root)', 'function sync()');
 assert.ok(syncRoot.includes('bindDesktopEdgeReleaseBridge(root);'), '悬浮面板同步时没有绑定桌面入口桥接');
 
-console.log('test.44 回归通过：桌面 iframe 内的悬浮箭头会以自身 pointerup 可靠回传 mouseup，手机入口不受影响。');
+console.log('test.44 回归通过：桌面 iframe 内的悬浮箭头会回传 mouseup，且原回调失效时仍可显示面板，手机入口不受影响。');
