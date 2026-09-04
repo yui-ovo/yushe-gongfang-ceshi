@@ -11085,8 +11085,30 @@ html.pmm-dnd-compat-active #preset-manager-main-panel{user-select:none!important
   }
 
   function documents() {
-    const result = [DOC];
-    try { if (TOP.document && !result.includes(TOP.document)) result.push(TOP.document); } catch (_) {}
+    // TavernHelper can place a script inside an iframe that itself is nested
+    // under the actual SillyTavern page. The floating root may therefore be
+    // in the immediate parent rather than in SELF or TOP. Walk every
+    // accessible same-origin frame so listeners and styles land where the
+    // visible arrow really lives.
+    const result = [];
+    const seen = new Set();
+    const addWindow = currentWindow => {
+      if (!currentWindow || seen.has(currentWindow)) return;
+      seen.add(currentWindow);
+      try {
+        const currentDocument = currentWindow.document;
+        if (currentDocument && !result.includes(currentDocument)) result.push(currentDocument);
+      } catch (_) { return; }
+      try {
+        if (currentWindow.parent && currentWindow.parent !== currentWindow) addWindow(currentWindow.parent);
+      } catch (_) {}
+      try {
+        for (let index = 0; index < currentWindow.frames.length; index += 1) addWindow(currentWindow.frames[index]);
+      } catch (_) {}
+    };
+    addWindow(SELF);
+    addWindow(TOP);
+    if (!result.includes(DOC)) result.unshift(DOC);
     return result;
   }
 
