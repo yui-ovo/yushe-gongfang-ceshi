@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
-const source = await readFile(new URL('../dist/workshop-v3.21.js', import.meta.url), 'utf8');
+const source = await readFile(new URL('../dist/workshop-v3.22.js', import.meta.url), 'utf8');
 
 function section(startMarker, endMarker) {
   const start = source.indexOf(startMarker);
@@ -42,7 +42,7 @@ const capture = section('async function exitCaptureMode(showNotice = false)', 'f
 assert.ok(capture.includes('session.entryStates'), '退出快照模式没有恢复进入前开关');
 assert.ok(capture.includes("captureMode = { presetName, entryStates: makeStates(prompts), restoring: false }"), '进入快照模式没有保存临时事务起点');
 
-const nativeSave = section('function nativeSaveButton()', 'function restoreCaptureImportButton(button)');
+const nativeSave = section('function nativeSaveButton()', 'function restoreCaptureEditButton(button)');
 assert.ok(nativeSave.includes("button.disabled = true"), '快照模式没有真正禁用原生保存按钮');
 assert.ok(nativeSave.includes('pmmSnapshotNativeSaveOriginalHtml'), '退出快照模式无法恢复原生保存图标');
 assert.ok(nativeSave.includes("const markup = button.dataset.pmmSnapshotNativeSaveOriginalHtml || '<div class=\"card-icon\"><i class=\"fa-solid fa-save\"></i></div>';"), '禁用时没有保留原生软盘图标');
@@ -50,10 +50,11 @@ assert.ok(!nativeSave.includes('pmm-switch-snapshot-save-block-mark'), '原生�
 
 const style = section('function installStyle()', 'function scheduleMount()');
 assert.ok(style.includes('#10b981'), '左侧保存快照按钮没有使用原生保存同系绿色高亮');
-assert.ok(style.includes('pmm-switch-snapshot-capture-cancel'), '取消按钮没有独立边框样式');
-assert.ok(style.includes('width:32px!important;min-width:32px!important;height:30px!important'), '左侧保存快照按钮没有缩回紧凑尺寸');
-assert.ok(style.includes('width:29px!important'), '手机端取消 X 没有缩小');
-assert.ok(style.includes('.title-action-btn.pmm-switch-snapshot-capture-cancel i{color:#10b981!important}'), '取消 X 没有改成绿色');
+assert.ok(style.includes('title-edit-btn.pmm-switch-snapshot-capture-save'), '铅笔位置没有获得保存快照样式');
+assert.ok(style.includes(`.title-action-btn.${'${TRIGGER_CLASS}'}.is-capture-mode`), '相机位置没有获得取消样式');
+const toolbarStyle = style.slice(0, style.indexOf('.pmm-switch-snapshot-overlay'));
+assert.ok(!toolbarStyle.includes('width:32px!important'), '快照保存仍被放大为 32px');
+assert.ok(!toolbarStyle.includes('min-width:29px!important'), '快照取消仍被放大为 29px');
 assert.ok(style.includes('pointer-events:none!important;cursor:default!important;opacity:.3!important'), '右侧原生保存没有像撤销一样完全变暗并禁用');
 assert.ok(!style.includes('.pmm-switch-snapshot-save-block-mark{'), '样式中仍残留保存按钮叠加 X');
 
