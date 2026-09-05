@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import vm from 'node:vm';
 import { readFile } from 'node:fs/promises';
 
-const source = await readFile(new URL('../dist/workshop-v2.99.js', import.meta.url), 'utf8');
+const source = await readFile(new URL('../dist/workshop-v3.00.js', import.meta.url), 'utf8');
 for (const marker of [
   'function unwrapWholeSetVariable(content)',
   'function buildVariableStripPlan(batch, selectedIds, cleanRelated)',

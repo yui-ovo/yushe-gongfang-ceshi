@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
-const source = await readFile(new URL('../dist/workshop-v2.99.js', import.meta.url), 'utf8');
+const source = await readFile(new URL('../dist/workshop-v3.00.js', import.meta.url), 'utf8');
 
 function section(startMarker, endMarker) {
   const start = source.indexOf(startMarker);
@@ -11,7 +11,7 @@ function section(startMarker, endMarker) {
 }
 
 for (const marker of [
-  'PMM_SWITCH_SNAPSHOTS_TEST51',
+  'PMM_SWITCH_SNAPSHOTS_TEST52',
   "const STORAGE_KEY = 'pmm.switch-snapshots.v1'",
   "const TRIGGER_CLASS = 'pmm-switch-snapshot-trigger'",
   'function saveNewSnapshot(inputName, afterSave = null)',
@@ -54,7 +54,7 @@ assert.ok(snapshotCreation.includes('isBranchMode()'), '分支模式下仍能错
 assert.ok(apply.includes('isBranchMode()'), '分支模式下仍能错误应用快照');
 
 const trigger = section('function mountTrigger()', 'function installStyle()');
-assert.ok(trigger.includes("button.title = captureActive ? '保存快照' : '开关快照'"), '顶部入口没有在快照模式中明确切换为保存');
+assert.ok(trigger.includes("const nextTitle = captureActive ? '保存快照' : '开关快照'"), '顶部入口没有在快照模式中明确切换为保存');
 assert.ok(trigger.includes("host.querySelector('[title=\"导入\"]')"), '快照入口没有定位导入按钮');
 assert.ok(trigger.includes('host.insertBefore(button, importButton)'), '快照入口没有放在导入／导出的左边');
 assert.ok(trigger.includes("button.dataset.pmmSnapshotTrigger = 'true'"), '快照入口没有稳定的顶层事件标记');

@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
 const source = await readFile(new URL('../dist/worldbook-stitch-test3.js', import.meta.url), 'utf8');
-const workshopSource = await readFile(new URL('../dist/workshop-v2.99.js', import.meta.url), 'utf8');
+const workshopSource = await readFile(new URL('../dist/workshop-v3.00.js', import.meta.url), 'utf8');
 
 for (const marker of [
   "function highlightedWorldSearchText(value, query, currentMatch = null, fieldName = '')",

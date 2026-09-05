@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
-const source = await readFile(new URL('../dist/workshop-v2.99.js', import.meta.url), 'utf8');
+const source = await readFile(new URL('../dist/workshop-v3.00.js', import.meta.url), 'utf8');
 const marker = '/* 桌面浮动栏右侧的收起箭头原本只有 16px，难以准确点按。 */';
 const start = source.indexOf(marker);
 const end = source.indexOf('@media screen and (max-width:768px)', start);

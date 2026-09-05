@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
-const source = await readFile(new URL('../dist/workshop-v2.99.js', import.meta.url), 'utf8');
+const source = await readFile(new URL('../dist/workshop-v3.00.js', import.meta.url), 'utf8');
 
 function section(startMarker, endMarker) {
   const start = source.indexOf(startMarker);
@@ -11,7 +11,7 @@ function section(startMarker, endMarker) {
 }
 
 for (const marker of [
-  'PMM_SWITCH_SNAPSHOTS_TEST51',
+  'PMM_SWITCH_SNAPSHOTS_TEST52',
   'let captureMode = null',
   'function enterCaptureMode()',
   'function exitCaptureMode(showNotice = false)',
@@ -46,9 +46,9 @@ assert.ok(overlay.includes("action === 'save-capture') finishCaptureSnapshot()")
 assert.ok(overlay.includes("action === 'return-capture') closeOverlay()"), '命名取消不应退出或保存快照');
 
 const trigger = section('function mountTrigger()', 'function handleDocumentClick(event)');
-assert.ok(trigger.includes("button.title = captureActive ? '保存快照' : '开关快照'"), '相机按钮没有切换为保存按钮');
+assert.ok(trigger.includes("const nextTitle = captureActive ? '保存快照' : '开关快照'"), '相机按钮没有切换为保存按钮');
 assert.ok(trigger.includes('fa-floppy-disk'), '快照模式没有使用保存图标');
-assert.ok(trigger.includes('pmm-switch-snapshot-capture-cancel'), '快照模式没有安全退出入口');
+assert.ok(trigger.includes('turnImportIntoCaptureCancel(importButton)'), '快照模式没有安全退出入口');
 
 const click = section('function handleDocumentClick(event)', 'function installStyle()');
 assert.ok(click.includes('exitCaptureMode(true)'), '取消快照模式没有退出');

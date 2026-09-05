@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto';
 
 const manifest = JSON.parse(await readFile(new URL('../manifest.json', import.meta.url), 'utf8'));
 const entry = await readFile(new URL('../dist/index.js', import.meta.url), 'utf8');
-const workshop = await readFile(new URL('../dist/workshop-v2.99.js', import.meta.url), 'utf8');
+const workshop = await readFile(new URL('../dist/workshop-v3.00.js', import.meta.url), 'utf8');
 const migrationBase = await readFile(new URL('../dist/workshop-v2.53.js', import.meta.url), 'utf8');
 const bridge = await readFile(new URL('../bridge/predefine.js', import.meta.url), 'utf8');
 const legacy = JSON.parse(await readFile(new URL('../legacy/🧩预设工坊｜双端适配v2.53.json', import.meta.url), 'utf8'));
@@ -25,24 +25,24 @@ if (!entry.includes('startPresetWorkshop') || !entry.includes('waitForTavernHelp
 }
 
 if (workshop.length < 1_000_000 || !workshop.includes('V2.94 已加载')) {
-  throw new Error(`v2.99 业务入口不完整：${workshop.length} 字符`);
+  throw new Error(`v3.00 业务入口不完整：${workshop.length} 字符`);
 }
 
-if (!entry.includes('workshop-v2.99.js') || !entry.includes('worldbook-stitch-test3.js') || !entry.includes("const EXTENSION_VERSION = '2.99.0-test.97'")) {
-  throw new Error('扩展启动器没有指向 v2.99');
+if (!entry.includes('workshop-v3.00.js') || !entry.includes('worldbook-stitch-test3.js') || !entry.includes("const EXTENSION_VERSION = '3.00.0-test.98'")) {
+  throw new Error('扩展启动器没有指向 v3.00');
 }
 
 if (!workshop.includes('readPresetExtensionField?.({name:requested,path:PATH})')) {
-  throw new Error('v2.99 没有按指定预设读取柏宝箱分组');
+  throw new Error('v3.00 没有按指定预设读取柏宝箱分组');
 }
 
 if (!workshop.includes('writePresetExtensionField({name:presetName,path:PATH')) {
-  throw new Error('v2.99 没有按指定预设写入柏宝箱分组');
+  throw new Error('v3.00 没有按指定预设写入柏宝箱分组');
 }
 
 if (!workshop.includes("String(n).startsWith('branch:')") ||
     !workshop.includes('分支直接使用已保存的柏宝箱分组快照')) {
-  throw new Error('v2.99 缺少分支快照读取隔离修复');
+  throw new Error('v3.00 缺少分支快照读取隔离修复');
 }
 
 if (legacy.content !== migrationBase) {
