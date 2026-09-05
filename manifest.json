@@ -5,7 +5,7 @@
   "optional": [],
   "js": "dist/index.js",
   "author": "kookt",
-  "version": "3.09.0-test.107",
+  "version": "3.10.0-test.108",
   "homePage": "https://github.com/yui-ovo/yushe-gongfang-ceshi",
   "auto_update": true,
   "hooks": {

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
-const source = await readFile(new URL('../dist/workshop-v3.09.js', import.meta.url), 'utf8');
+const source = await readFile(new URL('../dist/workshop-v3.10.js', import.meta.url), 'utf8');
 const tunerStart = source.indexOf('/* ===== PMM_MOBILE_LAYOUT_TUNER_V1');
 const tunerEnd = source.indexOf('/* ===== PMM_FLOATING_PANEL_BATCH_V1', tunerStart);
 const tuner = source.slice(tunerStart, tunerEnd);
@@ -23,8 +23,8 @@ assert.ok(!capture.includes('header.style.removeProperty(nativeVariable);'), '�
 assert.ok(capture.includes('外层标题卡片和名称框原始宽度都只测一次'), '缺少外层标题卡片稳定宽度保护');
 assert.ok(capture.includes("customKey:'presetWidth'"), '缺少预设名称框独立测量');
 assert.ok(capture.includes("customKey:'branchWidth'"), '缺少分支名称框独立测量');
-assert.ok(capture.includes("'.pm-panel-container > .pm-main-wrapper .pm-header'"), '预设名称框没有限定为上方主卡片');
-assert.ok(!capture.includes("'.pm-panel-container > .pm-main-wrapper .pm-header,.pm-panel-container--merge-mode > .preset-panel .pm-header'"), '下方缝合卡片仍会跟随预设名称框测量');
+assert.ok(capture.includes("'.pm-panel-container > .pm-main-wrapper .pm-header,.pm-panel-container--merge-mode > .preset-panel .pm-header'"), '缝合上下两张原生预设没有共用名称框测量');
+assert.ok(capture.includes('世界书使用 pmm-wb-header，不会混入测量'), '世界书没有与原生预设宽度测量明确隔离');
 assert.ok(capture.includes("root.style.setProperty('--pmm-primary-title-viewport-width'"), '没有把上方预设外层视口共享给上方世界书');
 assert.ok(!capture.includes("root.style.setProperty('--pmm-primary-native-preset-width'"), '上方世界书仍会继承不稳定的运行时名称宽度');
 
@@ -38,4 +38,4 @@ const syncEnd = tuner.indexOf('  function scheduleSync()', syncStart);
 const sync = tuner.slice(syncStart, syncEnd);
 assert.ok(sync.indexOf('capturePresetViewportWidths();') < sync.indexOf('applyState(false);'), '布局同步没有先取得稳定基准再应用设置');
 
-console.log('v2.94 名称框独立调节回归通过：内层可加长，外层标题卡片在布局切换后保持稳定。');
+console.log('v2.94 名称框独立调节回归通过：缝合上下预设同步，世界书与分支仍保持独立作用域。');
