@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
-const source = await readFile(new URL('../dist/workshop-v3.05.js', import.meta.url), 'utf8');
+const source = await readFile(new URL('../dist/workshop-v3.06.js', import.meta.url), 'utf8');
 
 function section(startMarker, endMarker) {
   const start = source.indexOf(startMarker);
@@ -33,6 +33,10 @@ assert.ok(apply.includes('saveAppliedDraft(presetName, nextPrompts, draftUpdated
 const persist = section('async function saveAppliedDraft(presetName, prompts, draftUpdated)', 'async function applySnapshot(id)');
 assert.ok(persist.includes('button.click()'), '应用快照没有调用工坊自己的保存按钮');
 assert.ok(persist.includes("await setPreset('in_use', { prompts: clone(prompts) })"), '应用当前预设后没有保证运行状态同步');
+assert.ok(persist.includes('return true;'), '原生保存链路没有向快照层报告已有保存通知');
+
+const applyNotice = section('async function applySnapshot(id)', 'function renameSnapshot(id)');
+assert.ok(applyNotice.includes('if (!notifiedByNativeSave)'), '应用快照没有避免与工坊原生保存重复通知');
 
 const capture = section('async function exitCaptureMode(showNotice = false)', 'function renderCaptureSavePrompt()');
 assert.ok(capture.includes('session.entryStates'), '退出快照模式没有恢复进入前开关');

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
-const source = await readFile(new URL('../dist/workshop-v3.05.js', import.meta.url), 'utf8');
+const source = await readFile(new URL('../dist/workshop-v3.06.js', import.meta.url), 'utf8');
 
 function section(startMarker, endMarker) {
   const start = source.indexOf(startMarker);
@@ -38,6 +38,7 @@ assert.ok(savePrompt.includes('保存后退出快照模式'), '命名界面没�
 const finish = section('function finishCaptureSnapshot()', 'function renderFirstDefaultPrompt()');
 assert.ok(finish.includes('saveNewSnapshot(composer?.name'), '快照模式保存没有复用完整快照保存链路');
 assert.ok(finish.includes('await exitCaptureMode(false)'), '保存快照后没有还原进入前开关并退出');
+assert.ok(finish.includes('openOverlay();'), '保存快照后没有自动返回开关快照管理面板');
 
 const overlay = section('function ensureOverlay()', 'function openOverlay()');
 assert.ok(overlay.includes("action === 'new') enterCaptureMode()"), '新建快照仍留在旧弹窗而没有进入快照模式');

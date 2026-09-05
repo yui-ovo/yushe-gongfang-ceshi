@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
-const source = await readFile(new URL('../dist/workshop-v3.05.js', import.meta.url), 'utf8');
+const source = await readFile(new URL('../dist/workshop-v3.06.js', import.meta.url), 'utf8');
 
 function section(startMarker, endMarker) {
   const start = source.indexOf(startMarker);
@@ -41,6 +41,7 @@ assert.ok(list.includes('!isDefaultSnapshot(snapshot)'), '角色快照列表错�
 const overlay = section('function renderOverlay()', 'function openOverlay()');
 assert.ok(overlay.includes('保存当前为默认'), '首次使用没有明确保存默认入口');
 assert.ok(overlay.includes('恢复默认'), '已保存默认没有一键恢复入口');
+assert.ok(overlay.includes('<i class="fa-solid fa-rotate"></i>更新默认'), '更新默认按钮没有显示中文说明');
 assert.ok(overlay.includes('用当前开关更新默认'), '已保存默认无法明确更新');
 
 const apply = section('async function applySnapshot(id)', 'function renameSnapshot(id)');
