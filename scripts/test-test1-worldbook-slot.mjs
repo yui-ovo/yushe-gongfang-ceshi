@@ -1,6 +1,6 @@
 import { readFile } from 'node:fs/promises';
 
-const source = await readFile(new URL('../dist/workshop-v3.19.js', import.meta.url), 'utf8');
+const source = await readFile(new URL('../dist/workshop-v3.20.js', import.meta.url), 'utf8');
 const entry = await readFile(new URL('../dist/index.js', import.meta.url), 'utf8');
 
 const requiredMarkers = [

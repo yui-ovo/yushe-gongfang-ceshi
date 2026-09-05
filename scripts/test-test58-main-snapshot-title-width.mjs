@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
-const source = await readFile(new URL('../dist/workshop-v3.19.js', import.meta.url), 'utf8');
+const source = await readFile(new URL('../dist/workshop-v3.20.js', import.meta.url), 'utf8');
 
 assert.ok(source.includes("const HOME_TITLE_CLASS = 'pmm-switch-snapshot-home-title'"), '主页面快照没有独立的标题标记');
 assert.ok(source.includes("const titleContent = host?.closest?.('.title-content') || null"), '快照入口没有定位主页面标题内容');
