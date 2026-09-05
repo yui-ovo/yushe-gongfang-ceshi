@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
-const source = await readFile(new URL('../dist/workshop-v3.06.js', import.meta.url), 'utf8');
+const source = await readFile(new URL('../dist/workshop-v3.07.js', import.meta.url), 'utf8');
 const tunerStart = source.indexOf('/* ===== PMM_MOBILE_LAYOUT_TUNER_V1');
 const tunerEnd = source.indexOf('/* ===== PMM_FLOATING_PANEL_BATCH_V1', tunerStart);
 const tuner = source.slice(tunerStart, tunerEnd);
@@ -23,6 +23,10 @@ assert.ok(!capture.includes('header.style.removeProperty(nativeVariable);'), '�
 assert.ok(capture.includes('外层标题卡片和名称框原始宽度都只测一次'), '缺少外层标题卡片稳定宽度保护');
 assert.ok(capture.includes("customKey:'presetWidth'"), '缺少预设名称框独立测量');
 assert.ok(capture.includes("customKey:'branchWidth'"), '缺少分支名称框独立测量');
+assert.ok(capture.includes("'.pm-panel-container > .pm-main-wrapper .pm-header'"), '预设名称框没有限定为上方主卡片');
+assert.ok(!capture.includes("'.pm-panel-container > .pm-main-wrapper .pm-header,.pm-panel-container--merge-mode > .preset-panel .pm-header'"), '下方缝合卡片仍会跟随预设名称框测量');
+assert.ok(capture.includes("root.style.setProperty('--pmm-primary-title-viewport-width'"), '没有把上方预设外层视口共享给上方世界书');
+assert.ok(capture.includes("root.style.setProperty('--pmm-primary-native-preset-width'"), '没有把上方预设名称基准共享给上方世界书');
 
 const applyStart = tuner.indexOf('  function applyState(save = false)');
 const applyEnd = tuner.indexOf('  function _pmmBindAndroidRangeGestureGuard', applyStart);
