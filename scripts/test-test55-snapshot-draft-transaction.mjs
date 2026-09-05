@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
-const source = await readFile(new URL('../dist/workshop-v3.04.js', import.meta.url), 'utf8');
+const source = await readFile(new URL('../dist/workshop-v3.05.js', import.meta.url), 'utf8');
 
 function section(startMarker, endMarker) {
   const start = source.indexOf(startMarker);
@@ -40,17 +40,18 @@ assert.ok(capture.includes("captureMode = { presetName, entryStates: makeStates(
 
 const nativeSave = section('function nativeSaveButton()', 'function restoreCaptureImportButton(button)');
 assert.ok(nativeSave.includes("button.disabled = true"), '快照模式没有真正禁用原生保存按钮');
-assert.ok(nativeSave.includes('fa-solid fa-xmark'), '禁用的原生保存按钮没有显示 X');
 assert.ok(nativeSave.includes('pmmSnapshotNativeSaveOriginalHtml'), '退出快照模式无法恢复原生保存图标');
-assert.ok(nativeSave.includes('pmm-switch-snapshot-save-block-mark'), '原生保存按钮没有在软盘上叠加禁用 X');
-assert.ok(nativeSave.includes('pmmSnapshotNativeSaveOriginalHtml ||'), '禁用时错误替换了原生软盘，而不是保留后叠加 X');
+assert.ok(nativeSave.includes("const markup = button.dataset.pmmSnapshotNativeSaveOriginalHtml || '<div class=\"card-icon\"><i class=\"fa-solid fa-save\"></i></div>';"), '禁用时没有保留原生软盘图标');
+assert.ok(!nativeSave.includes('pmm-switch-snapshot-save-block-mark'), '原生保存按钮不应再叠加禁用 X');
 
 const style = section('function installStyle()', 'function scheduleMount()');
 assert.ok(style.includes('#10b981'), '左侧保存快照按钮没有使用原生保存同系绿色高亮');
 assert.ok(style.includes('pmm-switch-snapshot-capture-cancel'), '取消按钮没有独立边框样式');
-assert.ok(style.includes('min-width:40px!important'), '手机端保存快照按钮没有放大');
+assert.ok(style.includes('width:32px!important;min-width:32px!important;height:30px!important'), '左侧保存快照按钮没有缩回紧凑尺寸');
 assert.ok(style.includes('width:29px!important'), '手机端取消 X 没有缩小');
 assert.ok(style.includes('.title-action-btn.pmm-switch-snapshot-capture-cancel i{color:#10b981!important}'), '取消 X 没有改成绿色');
+assert.ok(style.includes('pointer-events:none!important;cursor:default!important;opacity:.3!important'), '右侧原生保存没有像撤销一样完全变暗并禁用');
+assert.ok(!style.includes('.pmm-switch-snapshot-save-block-mark{'), '样式中仍残留保存按钮叠加 X');
 
 const onboarding = section('function ensureOverlay()', 'function openOverlay()');
 assert.ok(onboarding.includes("if (saveDefaultSnapshot()) enterCaptureMode()"), '首次保存预设默认后没有直接进入快照模式');

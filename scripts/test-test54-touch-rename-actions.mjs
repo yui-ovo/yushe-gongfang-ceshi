@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
-const source = await readFile(new URL('../dist/workshop-v3.04.js', import.meta.url), 'utf8');
+const source = await readFile(new URL('../dist/workshop-v3.05.js', import.meta.url), 'utf8');
 const start = source.indexOf('PMM_TOUCH_RENAME_ACTIONS_TEST54');
 const end = source.indexOf('个人测试通道：底部工具栏“世界书”入口', start);
 assert.ok(start >= 0 && end > start, '无法定位 test.54 外层改名铅笔触屏兼容模块');

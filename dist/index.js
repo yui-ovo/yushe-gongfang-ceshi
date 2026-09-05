@@ -1,5 +1,5 @@
 const EXTENSION_NAME = '🧪预设工坊测试版';
-const EXTENSION_VERSION = '3.04.0-test.102';
+const EXTENSION_VERSION = '3.05.0-test.103';
 const RUNTIME_ID = 'TH-script--🧩预设工坊（GitHub 扩展）--2f53f6af-3c9e-4c71-bc52-9f635be25300';
 const LEGACY_IFRAME_PREFIX = 'TH-script--🧩预设工坊';
 const EXTENSION_FOLDER_NAME = 'yushe-gongfang-ceshi';
@@ -211,7 +211,7 @@ async function waitForTavernHelper() {
 function buildRuntimeDocument() {
   const parentJqueryUrl = new URL('../bridge/parent-jquery.js', import.meta.url).href;
   const predefineUrl = new URL('../bridge/predefine.js', import.meta.url).href;
-  const workshopUrl = new URL('./workshop-v3.04.js', import.meta.url).href;
+  const workshopUrl = new URL('./workshop-v3.05.js', import.meta.url).href;
   const worldbookStitchUrl = new URL('./worldbook-stitch-test3.js', import.meta.url).href;
   const worldbookLoaderKey = '__PMM_LOAD_WORLDBOOK_STITCH__';
 

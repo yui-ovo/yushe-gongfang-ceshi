@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
-const source = await readFile(new URL('../dist/workshop-v3.04.js', import.meta.url), 'utf8');
+const source = await readFile(new URL('../dist/workshop-v3.05.js', import.meta.url), 'utf8');
 
 function section(startMarker, endMarker) {
   const start = source.indexOf(startMarker);
@@ -62,6 +62,12 @@ assert.ok(trigger.includes('host.insertBefore(button, importButton)'), '快照�
 assert.ok(trigger.includes("button.dataset.pmmSnapshotTrigger = 'true'"), '快照入口没有稳定的顶层事件标记');
 assert.ok(!trigger.includes("button.addEventListener('click', openOverlay)"), '入口不应依赖 Vue 重绘后会丢失的单按钮监听');
 
+const homeOnly = section('function normalPresetContainer()', 'function nativeSaveButton()');
+assert.ok(homeOnly.includes("DOC.getElementById('pmm-preset-regex-transfer-overlay')"), '打开正则管理器后仍可能显示快照入口');
+assert.ok(homeOnly.includes("root.classList.contains('pmm-worldbook-mode')"), '进入世界书后仍可能显示快照入口');
+assert.ok(homeOnly.includes(".side-panel-root .panel-btn.panel-btn--active"), '进入缝合、分支、收藏或正则后仍可能显示快照入口');
+assert.ok(!homeOnly.includes("DOC?.querySelector?.('#preset-manager-main-panel .title-actions')"), '主页面定位失败后不应回退到其他模式的标题栏');
+
 const delegatedClick = section('function handleDocumentClick(event)', 'function installStyle()');
 assert.ok(delegatedClick.includes("closest?.('[data-pmm-snapshot-trigger]')"), '没有由顶层委托监听快照入口');
 assert.ok(delegatedClick.includes('openOverlay();'), '顶层点击没有打开快照面板');
@@ -77,4 +83,4 @@ assert.ok(overlay.includes('pmm-switch-snapshot-menu'), '更多操作没有展�
 assert.ok(source.includes('@media (max-width:768px)'), '快照面板缺少手机端底部弹层布局');
 assert.ok(source.includes('快照只保存开关；正文、分组、顺序和条目本身不会变化。'), '快照面板没有说明其不会改变正文或排序');
 
-console.log('test.47 回归通过：快照入口由顶层稳定委托处理，放在导入左侧，名称使用工坊内输入框，更多操作收进菜单。');
+console.log('test.47 回归通过：快照入口只在主预设首页稳定挂载，放在导入左侧，名称使用工坊内输入框。');
