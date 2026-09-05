@@ -12858,6 +12858,9 @@ html.pmm-dnd-compat-active #preset-manager-main-panel{user-select:none!important
       if (parsed && Array.isArray(parsed.snapshots)) {
         return {
           version: 1,
+          activeSnapshots: parsed.activeSnapshots && typeof parsed.activeSnapshots === 'object'
+            ? { ...parsed.activeSnapshots }
+            : {},
           snapshots: parsed.snapshots
             .filter(snapshot => snapshot && typeof snapshot === 'object' && Array.isArray(snapshot.states))
             .map(snapshot => ({
@@ -12872,12 +12875,16 @@ html.pmm-dnd-compat-active #preset-manager-main-panel{user-select:none!important
     } catch (error) {
       console.warn('[预设工坊·开关快照] 读取失败', error);
     }
-    return { version: 1, snapshots: [] };
+    return { version: 1, activeSnapshots: {}, snapshots: [] };
   }
 
   function writeStore(store) {
     try {
-      TOP.localStorage?.setItem(STORAGE_KEY, JSON.stringify({ version: 1, snapshots: store.snapshots }));
+      TOP.localStorage?.setItem(STORAGE_KEY, JSON.stringify({
+        version: 1,
+        activeSnapshots: store.activeSnapshots && typeof store.activeSnapshots === 'object' ? store.activeSnapshots : {},
+        snapshots: store.snapshots,
+      }));
       return true;
     } catch (error) {
       console.error('[预设工坊·开关快照] 保存失败', error);
@@ -13041,11 +13048,45 @@ html.pmm-dnd-compat-active #preset-manager-main-panel{user-select:none!important
       });
   }
 
+  function activeSnapshotForPreset(presetName, store = readStore()) {
+    const id = text(store.activeSnapshots?.[text(presetName)]);
+    if (!id) return null;
+    return store.snapshots.find(snapshot => (
+      snapshot.id === id
+      && text(snapshot.presetName) === text(presetName)
+      && !isDefaultSnapshot(snapshot)
+    )) || null;
+  }
+
+  function activeSnapshotForCurrentPreset() {
+    return activeSnapshotForPreset(currentPresetName());
+  }
+
+  function setActiveSnapshot(presetName, snapshotId = '') {
+    const name = text(presetName);
+    if (!name) return false;
+    const store = readStore();
+    store.activeSnapshots = store.activeSnapshots && typeof store.activeSnapshots === 'object'
+      ? { ...store.activeSnapshots }
+      : {};
+    if (snapshotId) store.activeSnapshots[name] = text(snapshotId);
+    else delete store.activeSnapshots[name];
+    return writeStore(store);
+  }
+
+  function blockWhileSnapshotActive(actionLabel) {
+    const active = activeSnapshotForCurrentPreset();
+    if (!active) return false;
+    notify('warning', `当前正应用“${active.name}”快照，请先恢复预设默认后再${actionLabel}`);
+    return true;
+  }
+
   function saveDefaultSnapshot() {
     if (isBranchMode()) {
       notify('warning', '预设默认只记录主预设；请先退出分支模式');
       return false;
     }
+    if (blockWhileSnapshotActive('更新预设默认')) return false;
     const presetName = currentPresetName();
     const prompts = getPrompts(presetName);
     if (!presetName || !prompts.length) {
@@ -13097,6 +13138,7 @@ html.pmm-dnd-compat-active #preset-manager-main-panel{user-select:none!important
       notify('warning', '开关快照只记录主预设；请先退出分支模式');
       return;
     }
+    if (blockWhileSnapshotActive('新建快照')) return false;
     const presetName = currentPresetName();
     const prompts = Array.isArray(promptsOverride) ? clone(promptsOverride) : getPrompts(presetName);
     if (!presetName || !prompts.length) {
@@ -13263,6 +13305,7 @@ html.pmm-dnd-compat-active #preset-manager-main-panel{user-select:none!important
           ? `已应用“${snapshot.name}”：${applied} 个条目开关${groupSummary}，${missingTotal} 个未找到`
           : `已应用“${snapshot.name}”的 ${applied} 个条目开关${groupSummary}`);
       }
+      setActiveSnapshot(presetName, isDefaultSnapshot(snapshot) ? '' : snapshot.id);
       renderOverlay();
     } catch (error) {
       console.error('[预设工坊·开关快照] 应用失败', error);
@@ -13289,6 +13332,7 @@ html.pmm-dnd-compat-active #preset-manager-main-panel{user-select:none!important
       notify('warning', '开关快照只记录主预设；请先退出分支模式');
       return;
     }
+    if (blockWhileSnapshotActive('覆盖快照')) return;
     const store = readStore();
     const snapshot = store.snapshots.find(item => item.id === id);
     const presetName = currentPresetName();
@@ -13337,6 +13381,11 @@ html.pmm-dnd-compat-active #preset-manager-main-panel{user-select:none!important
     const store = readStore();
     const snapshot = store.snapshots.find(item => item.id === id);
     if (!snapshot) return;
+    const active = activeSnapshotForPreset(snapshot.presetName, store);
+    if (active?.id === snapshot.id) {
+      notify('warning', `当前正应用“${snapshot.name}”快照，请先恢复预设默认后再删除`);
+      return;
+    }
     store.snapshots = store.snapshots.filter(item => item.id !== id);
     if (writeStore(store)) {
       notify('success', `已删除“${snapshot.name}”`);
@@ -13409,6 +13458,7 @@ html.pmm-dnd-compat-active #preset-manager-main-panel{user-select:none!important
 
   function enterCaptureMode() {
     const presetName = currentPresetName();
+    if (blockWhileSnapshotActive('新建快照')) return;
     if (!presetName || !defaultSnapshotForCurrentPreset()) {
       notify('warning', '请先保存预设默认');
       return;
@@ -13540,9 +13590,11 @@ html.pmm-dnd-compat-active #preset-manager-main-panel{user-select:none!important
     const character = currentCharacter();
     const defaultSnapshot = defaultSnapshotForCurrentPreset();
     const snapshots = snapshotsForCurrentPreset();
+    const activeSnapshot = activeSnapshotForCurrentPreset();
     const composerGroupCount = composer ? makeGroupStates(presetName).length : 0;
     const rows = snapshots.length ? snapshots.map(snapshot => {
       const groupCount = Array.isArray(snapshot.groupStates) ? snapshot.groupStates.length : 0;
+      const isActive = activeSnapshot?.id === snapshot.id;
       const isCurrentCharacter = character && snapshot.character?.key === character.key;
       const characterLabel = snapshot.character?.name
         ? `<span class="pmm-switch-snapshot-role${isCurrentCharacter ? ' is-current' : ''}"><i class="fa-solid fa-user"></i>${escapeHtml(snapshot.character.name)}</span>`
@@ -13555,13 +13607,13 @@ html.pmm-dnd-compat-active #preset-manager-main-panel{user-select:none!important
         <button type="button" data-pmm-snapshot-action="${bindAction}" data-pmm-snapshot-id="${escapeHtml(snapshot.id)}"><i class="fa-solid fa-user-tag"></i>${bindLabel}</button>
         <button type="button" data-pmm-snapshot-action="delete" data-pmm-snapshot-id="${escapeHtml(snapshot.id)}"><i class="fa-solid fa-trash"></i>删除</button>
       </div>` : '';
-      return `<article class="pmm-switch-snapshot-row" data-pmm-snapshot-id="${escapeHtml(snapshot.id)}">
+      return `<article class="pmm-switch-snapshot-row${isActive ? ' is-active' : ''}" data-pmm-snapshot-id="${escapeHtml(snapshot.id)}">
         <div class="pmm-switch-snapshot-copy">
           <div class="pmm-switch-snapshot-name">${escapeHtml(snapshot.name)}${characterLabel}</div>
           <div class="pmm-switch-snapshot-meta">${snapshot.states.length} 条${groupCount ? ` · ${groupCount} 分组` : ''} · ${escapeHtml(formatSavedAt(snapshot.updatedAt || snapshot.createdAt))}</div>
         </div>
         <div class="pmm-switch-snapshot-actions">
-          <button type="button" data-pmm-snapshot-action="apply" data-pmm-snapshot-id="${escapeHtml(snapshot.id)}">应用</button>
+          <button type="button" data-pmm-snapshot-action="apply" data-pmm-snapshot-id="${escapeHtml(snapshot.id)}"${isActive ? ' class="is-current" disabled title="当前正在应用"' : ''}>${isActive ? '当前' : '应用'}</button>
           <div class="pmm-switch-snapshot-menu-wrap">
             <button type="button" class="pmm-switch-snapshot-more" data-pmm-snapshot-action="menu" data-pmm-snapshot-id="${escapeHtml(snapshot.id)}" title="更多操作"><i class="fa-solid fa-ellipsis"></i></button>
             ${menu}
@@ -13571,7 +13623,7 @@ html.pmm-dnd-compat-active #preset-manager-main-panel{user-select:none!important
     }).join('') : `<div class="pmm-switch-snapshot-empty"><i class="fa-solid fa-camera"></i><span>还没有角色开关快照</span><small>先保存预设默认，再为不同角色建立快照。</small></div>`;
     const defaultMarkup = defaultSnapshot ? `<section class="pmm-switch-snapshot-default is-saved">
       <div class="pmm-switch-snapshot-default-copy"><div><i class="fa-solid fa-house"></i>预设默认</div><small>${defaultSnapshot.states.length} 条${Array.isArray(defaultSnapshot.groupStates) && defaultSnapshot.groupStates.length ? ` · ${defaultSnapshot.groupStates.length} 分组` : ''} · ${escapeHtml(formatSavedAt(defaultSnapshot.updatedAt || defaultSnapshot.createdAt))}</small></div>
-      <div class="pmm-switch-snapshot-default-actions"><button type="button" data-pmm-snapshot-action="apply-default" data-pmm-snapshot-id="${escapeHtml(defaultSnapshot.id)}"><i class="fa-solid fa-rotate-left"></i>恢复默认</button><button type="button" data-pmm-snapshot-action="update-default" title="用当前开关更新默认"><i class="fa-solid fa-rotate"></i>更新默认</button></div>
+      <div class="pmm-switch-snapshot-default-actions"><button type="button" data-pmm-snapshot-action="apply-default" data-pmm-snapshot-id="${escapeHtml(defaultSnapshot.id)}"><i class="fa-solid fa-rotate-left"></i>恢复默认</button><button type="button" data-pmm-snapshot-action="update-default" title="${activeSnapshot ? '请先恢复预设默认' : '用当前开关更新默认'}"${activeSnapshot ? ' disabled' : ''}><i class="fa-solid fa-rotate"></i>更新默认</button></div>
     </section>` : `<section class="pmm-switch-snapshot-default is-empty">
       <div class="pmm-switch-snapshot-default-copy"><div><i class="fa-solid fa-house"></i>还没有预设默认</div><small>请先保存当前原始开关；以后可一键恢复。</small></div>
       <button type="button" data-pmm-snapshot-action="save-default"><i class="fa-solid fa-bookmark"></i>保存当前为默认</button>
@@ -13850,6 +13902,7 @@ html.pmm-dnd-compat-active #preset-manager-main-panel{user-select:none!important
       .pmm-switch-snapshot-create{padding:12px 18px!important;border-bottom:1px solid var(--pm-border,var(--SmartThemeBorderColor,rgba(148,163,184,.20)))!important}.pmm-switch-snapshot-create button,.pmm-switch-snapshot-actions>button:first-child{border:1px solid color-mix(in srgb,var(--pm-quote-color,var(--SmartThemeQuoteColor,#6b7db2)) 60%,transparent)!important;background:color-mix(in srgb,var(--pm-quote-color,var(--SmartThemeQuoteColor,#6b7db2)) 18%,transparent)!important;color:inherit!important;cursor:pointer!important;font:inherit!important;border-radius:8px!important}.pmm-switch-snapshot-create button{width:100%!important;min-height:36px!important;font-size:12px!important;font-weight:600!important}.pmm-switch-snapshot-create button i{margin-right:7px!important}
       .pmm-switch-snapshot-list{min-height:80px!important;max-height:420px!important;overflow:auto!important;padding:8px!important}.pmm-switch-snapshot-row{display:flex!important;align-items:center!important;gap:12px!important;padding:10px!important;border-radius:10px!important}.pmm-switch-snapshot-row:hover{background:rgba(127,127,127,.08)!important}.pmm-switch-snapshot-copy{min-width:0!important;flex:1 1 auto!important}.pmm-switch-snapshot-name{display:flex!important;align-items:center!important;gap:7px!important;min-width:0!important;overflow:hidden!important;text-overflow:ellipsis!important;white-space:nowrap!important;font-size:13px!important;font-weight:600!important}.pmm-switch-snapshot-meta{margin-top:4px!important;font-size:10px!important;opacity:.58!important}.pmm-switch-snapshot-role{display:inline-flex!important;align-items:center!important;gap:4px!important;flex:0 0 auto!important;padding:2px 6px!important;border-radius:999px!important;background:rgba(127,127,127,.11)!important;font-size:9px!important;font-weight:500!important;opacity:.78!important}.pmm-switch-snapshot-role.is-current{color:var(--pm-quote-color,var(--SmartThemeQuoteColor,#7c93ce))!important;opacity:1!important}
       .pmm-switch-snapshot-actions{display:flex!important;align-items:center!important;gap:3px!important;flex:0 0 auto!important}.pmm-switch-snapshot-actions>button:first-child{min-width:42px!important;height:28px!important;padding:0 8px!important;font-size:11px!important}.pmm-switch-snapshot-more{width:25px!important;height:28px!important;font-size:10px!important;opacity:.58!important}.pmm-switch-snapshot-menu-wrap{position:relative!important}.pmm-switch-snapshot-menu{position:absolute!important;z-index:2!important;top:calc(100% + 4px)!important;right:0!important;display:flex!important;flex-direction:column!important;min-width:142px!important;padding:5px!important;border:1px solid var(--pm-border,var(--SmartThemeBorderColor,rgba(148,163,184,.32)))!important;border-radius:9px!important;background:var(--pm-card-bg,var(--SmartThemeBlurTintColor,#232630))!important;box-shadow:0 10px 24px rgba(0,0,0,.28)!important}.pmm-switch-snapshot-menu--pending{visibility:hidden!important}.pmm-switch-snapshot-menu button{display:flex!important;align-items:center!important;gap:7px!important;min-height:29px!important;padding:0 8px!important;border:0!important;border-radius:6px!important;background:transparent!important;color:inherit!important;text-align:left!important;font:inherit!important;font-size:11px!important;cursor:pointer!important}.pmm-switch-snapshot-menu button:hover{background:rgba(127,127,127,.12)!important}.pmm-switch-snapshot-menu button i{width:11px!important;opacity:.65!important}.pmm-switch-snapshot-composer{padding:13px 18px!important;border-bottom:1px solid var(--pm-border,var(--SmartThemeBorderColor,rgba(148,163,184,.20)))!important}.pmm-switch-snapshot-composer label{display:block!important;margin-bottom:7px!important;font-size:11px!important;font-weight:600!important}.pmm-switch-snapshot-composer input{box-sizing:border-box!important;width:100%!important;height:35px!important;padding:0 10px!important;border:1px solid var(--pm-border,var(--SmartThemeBorderColor,rgba(148,163,184,.38)))!important;border-radius:8px!important;background:rgba(127,127,127,.08)!important;color:inherit!important;font:inherit!important;font-size:12px!important;outline:none!important}.pmm-switch-snapshot-composer input:focus{border-color:var(--pm-quote-color,var(--SmartThemeQuoteColor,#6b7db2))!important}.pmm-switch-snapshot-composer p{margin:7px 0 10px!important;font-size:10px!important;opacity:.6!important}.pmm-switch-snapshot-composer-actions{display:flex!important;justify-content:flex-end!important;gap:7px!important}.pmm-switch-snapshot-composer-actions button{min-height:30px!important;padding:0 11px!important;border:1px solid var(--pm-border,var(--SmartThemeBorderColor,rgba(148,163,184,.32)))!important;border-radius:7px!important;background:rgba(127,127,127,.08)!important;color:inherit!important;font:inherit!important;font-size:11px!important;cursor:pointer!important}.pmm-switch-snapshot-composer-actions button:last-child{border-color:color-mix(in srgb,var(--pm-quote-color,var(--SmartThemeQuoteColor,#6b7db2)) 60%,transparent)!important;background:color-mix(in srgb,var(--pm-quote-color,var(--SmartThemeQuoteColor,#6b7db2)) 18%,transparent)!important}.pmm-switch-snapshot-composer-actions i{margin-right:5px!important}.pmm-switch-snapshot-empty{min-height:150px!important;display:flex!important;flex-direction:column!important;align-items:center!important;justify-content:center!important;gap:8px!important;text-align:center!important;font-size:12px!important;opacity:.72!important}.pmm-switch-snapshot-empty i{font-size:22px!important;opacity:.55!important}.pmm-switch-snapshot-empty small{max-width:250px!important;font-size:10px!important;line-height:1.5!important;opacity:.72!important}.pmm-switch-snapshot-dialog footer{padding:11px 18px!important;border-top:1px solid var(--pm-border,var(--SmartThemeBorderColor,rgba(148,163,184,.20)))!important;font-size:10px!important;line-height:1.45!important;opacity:.55!important}
+      .pmm-switch-snapshot-row.is-active{background:color-mix(in srgb,var(--pm-quote-color,var(--SmartThemeQuoteColor,#6b7db2)) 7%,transparent)!important}.pmm-switch-snapshot-actions>button.is-current:disabled,.pmm-switch-snapshot-default-actions>button:disabled{cursor:default!important;pointer-events:none!important;border-color:rgba(148,163,184,.20)!important;background:rgba(127,127,127,.07)!important;color:inherit!important;opacity:.48!important}
       @media (max-width:768px){.pmm-switch-snapshot-overlay{align-items:flex-end!important;padding:8px!important}.pmm-switch-snapshot-dialog{max-height:min(650px,calc(100dvh - 16px))!important;border-radius:17px!important}.pmm-switch-snapshot-head{padding:15px 15px 12px!important}#preset-manager-main-panel .pm-panel-container.pmm-switch-snapshot-capture-mode{outline-offset:1px!important}.pmm-switch-snapshot-first-default{padding:29px 20px 24px!important}.pmm-switch-snapshot-save-capture{padding:19px 15px 15px!important}.pmm-switch-snapshot-default{padding:10px 15px!important;gap:8px!important}.pmm-switch-snapshot-default>button,.pmm-switch-snapshot-default-actions>button:first-child{padding:0 8px!important}.pmm-switch-snapshot-create{padding:10px 15px!important}.pmm-switch-snapshot-list{max-height:390px!important;padding:6px!important}.pmm-switch-snapshot-row{padding:10px 8px!important;gap:7px!important}.pmm-switch-snapshot-actions{gap:1px!important}.pmm-switch-snapshot-more{width:23px!important}.pmm-switch-snapshot-dialog footer{padding:10px 15px!important}}
     `;
     DOC.head.appendChild(style);
@@ -13892,7 +13945,7 @@ html.pmm-dnd-compat-active #preset-manager-main-panel{user-select:none!important
     },
   };
   install();
-  console.info('[预设工坊] test.122 已加载：应用快照与恢复默认不再写入普通编辑撤销栈。');
+  console.info('[预设工坊] test.123 已加载：角色快照标记为当前，恢复默认前阻止快照套快照。');
 })();
 
 /* ===== PMM_THEMED_COMPARE_DRAG_LINE_V289：差异边框与原版主题落点线叠加 ===== */

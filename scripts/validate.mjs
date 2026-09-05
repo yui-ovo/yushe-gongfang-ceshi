@@ -28,7 +28,7 @@ if (workshop.length < 1_000_000 || !workshop.includes('V2.94 已加载')) {
   throw new Error(`v3.02 业务入口不完整：${workshop.length} 字符`);
 }
 
-if (!entry.includes('workshop-v3.22.js') || !entry.includes('worldbook-stitch-test3.js') || !entry.includes("const EXTENSION_VERSION = '3.22.0-test.122'")) {
+if (!entry.includes('workshop-v3.22.js') || !entry.includes('worldbook-stitch-test3.js') || !entry.includes("const EXTENSION_VERSION = '3.22.0-test.123'")) {
   throw new Error('扩展启动器没有指向 v3.02');
 }
 
