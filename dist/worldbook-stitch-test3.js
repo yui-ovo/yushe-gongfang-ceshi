@@ -1606,6 +1606,17 @@
     return state.worldNames.map(name => `<option value="${h(name)}"${name === side.name ? ' selected' : ''}>${h(name)}</option>`).join('');
   }
 
+  function worldSourceTitleMarkup(sideName, side) {
+    const row = `<span class="pmm-wb-title-row">
+      <select class="title-select pmm-wb-source-select" data-wb-action="select-source" data-wb-side="${sideName}" aria-label="选择世界书">${sourceOptions(side)}</select>
+      <button class="pmm-preset-search-btn pmm-wb-source-action" data-wb-action="source-picker" data-wb-side="${sideName}" title="搜索世界书"><i class="fa-solid fa-magnifying-glass"></i></button>
+      <button class="pmm-wb-source-action" data-wb-action="rename-source" data-wb-side="${sideName}" title="重命名世界书"><i class="fa-solid fa-pencil"></i></button>
+    </span>`;
+    return sideName === 'top'
+      ? `<div class="header-card title-card title-card--interactive pmm-wb-title-card">${row}</div>`
+      : row;
+  }
+
   function searchScopeButton(sideName, side, scope, label) {
     return `<button type="button" class="${worldSearchScope(side.searchScope) === scope ? 'is-active' : ''}" data-wb-action="search-scope" data-wb-side="${sideName}" data-wb-search-scope="${scope}" title="${label}">${label}</button>`;
   }
@@ -1636,12 +1647,8 @@
     return `<section class="preset-panel pmm-wb-inline-panel" data-pmm-wb-panel="${sideName}">
       <div class="pmm-wb-main-content">
         <header class="pmm-wb-header">
-          <div class="pmm-wb-header-left">
-            <span class="pmm-wb-title-row">
-              <select class="title-select pmm-wb-source-select" data-wb-action="select-source" data-wb-side="${sideName}" aria-label="选择世界书">${sourceOptions(side)}</select>
-              <button class="pmm-preset-search-btn pmm-wb-source-action" data-wb-action="source-picker" data-wb-side="${sideName}" title="搜索世界书"><i class="fa-solid fa-magnifying-glass"></i></button>
-              <button class="pmm-wb-source-action" data-wb-action="rename-source" data-wb-side="${sideName}" title="重命名世界书"><i class="fa-solid fa-pencil"></i></button>
-            </span>
+          <div class="pmm-wb-header-left${sideName === 'top' ? ' header-left' : ''}">
+            ${worldSourceTitleMarkup(sideName, side)}
           </div>
           <div class="pmm-wb-header-right">
              <span class="pmm-wb-status">${h(state.status)}</span>
@@ -2659,7 +2666,7 @@
 #preset-manager-main-panel .pmm-wb-inline-panel[data-pmm-wb-keyboard-shift]{transform:translateY(var(--pmm-wb-keyboard-shift,0px))!important;transition:transform .16s ease!important;z-index:16010!important}
 .pmm-wb-main-content{width:100%;height:100%;min-height:0;display:flex;flex-direction:column;overflow:hidden}
 .pmm-wb-header{height:46px;min-height:46px;display:flex;align-items:center;justify-content:space-between;gap:5px;padding:5px 7px;border-bottom:1px solid var(--pm-border,rgba(127,127,127,.12));background:var(--pm-toolbar-bg,transparent)}
-.pmm-wb-header-left,.pmm-wb-header-right,.pmm-wb-title-row{display:flex;align-items:center;gap:3px;min-width:0}.pmm-wb-header-left{flex:1 1 auto}.pmm-wb-header-left>.pmm-wb-title-row{width:100%;flex:1 1 auto}.pmm-wb-header-right{flex:0 0 auto}
+.pmm-wb-header-left,.pmm-wb-header-right,.pmm-wb-title-row{display:flex;align-items:center;gap:3px;min-width:0}.pmm-wb-header-left{flex:1 1 auto}.pmm-wb-header-left>.pmm-wb-title-row,.pmm-wb-header-left>.pmm-wb-title-card,.pmm-wb-title-card>.pmm-wb-title-row{width:100%;min-width:0;flex:1 1 auto}.pmm-wb-header-right{flex:0 0 auto}
 .pmm-wb-source-select{width:auto!important;min-width:0!important;max-width:none!important;flex:1 1 auto!important}.pmm-wb-source-action{width:25px;height:25px;min-width:25px;padding:0;border:0;border-radius:5px;background:transparent;color:var(--pm-text-secondary,currentColor);display:inline-flex;align-items:center;justify-content:center;opacity:.68}.pmm-wb-source-action i{font-size:9px}.pmm-wb-source-action:active{transform:scale(.94)}.pmm-wb-kind-switch{display:inline-flex;align-items:center;gap:1px;padding:2px;border-radius:7px;background:color-mix(in srgb,currentColor 6%,transparent)}
 .pmm-wb-kind-switch button{width:25px;height:23px;padding:0;border:0;border-radius:5px;background:transparent;color:var(--pm-text-secondary,currentColor);opacity:.62;display:inline-flex;align-items:center;justify-content:center}.pmm-wb-kind-switch button.is-active{background:var(--pm-quote-color,#3b82f6);color:#fff;opacity:1}.pmm-wb-kind-switch button:active{transform:scale(.94)}.pmm-wb-kind-switch i{font-size:10px}
 #preset-manager-main-panel .pmm-wb-kind-switch--toolbar button.is-active,#preset-manager-main-panel .pmm-wb-kind-switch--toolbar button.is-active>i,#preset-manager-main-panel .pmm-wb-kind-switch--toolbar button.is-active>i::before{color:#fff!important;opacity:1!important;-webkit-text-fill-color:#fff!important}#preset-manager-main-panel .pmm-wb-kind-switch--toolbar button[data-wb-kind="world"].is-active>i{filter:drop-shadow(0 1px 1px rgba(0,0,0,.26))}
