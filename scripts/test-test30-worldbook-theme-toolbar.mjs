@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
 const worldbook = await readFile(new URL('../dist/worldbook-stitch-test3.js', import.meta.url), 'utf8');
-const workshop = await readFile(new URL('../dist/workshop-v3.15.js', import.meta.url), 'utf8');
+const workshop = await readFile(new URL('../dist/workshop-v3.16.js', import.meta.url), 'utf8');
 
 for (const marker of [
   'function themeToolbarSlotMarkup()',

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
-const workshop = await readFile(new URL('../dist/workshop-v3.15.js', import.meta.url), 'utf8');
+const workshop = await readFile(new URL('../dist/workshop-v3.16.js', import.meta.url), 'utf8');
 const worldbook = await readFile(new URL('../dist/worldbook-stitch-test3.js', import.meta.url), 'utf8');
 
 assert.ok(worldbook.includes('data-pmm-wb-panel="${sideName}"'), '世界书卡片缺少上下位置标记');
@@ -30,6 +30,8 @@ assert.ok(workshop.includes("root.style.setProperty('--pmm-primary-title-viewpor
 assert.ok(presetOuterCss.includes('flex:0 0 var(--pmm-title-viewport-width,150px)'), '原生预设外层标题视窗没有固定');
 assert.ok(presetOuterCss.includes('width:var(--pmm-title-viewport-width,150px)'), '原生预设外层标题宽度不是统一固定值');
 assert.ok(!presetOuterCss.includes('--pmm-user-preset-width-offset'), '预设滑杆仍会改变外层标题框');
+assert.ok(presetCss.includes('.pm-header > .header-right'), '预设标题右侧按钮组没有独立占满剩余空间');
+assert.ok(presetCss.includes('justify-content:space-evenly!important'), '预设标题右侧按钮没有按屏宽平均分布');
 assert.ok(presetCss.includes('.pmm-mobile-layout-enabled.pmm-layout-custom-preset-width'), '手动调节预设名称长度后没有切换为固定宽度');
 assert.ok(presetCss.includes('width:calc(100% + var(--pmm-title-overflow-actions-width))'), '导入导出没有留在标题横划区');
 assert.ok(presetCss.includes('width:calc(100% - var(--pmm-title-overflow-actions-width))'), '首屏名称行没有与导入导出横划区分离');
@@ -48,6 +50,7 @@ assert.ok(presetCss.includes('.pmm-wb-inline-panel[data-pmm-wb-panel="top"] .pmm
 assert.ok(presetCss.includes('var(--pmm-primary-title-viewport-width,150px)'), '上方世界书没有复用上方预设的外层宽度');
 assert.ok(worldbookOuterCss.includes('flex:0 0 var(--pmm-primary-title-viewport-width,150px)'), '上方世界书外层标题视窗没有固定');
 assert.ok(!worldbookOuterCss.includes('--pmm-user-preset-width-offset'), '预设滑杆仍会改变上方世界书外层框');
+assert.ok(presetCss.includes('.pmm-wb-inline-panel[data-pmm-wb-panel="top"] .pmm-wb-header-right'), '上方世界书右侧按钮组没有平均分布作用域');
 assert.ok(presetCss.includes('.pmm-wb-inline-panel[data-pmm-wb-panel="top"] .pmm-wb-title-card'), '上方世界书标题外框没有承接内部横向滚动');
 assert.ok(presetCss.includes('.pmm-wb-inline-panel[data-pmm-wb-panel="top"] .pmm-wb-source-select'), '上方世界书名称框没有响应预设名称滑杆');
 assert.ok(presetCss.includes('.pmm-worldbook-mode.pmm-layout-custom-preset-width'), '手动调节后上方世界书没有跟随固定宽度模式');
@@ -59,4 +62,4 @@ assert.ok(!worldbook.includes('.title-action-btn[title^="导入"]'), '世界书�
 assert.ok(!worldbook.includes('.title-action-btn[title^="导出"]'), '世界书混合模式仍会彻底隐藏预设导出按钮');
 assert.ok(worldbook.includes('button[title="取消当前预设全部分组"]{display:none!important}'), '世界书模式误恢复了不适用的清空分组按钮');
 
-console.log('test.56 世界书标题宽度作用域通过：外框固定，默认铅笔可见，自定义只改变内部名称框。');
+console.log('test.56 世界书标题宽度作用域通过：外框固定，默认铅笔可见，右侧按钮按屏宽平均分布。');
