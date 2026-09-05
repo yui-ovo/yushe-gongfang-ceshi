@@ -13243,7 +13243,7 @@ html.pmm-dnd-compat-active #preset-manager-main-panel{user-select:none!important
 
     try {
       const draftUpdated = changed > 0
-        ? await writeSwitchesToDraft(nextPrompts, `应用开关快照：${snapshot.name}`)
+        ? await writeSwitchesToDraft(nextPrompts, `应用开关快照：${snapshot.name}`, false)
         : !!currentDraftBridge();
       const notifiedByNativeSave = changed > 0
         ? await saveAppliedDraft(presetName, nextPrompts, draftUpdated)
@@ -13892,7 +13892,7 @@ html.pmm-dnd-compat-active #preset-manager-main-panel{user-select:none!important
     },
   };
   install();
-  console.info('[预设工坊] test.121 已加载：开关快照会同时保存、应用并回滚柏宝箱独立分组开关。');
+  console.info('[预设工坊] test.122 已加载：应用快照与恢复默认不再写入普通编辑撤销栈。');
 })();
 
 /* ===== PMM_THEMED_COMPARE_DRAG_LINE_V289：差异边框与原版主题落点线叠加 ===== */
