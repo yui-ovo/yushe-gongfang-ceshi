@@ -60,6 +60,6 @@ assert.ok(trigger.includes("host.querySelector('[title=\"导入\"]')"), '快照�
 assert.ok(trigger.includes('host.insertBefore(button, importButton)'), '快照入口没有放在导入／导出的左边');
 
 assert.ok(source.includes('@media (max-width:768px)'), '快照面板缺少手机端底部弹层布局');
-assert.ok(source.includes('快照只保存开关；正文、分组、顺序和条目本身不会变化。'), '快照面板没有说明其不会改变正文或排序');
+assert.ok(source.includes('快照保存条目开关与柏宝箱分组总开关；正文、分组结构、顺序和条目本身不会变化。'), '快照面板没有说明其只保存开关且不会改变正文或排序');
 
 console.log('test.46 回归通过：完整开关快照支持多份命名、UID 优先匹配、名称安全兜底、当前预设即时应用、角色绑定与分支隔离。');

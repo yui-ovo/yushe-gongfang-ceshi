@@ -12611,6 +12611,7 @@ html.pmm-dnd-compat-active #preset-manager-main-panel{user-select:none!important
   }
 
   async function syncGroupEnabledState({presetName='',sectionId='',enabled=true}={}){
+    if(compat.__suspendGroupPowerSync===true)return true;
     const resolvedPreset=resolveNativePresetName(presetName);
     const rawSectionId=text(sectionId);
     const groupId=rawSectionId.startsWith('baibai_')?rawSectionId.slice(7):rawSectionId;
@@ -12627,6 +12628,60 @@ html.pmm-dnd-compat-active #preset-manager-main-panel{user-select:none!important
     finally{delete compat.__nextSuccessMessage}
   }
 
+  function readGroupEnabledStates(presetName=''){
+    const resolvedPreset=resolveNativePresetName(presetName);
+    if(!resolvedPreset)return[];
+    const state=readNativeState(getPresetManager(),resolvedPreset);
+    if(!state)return[];
+    return (state.groups||[]).map(group=>({
+      id:text(group?.id),
+      name:text(group?.name??group?.title),
+      enabled:group?.enabled!==false,
+    })).filter(group=>group.id)
+  }
+
+  async function syncGroupEnabledStates({presetName='',states=[]}={}){
+    const resolvedPreset=resolveNativePresetName(presetName);
+    const requested=Array.isArray(states)?states.filter(state=>state&&typeof state==='object'):[];
+    if(!resolvedPreset||!requested.length)return{applied:0,changed:0,missing:requested.length};
+    const manager=getPresetManager();
+    const state=readNativeState(manager,resolvedPreset);
+    if(!state)return{applied:0,changed:0,missing:requested.length};
+
+    const requestedById=new Map(requested.filter(item=>text(item?.id)).map(item=>[text(item.id),item]));
+    const requestedNameCounts=new Map;
+    const currentNameCounts=new Map;
+    for(const item of requested){
+      const name=text(item?.name);
+      if(name)requestedNameCounts.set(name,(requestedNameCounts.get(name)||0)+1)
+    }
+    for(const group of state.groups||[]){
+      const name=text(group?.name??group?.title);
+      if(name)currentNameCounts.set(name,(currentNameCounts.get(name)||0)+1)
+    }
+    const uniqueRequestedByName=new Map(requested.filter(item=>{
+      const name=text(item?.name);
+      return name&&requestedNameCounts.get(name)===1
+    }).map(item=>[text(item.name),item]));
+
+    let applied=0;
+    let changed=0;
+    for(const group of state.groups||[]){
+      const groupId=text(group?.id);
+      const groupName=text(group?.name??group?.title);
+      const desired=requestedById.get(groupId)
+        ||(groupName&&currentNameCounts.get(groupName)===1?uniqueRequestedByName.get(groupName):null);
+      if(!desired)continue;
+      applied+=1;
+      const enabled=desired.enabled!==false;
+      if((group.enabled!==false)===enabled)continue;
+      group.enabled=enabled;
+      changed+=1
+    }
+    if(changed)await writeNativeState(resolvedPreset,state,{syncMembership:false});
+    return{applied,changed,missing:Math.max(0,requested.length-applied)}
+  }
+
   Object.assign(compat,{
     __branchStateSyncV247:true,
     __groupPowerSyncV250:true,
@@ -12641,6 +12696,8 @@ html.pmm-dnd-compat-active #preset-manager-main-panel{user-select:none!important
     restoreMainState,
     syncEnabledStates,
     syncGroupEnabledState,
+    readGroupEnabledStates,
+    syncGroupEnabledStates,
     nativeStateFromSections,
   });
   try{sharedRoot.__PMM_BAIBAI_COMPAT__=compat}catch(_){ }
@@ -12803,7 +12860,13 @@ html.pmm-dnd-compat-active #preset-manager-main-panel{user-select:none!important
           version: 1,
           snapshots: parsed.snapshots
             .filter(snapshot => snapshot && typeof snapshot === 'object' && Array.isArray(snapshot.states))
-            .map(snapshot => ({ ...snapshot, states: snapshot.states.map(state => ({ ...state })) })),
+            .map(snapshot => ({
+              ...snapshot,
+              states: snapshot.states.map(state => ({ ...state })),
+              ...(Array.isArray(snapshot.groupStates)
+                ? { groupStates: snapshot.groupStates.map(state => ({ ...state })) }
+                : {}),
+            })),
         };
       }
     } catch (error) {
@@ -12831,6 +12894,123 @@ html.pmm-dnd-compat-active #preset-manager-main-panel{user-select:none!important
         name: text(prompt.name || prompt.id),
         enabled: prompt.enabled === true,
       }));
+  }
+
+  function baiBaiCompat() {
+    try { return TOP.__PMM_BAIBAI_COMPAT__ || SELF.__PMM_BAIBAI_COMPAT__ || null; }
+    catch (_) { return null; }
+  }
+
+  function sectionGroupStore() {
+    const root = DOC?.querySelector?.('#preset-manager-main-panel');
+    const app = root?.__vue_app__;
+    const provides = app?._context?.provides || root?.__vueParentComponent?.appContext?.provides;
+    if (!provides) return null;
+    for (const key of Reflect.ownKeys(provides)) {
+      const candidate = provides[key];
+      if (!(candidate?._s instanceof Map)) continue;
+      const direct = candidate._s.get('sectionGroup');
+      if (direct?.getPanelState && direct?.toggleSectionDisabled) return direct;
+      for (const store of candidate._s.values()) {
+        if (store?.getPanelState && store?.toggleSectionDisabled) return store;
+      }
+    }
+    return null;
+  }
+
+  function workshopGroupStates(presetName) {
+    const store = sectionGroupStore();
+    let panelState = null;
+    try { panelState = store?.getPanelState?.(presetName) || null; }
+    catch (_) {}
+    const sections = Array.isArray(panelState?.sections) ? panelState.sections : [];
+    const disabled = new Set(panelState?.disabledSections || []);
+    return sections
+      .filter(section => text(section?.id).startsWith('baibai_'))
+      .map(section => ({
+        id: text(section.id).slice('baibai_'.length),
+        sectionId: text(section.id),
+        name: text(section.displayName),
+        enabled: !disabled.has(text(section.id)),
+      }))
+      .filter(group => group.id);
+  }
+
+  function makeGroupStates(presetName) {
+    const workshop = workshopGroupStates(presetName);
+    if (workshop.length) return workshop.map(({ id, name, enabled }) => ({ id, name, enabled }));
+    try {
+      const native = baiBaiCompat()?.readGroupEnabledStates?.(presetName);
+      return Array.isArray(native)
+        ? native.map(group => ({ id: text(group?.id), name: text(group?.name), enabled: group?.enabled !== false })).filter(group => group.id)
+        : [];
+    } catch (_) { return []; }
+  }
+
+  function matchGroupStates(currentStates, savedStates) {
+    const requested = Array.isArray(savedStates) ? savedStates.filter(state => state && typeof state === 'object') : [];
+    const requestedById = new Map(requested.filter(state => text(state.id)).map(state => [text(state.id), state]));
+    const requestedNameCounts = new Map();
+    const currentNameCounts = new Map();
+    for (const state of requested) {
+      const name = text(state.name);
+      if (name) requestedNameCounts.set(name, (requestedNameCounts.get(name) || 0) + 1);
+    }
+    for (const state of currentStates) {
+      const name = text(state.name);
+      if (name) currentNameCounts.set(name, (currentNameCounts.get(name) || 0) + 1);
+    }
+    const uniqueRequestedByName = new Map(requested
+      .filter(state => text(state.name) && requestedNameCounts.get(text(state.name)) === 1)
+      .map(state => [text(state.name), state]));
+    return currentStates.map(current => {
+      const name = text(current.name);
+      const saved = requestedById.get(text(current.id))
+        || (name && currentNameCounts.get(name) === 1 ? uniqueRequestedByName.get(name) : null);
+      return saved ? { current, saved } : null;
+    }).filter(Boolean);
+  }
+
+  async function applyGroupSnapshotStates(presetName, savedStates) {
+    if (!Array.isArray(savedStates)) return { supported: false, applied: 0, changed: 0, missing: 0 };
+    const requested = savedStates.filter(state => state && typeof state === 'object');
+    if (!requested.length) return { supported: true, applied: 0, changed: 0, missing: 0 };
+
+    const compat = baiBaiCompat();
+    const store = sectionGroupStore();
+    const workshop = workshopGroupStates(presetName);
+    const matches = matchGroupStates(workshop, requested);
+    let workshopChanged = 0;
+    const previousSuspend = compat?.__suspendGroupPowerSync === true;
+    if (store && matches.length) {
+      if (compat) compat.__suspendGroupPowerSync = true;
+      try {
+        for (const { current, saved } of matches) {
+          const enabled = saved.enabled !== false;
+          if (current.enabled === enabled) continue;
+          await store.toggleSectionDisabled(current.sectionId, null, presetName);
+          workshopChanged += 1;
+        }
+      } finally {
+        if (compat) {
+          if (previousSuspend) compat.__suspendGroupPowerSync = true;
+          else delete compat.__suspendGroupPowerSync;
+        }
+      }
+    }
+
+    let nativeResult = null;
+    if (typeof compat?.syncGroupEnabledStates === 'function') {
+      nativeResult = await compat.syncGroupEnabledStates({ presetName, states: requested });
+    }
+    const applied = Math.max(matches.length, Number(nativeResult?.applied) || 0);
+    const changed = Math.max(workshopChanged, Number(nativeResult?.changed) || 0);
+    return {
+      supported: true,
+      applied,
+      changed,
+      missing: Math.max(0, requested.length - applied),
+    };
   }
 
   function defaultSnapshotName() {
@@ -12873,6 +13053,7 @@ html.pmm-dnd-compat-active #preset-manager-main-panel{user-select:none!important
       return false;
     }
     const now = Date.now();
+    const groupStates = makeGroupStates(presetName);
     const store = readStore();
     const existing = store.snapshots.find(snapshot => (
       text(snapshot.presetName) === presetName && isDefaultSnapshot(snapshot)
@@ -12883,6 +13064,7 @@ html.pmm-dnd-compat-active #preset-manager-main-panel{user-select:none!important
       existing.isDefault = true;
       existing.character = null;
       existing.states = makeStates(prompts);
+      existing.groupStates = groupStates;
       existing.updatedAt = now;
     } else {
       store.snapshots.unshift({
@@ -12892,6 +13074,7 @@ html.pmm-dnd-compat-active #preset-manager-main-panel{user-select:none!important
         isDefault: true,
         presetName,
         states: makeStates(prompts),
+        groupStates,
         character: null,
         createdAt: now,
         updatedAt: now,
@@ -12899,9 +13082,10 @@ html.pmm-dnd-compat-active #preset-manager-main-panel{user-select:none!important
     }
     if (writeStore(store)) {
       openMenuId = '';
+      const groupSuffix = groupStates.length ? `及 ${groupStates.length} 个柏宝箱分组开关` : '';
       notify('success', existing
-        ? `已更新预设默认的 ${prompts.length} 个开关`
-        : `已保存预设默认的 ${prompts.length} 个开关`);
+        ? `已更新预设默认的 ${prompts.length} 个条目开关${groupSuffix}`
+        : `已保存预设默认的 ${prompts.length} 个条目开关${groupSuffix}`);
       renderOverlay();
       return true;
     }
@@ -12923,12 +13107,14 @@ html.pmm-dnd-compat-active #preset-manager-main-panel{user-select:none!important
     if (!name) return;
     const now = Date.now();
     const character = currentCharacter();
+    const groupStates = makeGroupStates(presetName);
     const store = readStore();
     store.snapshots.unshift({
       id: makeId(),
       name,
       presetName,
       states: makeStates(prompts),
+      groupStates,
       character: character ? { ...character } : null,
       createdAt: now,
       updatedAt: now,
@@ -12936,7 +13122,8 @@ html.pmm-dnd-compat-active #preset-manager-main-panel{user-select:none!important
     if (writeStore(store)) {
       composer = null;
       openMenuId = '';
-      notify('success', `已保存“${name}”的 ${prompts.length} 个开关`);
+      const groupSuffix = groupStates.length ? `及 ${groupStates.length} 个柏宝箱分组开关` : '';
+      notify('success', `已保存“${name}”的 ${prompts.length} 个条目开关${groupSuffix}`);
       if (typeof afterSave === 'function') afterSave();
       else renderOverlay();
       return true;
@@ -13047,8 +13234,9 @@ html.pmm-dnd-compat-active #preset-manager-main-panel{user-select:none!important
     }
 
     const { nextPrompts, applied, changed } = mergeSnapshotStates(prompts, snapshot.states);
+    const hasSavedGroups = Array.isArray(snapshot.groupStates) && snapshot.groupStates.length > 0;
 
-    if (!applied) {
+    if (!applied && !hasSavedGroups) {
       notify('warning', '没有能与当前预设对应的快照条目');
       return;
     }
@@ -13060,12 +13248,20 @@ html.pmm-dnd-compat-active #preset-manager-main-panel{user-select:none!important
       const notifiedByNativeSave = changed > 0
         ? await saveAppliedDraft(presetName, nextPrompts, draftUpdated)
         : false;
+      const groupResult = await applyGroupSnapshotStates(presetName, snapshot.groupStates);
+
+      if (!applied && !groupResult.applied) {
+        notify('warning', '没有能与当前预设对应的快照开关');
+        return;
+      }
 
       const missing = Math.max(0, snapshot.states.length - applied);
       if (!notifiedByNativeSave) {
-        notify('success', missing
-          ? `已应用“${snapshot.name}”：${applied} 条，${missing} 条未找到`
-          : `已应用“${snapshot.name}”的 ${applied} 个开关`);
+        const groupSummary = groupResult.applied ? `，${groupResult.applied} 个分组开关` : '';
+        const missingTotal = missing + groupResult.missing;
+        notify('success', missingTotal
+          ? `已应用“${snapshot.name}”：${applied} 个条目开关${groupSummary}，${missingTotal} 个未找到`
+          : `已应用“${snapshot.name}”的 ${applied} 个条目开关${groupSummary}`);
       }
       renderOverlay();
     } catch (error) {
@@ -13099,9 +13295,11 @@ html.pmm-dnd-compat-active #preset-manager-main-panel{user-select:none!important
     const prompts = getPrompts(presetName);
     if (!snapshot || text(snapshot.presetName) !== presetName || !prompts.length) return;
     snapshot.states = makeStates(prompts);
+    snapshot.groupStates = makeGroupStates(presetName);
     snapshot.updatedAt = Date.now();
     if (writeStore(store)) {
-      notify('success', `已用当前 ${prompts.length} 个开关覆盖“${snapshot.name}”`);
+      const groupSuffix = snapshot.groupStates.length ? `及 ${snapshot.groupStates.length} 个柏宝箱分组开关` : '';
+      notify('success', `已用当前 ${prompts.length} 个条目开关${groupSuffix}覆盖“${snapshot.name}”`);
       renderOverlay();
     }
   }
@@ -13199,13 +13397,14 @@ html.pmm-dnd-compat-active #preset-manager-main-panel{user-select:none!important
       const current = getPrompts(session.presetName);
       const { nextPrompts } = mergeSnapshotStates(current, session.entryStates || []);
       const restored = await writeSwitchesToDraft(nextPrompts, '', false);
+      await applyGroupSnapshotStates(session.presetName, session.entryGroupStates);
       if (!restored) notify('warning', '没有找到当前工坊草稿，开关未能自动还原');
     } finally {
       captureMode = null;
       syncCaptureModeUI();
       scheduleMount();
     }
-    if (showNotice) notify('info', '已取消快照，开关已恢复到进入前状态');
+    if (showNotice) notify('info', '已取消快照，条目与分组开关已恢复到进入前状态');
   }
 
   function enterCaptureMode() {
@@ -13220,6 +13419,7 @@ html.pmm-dnd-compat-active #preset-manager-main-panel{user-select:none!important
       return;
     }
     captureMode = { presetName, entryStates: makeStates(prompts), restoring: false };
+    captureMode.entryGroupStates = makeGroupStates(presetName);
     composer = null;
     openMenuId = '';
     closeOverlay();
@@ -13240,7 +13440,7 @@ html.pmm-dnd-compat-active #preset-manager-main-panel{user-select:none!important
       <div class="pmm-switch-snapshot-save-capture">
         <label for="pmm-switch-snapshot-name">保存为</label>
         <input id="pmm-switch-snapshot-name" data-pmm-snapshot-name type="text" maxlength="80" autocomplete="off" value="${escapeHtml(composer?.name || defaultSnapshotName())}" placeholder="例如：悟·日常">
-        <p>会保存当前全部条目的开／关状态；保存后退出快照模式。</p>
+        <p>会保存当前全部条目开关与柏宝箱分组开关；保存后退出快照模式。</p>
         <div class="pmm-switch-snapshot-save-capture-actions"><button type="button" data-pmm-snapshot-action="return-capture">取消</button><button type="button" data-pmm-snapshot-action="save-capture"><i class="fa-solid fa-floppy-disk"></i>保存快照</button></div>
       </div>
     </section>`;
@@ -13281,7 +13481,7 @@ html.pmm-dnd-compat-active #preset-manager-main-panel{user-select:none!important
       <div class="pmm-switch-snapshot-first-default">
         <i class="fa-solid fa-house pmm-switch-snapshot-first-default-icon"></i>
         <h3>保存当前预设为默认？</h3>
-        <p>会冻结当前全部条目的开／关状态，以后可一键恢复；不会修改预设内容。</p>
+        <p>会冻结当前全部条目开关与柏宝箱分组开关，以后可一键恢复；不会修改预设内容。</p>
         <div class="pmm-switch-snapshot-first-default-actions"><button type="button" data-pmm-snapshot-action="cancel-default-onboarding">取消</button><button type="button" data-pmm-snapshot-action="save-default-and-enter"><i class="fa-solid fa-bookmark"></i>保存并进入</button></div>
       </div>
     </section>`;
@@ -13340,7 +13540,9 @@ html.pmm-dnd-compat-active #preset-manager-main-panel{user-select:none!important
     const character = currentCharacter();
     const defaultSnapshot = defaultSnapshotForCurrentPreset();
     const snapshots = snapshotsForCurrentPreset();
+    const composerGroupCount = composer ? makeGroupStates(presetName).length : 0;
     const rows = snapshots.length ? snapshots.map(snapshot => {
+      const groupCount = Array.isArray(snapshot.groupStates) ? snapshot.groupStates.length : 0;
       const isCurrentCharacter = character && snapshot.character?.key === character.key;
       const characterLabel = snapshot.character?.name
         ? `<span class="pmm-switch-snapshot-role${isCurrentCharacter ? ' is-current' : ''}"><i class="fa-solid fa-user"></i>${escapeHtml(snapshot.character.name)}</span>`
@@ -13356,7 +13558,7 @@ html.pmm-dnd-compat-active #preset-manager-main-panel{user-select:none!important
       return `<article class="pmm-switch-snapshot-row" data-pmm-snapshot-id="${escapeHtml(snapshot.id)}">
         <div class="pmm-switch-snapshot-copy">
           <div class="pmm-switch-snapshot-name">${escapeHtml(snapshot.name)}${characterLabel}</div>
-          <div class="pmm-switch-snapshot-meta">${snapshot.states.length} 条 · ${escapeHtml(formatSavedAt(snapshot.updatedAt || snapshot.createdAt))}</div>
+          <div class="pmm-switch-snapshot-meta">${snapshot.states.length} 条${groupCount ? ` · ${groupCount} 分组` : ''} · ${escapeHtml(formatSavedAt(snapshot.updatedAt || snapshot.createdAt))}</div>
         </div>
         <div class="pmm-switch-snapshot-actions">
           <button type="button" data-pmm-snapshot-action="apply" data-pmm-snapshot-id="${escapeHtml(snapshot.id)}">应用</button>
@@ -13368,7 +13570,7 @@ html.pmm-dnd-compat-active #preset-manager-main-panel{user-select:none!important
       </article>`;
     }).join('') : `<div class="pmm-switch-snapshot-empty"><i class="fa-solid fa-camera"></i><span>还没有角色开关快照</span><small>先保存预设默认，再为不同角色建立快照。</small></div>`;
     const defaultMarkup = defaultSnapshot ? `<section class="pmm-switch-snapshot-default is-saved">
-      <div class="pmm-switch-snapshot-default-copy"><div><i class="fa-solid fa-house"></i>预设默认</div><small>${defaultSnapshot.states.length} 条 · ${escapeHtml(formatSavedAt(defaultSnapshot.updatedAt || defaultSnapshot.createdAt))}</small></div>
+      <div class="pmm-switch-snapshot-default-copy"><div><i class="fa-solid fa-house"></i>预设默认</div><small>${defaultSnapshot.states.length} 条${Array.isArray(defaultSnapshot.groupStates) && defaultSnapshot.groupStates.length ? ` · ${defaultSnapshot.groupStates.length} 分组` : ''} · ${escapeHtml(formatSavedAt(defaultSnapshot.updatedAt || defaultSnapshot.createdAt))}</small></div>
       <div class="pmm-switch-snapshot-default-actions"><button type="button" data-pmm-snapshot-action="apply-default" data-pmm-snapshot-id="${escapeHtml(defaultSnapshot.id)}"><i class="fa-solid fa-rotate-left"></i>恢复默认</button><button type="button" data-pmm-snapshot-action="update-default" title="用当前开关更新默认"><i class="fa-solid fa-rotate"></i>更新默认</button></div>
     </section>` : `<section class="pmm-switch-snapshot-default is-empty">
       <div class="pmm-switch-snapshot-default-copy"><div><i class="fa-solid fa-house"></i>还没有预设默认</div><small>请先保存当前原始开关；以后可一键恢复。</small></div>
@@ -13377,7 +13579,7 @@ html.pmm-dnd-compat-active #preset-manager-main-panel{user-select:none!important
     const composerMarkup = composer ? `<div class="pmm-switch-snapshot-composer">
       <label for="pmm-switch-snapshot-name">快照名称</label>
       <input id="pmm-switch-snapshot-name" data-pmm-snapshot-name type="text" maxlength="80" autocomplete="off" value="${escapeHtml(composer.name)}" placeholder="例如：悟·日常">
-      <p>会冻结当前 ${getPrompts(presetName).length} 个条目的开／关状态。</p>
+      <p>会冻结当前 ${getPrompts(presetName).length} 个条目开关${composerGroupCount ? `及 ${composerGroupCount} 个柏宝箱分组开关` : ''}。</p>
       <div class="pmm-switch-snapshot-composer-actions"><button type="button" data-pmm-snapshot-action="cancel-create">取消</button><button type="button" data-pmm-snapshot-action="create"><i class="fa-solid fa-camera"></i>保存快照</button></div>
     </div>` : `<div class="pmm-switch-snapshot-create"><button type="button" data-pmm-snapshot-action="new"><i class="fa-solid fa-plus"></i>新建开关快照</button></div>`;
 
@@ -13389,7 +13591,7 @@ html.pmm-dnd-compat-active #preset-manager-main-panel{user-select:none!important
       ${defaultMarkup}
       ${composerMarkup}
       <div class="pmm-switch-snapshot-list">${rows}</div>
-      <footer>快照只保存开关；正文、分组、顺序和条目本身不会变化。</footer>
+      <footer>快照保存条目开关与柏宝箱分组总开关；正文、分组结构、顺序和条目本身不会变化。</footer>
     </section>`;
     if (openMenuId) positionOpenSnapshotMenu(existing);
     if (composer) {
@@ -13690,7 +13892,7 @@ html.pmm-dnd-compat-active #preset-manager-main-panel{user-select:none!important
     },
   };
   install();
-  console.info('[预设工坊] test.120 已加载：快照模式复用铅笔为保存、相机为取消，并保持普通工具按钮尺寸。');
+  console.info('[预设工坊] test.121 已加载：开关快照会同时保存、应用并回滚柏宝箱独立分组开关。');
 })();
 
 /* ===== PMM_THEMED_COMPARE_DRAG_LINE_V289：差异边框与原版主题落点线叠加 ===== */

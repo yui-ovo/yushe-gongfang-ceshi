@@ -82,6 +82,6 @@ assert.ok(overlay.includes('data-pmm-snapshot-action="menu"'), '快照行缺少�
 assert.ok(overlay.includes('pmm-switch-snapshot-menu'), '更多操作没有展开为快照菜单');
 
 assert.ok(source.includes('@media (max-width:768px)'), '快照面板缺少手机端底部弹层布局');
-assert.ok(source.includes('快照只保存开关；正文、分组、顺序和条目本身不会变化。'), '快照面板没有说明其不会改变正文或排序');
+assert.ok(source.includes('快照保存条目开关与柏宝箱分组总开关；正文、分组结构、顺序和条目本身不会变化。'), '快照面板没有说明其只保存开关且不会改变正文或排序');
 
 console.log('test.47 回归通过：快照入口只在主预设首页稳定挂载，放在导入左侧，名称使用工坊内输入框。');
