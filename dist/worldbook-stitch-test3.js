@@ -2653,8 +2653,6 @@
     style.id = STYLE_ID;
     style.textContent = `
 #preset-manager-main-panel.pmm-worldbook-mode .pm-panel-container{position:relative!important}
-#preset-manager-main-panel.pmm-worldbook-mode .pm-panel-container--merge-mode .title-action-btn[title^="导入"],
-#preset-manager-main-panel.pmm-worldbook-mode .pm-panel-container--merge-mode .title-action-btn[title^="导出"],
 #preset-manager-main-panel.pmm-worldbook-mode .pm-panel-container--merge-mode button[title="取消当前预设全部分组"]{display:none!important}
 #preset-manager-main-panel.pmm-worldbook-mode .pm-main-wrapper>.preset-panel .theme-switch-card{display:none!important}
 #preset-manager-main-panel .pmm-wb-native-hidden{display:none!important}
