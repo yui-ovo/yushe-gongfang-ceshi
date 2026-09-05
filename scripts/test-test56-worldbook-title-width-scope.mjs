@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
-const workshop = await readFile(new URL('../dist/workshop-v3.08.js', import.meta.url), 'utf8');
+const workshop = await readFile(new URL('../dist/workshop-v3.09.js', import.meta.url), 'utf8');
 const worldbook = await readFile(new URL('../dist/worldbook-stitch-test3.js', import.meta.url), 'utf8');
 
 assert.ok(worldbook.includes('data-pmm-wb-panel="${sideName}"'), '世界书卡片缺少上下位置标记');
@@ -22,7 +22,8 @@ assert.ok(presetCss.includes('.pmm-wb-inline-panel[data-pmm-wb-panel="top"] .pmm
 assert.ok(presetCss.includes('var(--pmm-primary-title-viewport-width,150px)'), '上方世界书没有复用上方预设的外层宽度');
 assert.ok(presetCss.includes('.pmm-wb-inline-panel[data-pmm-wb-panel="top"] .pmm-wb-title-card'), '上方世界书标题外框没有承接内部横向滚动');
 assert.ok(presetCss.includes('.pmm-wb-inline-panel[data-pmm-wb-panel="top"] .pmm-wb-source-select'), '上方世界书名称框没有响应预设名称滑杆');
-assert.ok(presetCss.includes('var(--pmm-primary-native-preset-width,90px) + var(--pmm-user-preset-width-offset)'), '上方世界书没有沿用预设名称长度变量');
+assert.ok(presetCss.includes('calc(90px + var(--pmm-user-preset-width-offset))'), '上方世界书没有从预设的 90px 手机默认宽度开始调节');
+assert.ok(!presetCss.includes('--pmm-primary-native-preset-width'), '上方世界书仍会采用不稳定的运行时名称宽度基准');
 assert.ok(!presetCss.includes('data-pmm-wb-panel="bottom"'), '下方世界书仍被预设名称滑杆覆盖');
 
 console.log('test.56 世界书标题宽度作用域通过：仅上方复用预设视口，下方卡片保持弹性宽度。');
