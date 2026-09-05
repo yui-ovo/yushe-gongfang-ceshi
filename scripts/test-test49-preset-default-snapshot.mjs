@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
-const source = await readFile(new URL('../dist/workshop-v3.02.js', import.meta.url), 'utf8');
+const source = await readFile(new URL('../dist/workshop-v3.03.js', import.meta.url), 'utf8');
 
 function section(startMarker, endMarker) {
   const start = source.indexOf(startMarker);
@@ -23,7 +23,7 @@ for (const marker of [
   assert.ok(source.includes(marker), `test.49 缺少预设默认功能：${marker}`);
 }
 
-const saveDefault = section('function saveDefaultSnapshot()', 'function saveNewSnapshot(inputName, afterSave = null)');
+const saveDefault = section('function saveDefaultSnapshot()', 'function saveNewSnapshot(inputName, afterSave = null, promptsOverride = null)');
 assert.ok(saveDefault.includes("name: '预设默认'"), '预设默认没有使用固定名称');
 assert.ok(saveDefault.includes("kind: 'default'"), '预设默认没有与角色快照隔离');
 assert.ok(saveDefault.includes('isDefault: true'), '预设默认没有持久化默认标记');
@@ -44,7 +44,7 @@ assert.ok(overlay.includes('恢复默认'), '已保存默认没有一键恢复�
 assert.ok(overlay.includes('用当前开关更新默认'), '已保存默认无法明确更新');
 
 const apply = section('async function applySnapshot(id)', 'function renameSnapshot(id)');
-assert.ok(apply.includes("await setPreset(presetName, { prompts: clone(nextPrompts) })"), '恢复默认没有写回真实预设');
-assert.ok(apply.includes("await setPreset('in_use', { prompts: clone(nextPrompts) })"), '恢复默认没有同步当前运行预设');
+assert.ok(apply.includes('writeSwitchesToDraft(nextPrompts'), '恢复默认没有更新当前工坊草稿');
+assert.ok(apply.includes('saveAppliedDraft(presetName, nextPrompts, draftUpdated)'), '恢复默认没有保存到真实预设与当前运行预设');
 
 console.log('test.49 回归通过：每个主预设可独立保存、更新并一键恢复预设默认；角色快照不会混入默认。');

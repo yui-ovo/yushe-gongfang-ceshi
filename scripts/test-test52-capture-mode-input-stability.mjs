@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
-const source = await readFile(new URL('../dist/workshop-v3.02.js', import.meta.url), 'utf8');
+const source = await readFile(new URL('../dist/workshop-v3.03.js', import.meta.url), 'utf8');
 
 function section(startMarker, endMarker) {
   const start = source.indexOf(startMarker);
@@ -37,5 +37,6 @@ assert.ok(trigger.includes('turnImportIntoCaptureCancel(importButton)'), '导入
 
 const cleanup = section('cleanup()', '  };\n  install();');
 assert.ok(cleanup.includes("querySelectorAll?.('[data-pmm-snapshot-import-stashed]').forEach(restoreCaptureImportButton)"), '扩展重载时没有恢复被临时替换的导入按钮');
+assert.ok(cleanup.includes("querySelectorAll?.('[data-pmm-snapshot-native-save-stashed]').forEach(restoreCaptureNativeSaveButton)"), '扩展重载时没有恢复被临时禁用的原生保存按钮');
 
 console.log('test.52 回归通过：快照模式复用导入位置为取消，重绘不会循环创建按钮，退出及热重载都会恢复导入。');

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
-const source = await readFile(new URL('../dist/workshop-v3.02.js', import.meta.url), 'utf8');
+const source = await readFile(new URL('../dist/workshop-v3.03.js', import.meta.url), 'utf8');
 
 function section(startMarker, endMarker) {
   const start = source.indexOf(startMarker);
@@ -14,7 +14,7 @@ for (const marker of [
   'PMM_SWITCH_SNAPSHOTS_TEST52',
   "const STORAGE_KEY = 'pmm.switch-snapshots.v1'",
   "const TRIGGER_CLASS = 'pmm-switch-snapshot-trigger'",
-  'function saveNewSnapshot(inputName, afterSave = null)',
+  'function saveNewSnapshot(inputName, afterSave = null, promptsOverride = null)',
   'async function applySnapshot(id)',
   'function overwriteSnapshot(id)',
   'function bindSnapshotToCurrentCharacter(id)',
@@ -33,14 +33,16 @@ assert.ok(stateBuilder.includes('enabled: prompt.enabled === true'), '快照没�
 
 const apply = section('async function applySnapshot(id)', 'function renameSnapshot(id)');
 assert.ok(apply.includes("text(snapshot.presetName) !== presetName"), '快照不应跨预设误应用');
-assert.ok(apply.includes('const statesById = new Map'), '应用快照时没有按 UID 匹配');
-assert.ok(apply.includes('uniqueStatesByName'), '重导入后 UID 变化时没有名称兼容兜底');
-assert.ok(apply.includes('promptNameCounts.get(name) === 1'), '同名条目不能在名称兜底时被错误覆盖');
-assert.ok(apply.includes("await setPreset(presetName, { prompts: clone(nextPrompts) })"), '应用快照没有写回真实预设');
-assert.ok(apply.includes("await setPreset('in_use', { prompts: clone(nextPrompts) })"), '应用当前预设时没有即时更新运行中的开关');
-assert.ok(apply.includes('context.eventSource.emit(eventType'), '应用快照后没有刷新工坊当前卡片');
+assert.ok(apply.includes('mergeSnapshotStates(prompts, snapshot.states)'), '应用快照时没有统一走 UID 与名称兜底匹配');
+assert.ok(apply.includes('writeSwitchesToDraft(nextPrompts'), '应用快照后没有刷新工坊当前卡片');
+assert.ok(apply.includes('saveAppliedDraft(presetName, nextPrompts, draftUpdated)'), '应用快照没有同步真实预设与运行状态');
 
-const snapshotCreation = section('function saveNewSnapshot(inputName, afterSave = null)', 'function findSnapshot(id)');
+const matching = section('function mergeSnapshotStates(prompts, states)', 'async function settleDraft()');
+assert.ok(matching.includes('const statesById = new Map'), '应用快照时没有按 UID 匹配');
+assert.ok(matching.includes('uniqueStatesByName'), '重导入后 UID 变化时没有名称兼容兜底');
+assert.ok(matching.includes('promptNameCounts.get(name) === 1'), '同名条目不能在名称兜底时被错误覆盖');
+
+const snapshotCreation = section('function saveNewSnapshot(inputName, afterSave = null, promptsOverride = null)', 'function findSnapshot(id)');
 assert.ok(snapshotCreation.includes('states: makeStates(prompts)'), '新快照没有冻结当前全部条目状态');
 assert.ok(snapshotCreation.includes('character: character ? { ...character } : null'), '新快照没有记录当前角色绑定');
 assert.ok(snapshotCreation.includes('writeStore(store)'), '新快照没有持久化');
