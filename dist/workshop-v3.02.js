@@ -14573,6 +14573,7 @@ html.pmm-dnd-compat-active #preset-manager-main-panel{user-select:none!important
         <div class="pmm-switch-snapshot-first-default-actions"><button type="button" data-pmm-snapshot-action="cancel-default-onboarding">取消</button><button type="button" data-pmm-snapshot-action="save-default-and-enter"><i class="fa-solid fa-bookmark"></i>保存并进入</button></div>
       </div>
     </section>`;
+    TOP.__PMM_WORLDBOOK_SNAPSHOTS__?.decoratePreset(existing);
   }
 
   function positionOpenSnapshotMenu(overlay) {
@@ -14713,6 +14714,7 @@ html.pmm-dnd-compat-active #preset-manager-main-panel{user-select:none!important
       <footer class="pmm-switch-snapshot-footer"><span>快照保存条目开关与柏宝箱分组开关。</span><span>角色锁绑定当前角色，聊天锁绑定当前聊天；可通过「…」批量绑定多个角色；进入已绑定的角色或聊天时，会自动应用该快照。</span></footer>
       ${characterPickerMarkup}
     </section>`;
+    TOP.__PMM_WORLDBOOK_SNAPSHOTS__?.decoratePreset(existing);
     if (openMenuId) positionOpenSnapshotMenu(existing);
     if (composer) {
       const focus = TOP.requestAnimationFrame || SELF.requestAnimationFrame || (callback => TOP.setTimeout(callback, 0));
@@ -15181,6 +15183,8 @@ html.pmm-dnd-compat-active #preset-manager-main-panel{user-select:none!important
 
   TOP[API_KEY] = {
     open: openOverlay,
+    close: closeOverlay,
+    isCapturing: () => !!captureMode,
     list: () => clone(readStore().snapshots),
     activeForPreset: presetName => {
       const snapshot = activeSnapshotForPreset(presetName);

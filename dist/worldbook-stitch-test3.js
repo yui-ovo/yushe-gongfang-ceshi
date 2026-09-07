@@ -1635,6 +1635,7 @@
           </div>
           <div class="pmm-wb-header-right">
              <span class="pmm-wb-status">${h(state.status)}</span>
+             ${toolbarButton('snapshots', '世界书快照', 'fa-camera', `data-wb-side="${sideName}"`)}
              ${sideName === 'top' ? typeSwitchMarkup() : ''}
              ${sideName === 'top' ? themeToolbarSlotMarkup() : ''}
              ${toolbarButton('multi', side.multi ? '退出多选' : '多选', 'fa-check-double', `data-wb-side="${sideName}"`)}
@@ -2119,6 +2120,7 @@
     if (action === 'source-picker') return openSourcePicker(sideName);
     if (action === 'rename-source') return renameWorldSource(sideName);
     if (action === 'select-source') return;
+    if (action === 'snapshots') return TOP.__PMM_WORLDBOOK_SNAPSHOTS__?.open('character');
     if (action === 'entry-search') {
       side.searchOpen = !side.searchOpen;
       if (!side.searchOpen) {
@@ -2860,7 +2862,20 @@
   DOC.addEventListener('dragover', onDragOver, true);
   DOC.addEventListener('drop', onDrop, true);
   DOC.addEventListener('dragend', clearDrag, true);
-  TOP[API_KEY] = { open, close, cleanup, state };
+  TOP[API_KEY] = { open, close, cleanup, state,
+    async refreshSnapshotBook(name, data) {
+      if (!state.open) return;
+      saveScrolls();
+      for (const side of [state.top, state.bottom]) {
+        if (side.name !== name || side.dirty) continue;
+        applyWorldData(side, data);
+        side.savedData = clone(data);
+        side.history.length = 0;
+      }
+      renderPanels();
+      await reloadOpenNativeWorldbook(name);
+    },
+  };
   console.info('[预设工坊测试版] test.3 世界书已接入原生双卡片布局。');
   console.info('[预设工坊测试版] test.29 已加载：世界书条目按蓝色落点线插入目标位置。');
   console.info('[预设工坊测试版] test.30 已加载：手机三态主题按钮已移入世界书顶部工具栏。');
