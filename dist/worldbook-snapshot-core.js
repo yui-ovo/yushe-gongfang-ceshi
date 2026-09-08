@@ -258,7 +258,11 @@ export function createWorldbookSnapshots(host) {
       const store=read(),group=store.groups.find(g=>g.id===id);
       if (!group) throw new Error('分组已不存在');
       group.snapshot=snapshot;
-      const plan=groupPlan(store,group);
+      let plan=groupPlan(store,group);
+      if(!plan && !snapshot) {
+        if(!group.enabled) { persist(store); return; }
+        plan=await ensureDefault(store,'group',id,await loadBundle(await target('group',id)));
+      }
       if (!plan) throw new Error('方案已不存在，请先创建快照保存默认');
       await validateBundle(plan);
       if (group.enabled) { checkConflict(store,group,plan,force); await batch(plan.books,()=>persist(store)); }

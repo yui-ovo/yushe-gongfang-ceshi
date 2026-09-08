@@ -48,6 +48,8 @@ async function create(f,scope,owner,name,flip=true){const d=await f.e.captureBun
 {
   const f=fixture();
   await f.e.saveGroup({name:'G',books:['x','manual']});const g=f.store.groups[0].id;
+  await f.e.selectGroupPlan(g,'');
+  assert.deepEqual(f.globals,['manual'],'Fresh default selection must not mount books');
   const s=await create(f,'group',g,'剧情');
   assert.equal(f.data.x.entries[1].disable,false,'Group draft saves without applying');
   assert.deepEqual(f.globals,['manual']);

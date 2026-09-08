@@ -1,4 +1,4 @@
-import { createWorldbookSnapshots, copy } from './worldbook-snapshot-core.js?v=2.98.0-test.4';
+import { createWorldbookSnapshots, copy } from './worldbook-snapshot-core.js?v=2.98.0-test.5';
 
 const SELF = window, TOP = window.parent || window, DOC = TOP.document;
 const KEY = '__PMM_WORLDBOOK_SNAPSHOTS__';
@@ -66,7 +66,7 @@ const engine = createWorldbookSnapshots({
 
 let overlay = null, viewportCleanup = null, themeCleanup = null, busy = false, disposed = false;
 let page = 'character', section = 'snapshots', book = '', books = [], items = [], draft = null;
-let picker = false, editGroup = null, renameId = '', menuId = '', message = '', lastFocus = null, planGroup = '';
+let picker = false, editGroup = null, renameId = '', menuId = '', message = '', lastFocus = null;
 let eventSource = null, eventType = '', eventTimer = 0;
 const style = DOC.createElement('style');
 style.id = 'pmm-worldbook-snapshot-style';
@@ -184,6 +184,17 @@ style.textContent = `
 .pmm-wbs-toggle[aria-checked="true"] span { background:var(--wbs-ink); }
 .pmm-wbs-toggle[aria-checked="true"] span:after { left:15px; }
 .pmm-wbs-copy .pmm-wbs-plan { margin-top:5px; max-width:100%; white-space:normal; text-align:left; font-size:11px; padding:3px 7px; min-height:28px; }
+.pmm-wbs-plan-label { display:flex; align-items:center; gap:4px; margin-top:5px; font-size:11px; }
+.pmm-wbs-dialog select.pmm-wbs-plan { width:auto; min-width:65px; max-width:100%; margin:0; color:var(--wbs-ink); background:var(--wbs-raised); border:1px solid var(--wbs-line); border-radius:10px; font:inherit; padding:5px 7px; text-overflow:ellipsis; }
+.pmm-wbs-plan option { color:var(--wbs-ink); background:var(--pm-panel-bg); }
+.pmm-wbs-book { display:block!important; margin:8px 0; border:1px solid var(--wbs-line); border-radius:12px; overflow:hidden; }
+.pmm-wbs-book>summary { display:flex!important; align-items:center; gap:8px; padding:12px 9px; cursor:pointer; list-style:none; background:var(--wbs-raised); }
+.pmm-wbs-book>summary::-webkit-details-marker { display:none; }
+.pmm-wbs-book>summary .pmm-wbs-svg { width:14px; height:14px; transition:transform .12s; }
+.pmm-wbs-book[open]>summary .pmm-wbs-svg { transform:rotate(90deg); }
+.pmm-wbs-book-title { flex:1; min-width:0; overflow-wrap:anywhere; }
+.pmm-wbs-book>summary small { margin:0; white-space:nowrap; }
+.pmm-wbs-book:not([open])>.pmm-wbs-book-entries { display:none!important; }
 .pmm-wbs-lock[aria-pressed="true"] { background:var(--wbs-ink); color:var(--wbs-base); }
 .pmm-wbs-entry { padding:13px 8px; border-color:var(--wbs-line); font-size:13px; }
 .pmm-wbs-dialog input[type="text"],.pmm-wbs-dialog input[type="search"] { border-color:var(--wbs-line); background:var(--wbs-raised); border-radius:14px; }
@@ -322,7 +333,7 @@ function report(error) { console.warn('[世界书快照]', error); say(error.mes
 async function run(action) {
   if (busy) return;
   busy = true;
-  const controls = [...(overlay?.querySelectorAll('button,input') || [])].map(node => [node, node.disabled]);
+  const controls = [...(overlay?.querySelectorAll('button,input,select') || [])].map(node => [node, node.disabled]);
   controls.forEach(([node]) => { node.disabled = true; });
   overlay?.setAttribute('aria-busy', 'true');
   try { await action(); }
@@ -365,27 +376,19 @@ function groupMarkup() {
   const store=engine.read();
   return button('new-group','＋ 新建分组','class="pmm-wbs-source"')+store.groups.map(group=>{
     const attrs='data-id="'+h(group.id)+'"';
-    const selected=store.snapshots.find(s=>s.id===group.snapshot);
+    const plans=store.snapshots.filter(s=>s.bundle && s.scope==='group' && s.owner===group.id);
     return '<article class="pmm-wbs-row"><div class="pmm-wbs-row-main"><div class="pmm-wbs-copy"><strong>'+h(group.name)+'</strong><small>'+h(group.books.join('、'))+'</small>'
-      +button('plans','方案：'+h(selected?.name||'默认')+' ▾',attrs+' class="pmm-wbs-plan"')+'</div>'
+      +'<label class="pmm-wbs-plan-label">方案：<select class="pmm-wbs-plan" data-group-plan="'+h(group.id)+'" aria-label="'+h(group.name)+'方案"><option value="">默认</option>'+plans.map(s=>'<option value="'+h(s.id)+'" '+(group.snapshot===s.id?'selected':'')+'>'+h(s.name)+'</option>').join('')+'</select></label></div>'
       +button('toggle-group','<span></span>',attrs+' class="pmm-wbs-toggle" role="switch" aria-label="'+h(group.name)+'开关" aria-checked="'+group.enabled+'"')
       +button('group-menu','⋯',attrs+' aria-label="分组更多操作"')+'</div>'
-      +(menuId===group.id?'<div class="pmm-wbs-menu">'+button('edit-group','编辑',attrs+(group.enabled?' disabled':''))+button('delete-group','删除',attrs+(group.enabled?' disabled':''))+'</div>':'')+'</article>';
+      +(menuId===group.id?'<div class="pmm-wbs-menu">'+button('edit-group','编辑',attrs)+button('delete-group','删除',attrs)+'</div>':'')+'</article>';
   }).join('');
-}
-function planMarkup() {
-  const store=engine.read(), group=store.groups.find(g=>g.id===planGroup);
-  if (!group) { planGroup=''; return groupMarkup(); }
-  const baseline=store.defaults?.find(s=>s.scope==='group' && s.owner===group.id);
-  return '<h3>'+h(group.name)+' · 选择方案</h3>'+button('select-plan','默认','class="pmm-wbs-source" data-id="" '+(baseline?'':'disabled'))
-    +store.snapshots.filter(s=>s.bundle && s.scope==='group' && s.owner===group.id).map(s=>button('select-plan',h(s.name),'class="pmm-wbs-source" data-id="'+h(s.id)+'"')).join('')
-    +button('group-snapshots','＋ 创建分组快照','data-id="'+h(group.id)+'"')+button('back-plans','返回');
 }
 function draftMarkup() {
   return '<label>快照名称<input type="text" data-name value="'+h(draft.name)+'" maxlength="100" autocomplete="off"></label>'
-    +'<input type="search" data-filter placeholder="搜索条目名称" aria-label="搜索条目名称"><div data-entries>'
-    +Object.entries(draft.data).map(([name,data])=>'<section><h3>'+h(name)+'</h3>'+Object.values(data.entries).sort((a,b)=>Number(a.displayIndex??a.uid)-Number(b.displayIndex??b.uid)).map(entry=>
-      '<label class="pmm-wbs-entry" data-entry-title="'+h(String(entry.comment||entry.key?.[0]||entry.uid).toLocaleLowerCase())+'"><span>'+h(entry.comment||entry.key?.[0]||'条目 '+entry.uid)+'</span><input type="checkbox" data-toggle="'+h(entry.uid)+'" data-toggle-book="'+h(name)+'" aria-label="'+h(entry.comment||'条目 '+entry.uid)+'" '+(entry.disable?'':'checked')+'></label>').join('')+'</section>').join('')+'</div>';
+    +'<input type="search" data-filter value="'+h(draft.query||'')+'" placeholder="搜索条目名称" aria-label="搜索条目名称"><small>共 '+Object.keys(draft.data).length+' 本世界书 · 点击书名展开或收起</small><div data-entries>'
+    +Object.entries(draft.data).map(([name,data])=>'<details class="pmm-wbs-book" data-draft-book="'+h(name)+'" '+(draft.expanded[name]?'open':'')+'><summary>'+icon('arrow')+'<span class="pmm-wbs-book-title">'+h(name)+'</span><small>'+Object.keys(data.entries).length+' 条</small></summary><div class="pmm-wbs-book-entries">'+Object.values(data.entries).sort((a,b)=>Number(a.displayIndex??a.uid)-Number(b.displayIndex??b.uid)).map(entry=>
+      '<label class="pmm-wbs-entry" data-entry-title="'+h(String(entry.comment||entry.key?.[0]||entry.uid).toLocaleLowerCase())+'"><span>'+h(entry.comment||entry.key?.[0]||'条目 '+entry.uid)+'</span><input type="checkbox" data-toggle="'+h(entry.uid)+'" data-toggle-book="'+h(name)+'" aria-label="'+h(entry.comment||'条目 '+entry.uid)+'" '+(entry.disable?'':'checked')+'></label>').join('')+(!Object.keys(data.entries).length?'<small>这本世界书暂无条目</small>':'')+'</div></details>').join('')+'</div>';
 }
 function groupEditorMarkup() {
   const rows = books.filter(row => !row.characters.length);
@@ -397,13 +400,14 @@ function render() {
   const rename = renameId && engine.read().snapshots.find(item => item.id === renameId);
   const content = draft ? draftMarkup() : editGroup ? groupEditorMarkup() : rename
     ? `<label>快照名称<input type="text" data-rename value="${h(rename.name)}" maxlength="100"></label>`
-    : planGroup ? planMarkup() : picker ? sourceMarkup() : section === 'groups' ? groupMarkup() : snapshotMarkup();
+    : picker ? sourceMarkup() : section === 'groups' ? groupMarkup() : snapshotMarkup();
   overlay.innerHTML = `<section class="pmm-wbs-dialog${editing ? ' is-editing' : ''}" role="dialog" aria-modal="true" aria-label="世界书快照">
     <header class="pmm-wbs-head"><div class="pmm-wbs-heading"><span class="pmm-wbs-symbol">${icon('camera')}</span><div><h2>${draft ? '调整开关' : editGroup ? '世界书分组' : '快照'}</h2><p>${h(character()?.name || '酒馆主页')}</p></div></div>${button('close', icon('close'), 'class="pmm-wbs-icon" aria-label="关闭"')}</header>
     ${tabs(page, !!editing)}<div class="pmm-wbs-message" data-message role="status" ${message ? '' : 'hidden'}>${h(message)}</div>
-    <div class="pmm-wbs-body">${page === 'global' && !editing && !picker && !planGroup ? `<div class="pmm-wbs-tools pmm-wbs-subnav">${button('groups', '世界书分组', section === 'groups' ? 'class="pmm-wbs-primary"' : '')}${button('snapshots', '分组快照', section === 'snapshots' ? 'class="pmm-wbs-primary"' : '')}</div>` : ''}${content}</div>
+    <div class="pmm-wbs-body">${page === 'global' && !editing && !picker ? `<div class="pmm-wbs-tools pmm-wbs-subnav">${button('groups', '世界书分组', section === 'groups' ? 'class="pmm-wbs-primary"' : '')}${button('snapshots', '分组快照', section === 'snapshots' ? 'class="pmm-wbs-primary"' : '')}</div>` : ''}${content}</div>
     <footer class="pmm-wbs-foot"><small>${draft ? (page==='character'?'只调整开关；保存后应用，取消不改原书。':'保存方案不挂载世界书；请在分组中选用。') : page==='global' ? '分组开启时应用所选方案；关闭不卸载其他分组需要的书。' : '聊天锁自动应用 · 返回主页恢复进入前状态'}</small>${editing ? button('cancel-edit', '取消') + button(draft ? 'save-draft' : editGroup ? 'save-group' : 'save-rename', '保存', 'class="pmm-wbs-primary"') : ''}</footer>
     </section>`;
+  filterDraft();
 }
 async function loadItems() {
   items = [];
@@ -413,12 +417,15 @@ async function open(scope = 'character', selected = '') {
   if (TOP[PRESET]?.isCapturing?.()) { TOP.toastr?.info?.('请先保存或取消预设快照'); return; }
   if (overlay) return;
   TOP[PRESET]?.close?.();
-  page = scope; section = scope === 'global' ? 'groups' : 'snapshots'; book = ''; message = ''; picker = false; planGroup = '';
+  page = scope; section = scope === 'global' ? 'groups' : 'snapshots'; book = ''; message = ''; picker = false;
   lastFocus = DOC.activeElement;
   overlay = DOC.createElement('div'); overlay.className = 'pmm-wbs-overlay';
   overlay.addEventListener('click', onClick);
   overlay.addEventListener('input', onInput);
   overlay.addEventListener('change', onChange);
+  overlay.addEventListener('toggle', event=>{
+    if(draft && !draft.query && event.target.matches('[data-draft-book]')) draft.expanded[event.target.dataset.draftBook]=event.target.open;
+  },true);
   overlay.addEventListener('keydown', onKey);
   DOC.body.append(overlay); theme(); watchTheme(); bindViewport(); render();
   overlay.querySelector('[data-wbs="close"]')?.focus({ preventScroll: true });
@@ -447,11 +454,34 @@ function onInput(event) {
   if (draft && event.target.matches('[data-name]')) draft.name = event.target.value;
   if (editGroup && event.target.matches('[data-group-name]')) editGroup.name = event.target.value;
   if (event.target.matches('[data-filter]')) {
-    const query = event.target.value.toLocaleLowerCase();
-    for (const row of overlay.querySelectorAll('[data-entry-title]')) row.hidden = !row.dataset.entryTitle.includes(query);
+    draft.query=event.target.value;
+    filterDraft();
+  }
+}
+function filterDraft() {
+  if(!draft || !overlay) return;
+  const query=(draft.query||'').trim().toLocaleLowerCase();
+  for(const block of overlay.querySelectorAll('[data-draft-book]')) {
+    let count=0;
+    for(const row of block.querySelectorAll('[data-entry-title]')) {
+      row.hidden=!row.dataset.entryTitle.includes(query);
+      if(!row.hidden)count++;
+    }
+    block.hidden=!!query && !count;
+    block.open=query?!!count:!!draft.expanded[block.dataset.draftBook];
   }
 }
 function onChange(event) {
+  if(event.target.matches('[data-group-plan]')) {
+    if(busy)return;
+    const groupId=event.target.dataset.groupPlan,value=event.target.value;
+    void run(async()=>{
+      await conflictAction(force=>engine.selectGroupPlan(groupId,value,force));
+      say(engine.read().groups.find(g=>g.id===groupId)?.enabled?'分组方案已应用':'分组方案已选择；开启时生效');
+      render();
+    });
+    return;
+  }
   if (draft && event.target.matches('[data-toggle]')) {
     const entry = Object.values(draft.data[event.target.dataset.toggleBook]?.entries || {}).find(entry => String(entry.uid) === event.target.dataset.toggle);
     if (entry) entry.disable = !event.target.checked;
@@ -463,9 +493,10 @@ function onChange(event) {
   }
 }
 function onKey(event) {
+  if(event.key==='Escape' && event.target.matches('select'))return;
   if (event.key === 'Escape') { event.stopPropagation(); void close(); }
   if (event.key !== 'Tab') return;
-  const nodes = [...overlay.querySelectorAll('button:not(:disabled),input:not(:disabled)')].filter(node => node.getClientRects().length);
+  const nodes = [...overlay.querySelectorAll('button:not(:disabled),input:not(:disabled),select:not(:disabled),summary')].filter(node => node.getClientRects().length);
   const first = nodes[0], last = nodes.at(-1);
   if (event.shiftKey && DOC.activeElement === first) { event.preventDefault(); last?.focus(); }
   else if (!event.shiftKey && DOC.activeElement === last) { event.preventDefault(); first?.focus(); }
@@ -478,7 +509,8 @@ function onClick(event) {
   void run(async () => {
     if (target.dataset.hubTab) {
       if (draft || editGroup || renameId) return;
-      page = target.dataset.hubTab; book = ''; menuId = ''; planGroup=''; section = page === 'global' ? 'groups' : 'snapshots'; picker = false; items = [];
+      say('');
+      page = target.dataset.hubTab; book = ''; menuId = ''; section = page === 'global' ? 'groups' : 'snapshots'; picker = false; items = [];
       if (page === 'preset') { await close(true); TOP[PRESET]?.open?.(); return; }
       await refresh();
     } else if (action === 'choose') {
@@ -488,12 +520,13 @@ function onClick(event) {
     else if (action === 'snapshots' || action === 'groups') { section = action; picker = false; await refresh(); }
     else if (action === 'new') {
       if (TOP[PRESET]?.isCapturing?.()) throw new Error('请先完成预设快照');
+      say('');
       engine.setCapturing(true);
       try {
         const scope=bundleScope(),owner=scopeOwner();
         const captured = await engine.captureBundle(scope,owner);
         const label=page==='character'?character().name:engine.read().groups.find(g=>g.id===owner).name;
-        draft = { ...captured, scope, owner, name: `${label} 开关` };
+        draft = { ...captured, scope, owner, name: `${label} 开关`, expanded:Object.fromEntries(Object.keys(captured.data).map(name=>[name,Object.keys(captured.data).length===1])),query:'' };
       } catch (error) { engine.setCapturing(false); await engine.transition(); throw error; }
     } else if (action === 'save-draft') {
       await engine.createBundle(draft);
@@ -514,21 +547,35 @@ function onClick(event) {
       await loadItems();
     }
     else if (action === 'group-menu') menuId=menuId===id?'':id;
-    else if (action === 'plans') planGroup=id;
-    else if (action === 'back-plans') planGroup='';
-    else if (action === 'group-snapshots') { book=id; planGroup=''; section='snapshots'; }
-    else if (action === 'use-plan' || action === 'select-plan') {
-      const groupId=action==='use-plan'?book:planGroup;
+    else if (action === 'use-plan') {
+      const groupId=book;
       await conflictAction(force=>engine.selectGroupPlan(groupId,id,force));
-      planGroup=''; say(engine.read().groups.find(g=>g.id===groupId)?.enabled?'分组方案已应用':'分组方案已选择；开启时生效');
+      say(engine.read().groups.find(g=>g.id===groupId)?.enabled?'分组方案已应用':'分组方案已选择；开启时生效');
     }
     else if (action === 'new-group' || action === 'edit-group') {
+      if(action==='edit-group' && !await prepareGroupChange(id,'编辑'))return;
       await refresh(); editGroup = action === 'new-group' ? { name: '', books: [] } : copy(engine.read().groups.find(group => group.id === id));
     } else if (action === 'save-group') { await engine.saveGroup(editGroup); editGroup = null; }
     else if (action === 'toggle-group') { await conflictAction(force=>engine.toggleGroup(id,force)); await refresh(); }
-    else if (action === 'delete-group' && TOP.confirm('删除这个分组？')) await engine.removeGroup(id);
+    else if (action === 'delete-group') {
+      const group=engine.read().groups.find(g=>g.id===id);
+      if(TOP.confirm(group?.enabled?'此分组正在开启。确认先关闭并删除分组？不会删除世界书文件。':'删除这个分组？不会删除世界书文件。')) {
+        if(group?.enabled)await engine.toggleGroup(id);
+        await engine.removeGroup(id); await refresh(); say('分组已删除，世界书文件保留');
+      }
+    }
     render();
   });
+}
+async function prepareGroupChange(id,label) {
+  const group=engine.read().groups.find(g=>g.id===id);
+  if(!group)throw new Error('分组已不存在');
+  if(group.enabled) {
+    if(!TOP.confirm('分组正在开启。先关闭分组再'+label+'？完成后需手动重新开启。'))return false;
+    await engine.toggleGroup(id);
+    say('分组已关闭，编辑完成后请重新开启');
+  }
+  return true;
 }
 async function conflictAction(action) {
   try { await action(false); }
