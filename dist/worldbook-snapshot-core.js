@@ -217,6 +217,26 @@ export function createWorldbookSnapshots(host) {
       await ensureDefault(read(),scope,owner,data);
       return { data, contextKey:key };
     }),
+    editBundle: id => queued(async () => {
+      const key=contextKey(), item=find(read(),id);
+      await validateBundle(item);
+      const data=await loadBundle(Object.keys(item.books));
+      for(const name of Object.keys(data)) data[name]=mergeSwitches(data[name],item.books[name]).data;
+      if(key!==contextKey())throw new Error('聊天已切换，请重试');
+      return {data,contextKey:key,scope:item.scope,owner:item.owner,name:item.name,id:item.id};
+    }),
+    updateBundle: ({id,name,data,contextKey:key},sync=false,force=false) => queued(async () => {
+      if(key!==contextKey())throw new Error('聊天已切换，请取消草稿后重建');
+      if(!name.trim())throw new Error('请填写快照名称');
+      const store=read(),item=find(store,id);
+      item.name=name.trim();item.books=statesOf(data);
+      await validateBundle(item);
+      const active=store.groups.find(g=>g.enabled && g.snapshot===id);
+      if(sync && active) {
+        checkConflict(store,active,item,force);
+        await batch(item.books,()=>persist(store));
+      } else persist(store);
+    }),
     createBundle: ({scope,owner,name,data,contextKey:key}) => queued(async () => {
       if (key !== contextKey()) throw new Error('聊天已切换，请取消草稿后重建');
       if (!name.trim()) throw new Error('请填写快照名称');

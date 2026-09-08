@@ -83,4 +83,23 @@ async function create(f,scope,owner,name,flip=true){const d=await f.e.captureBun
   assert.equal(f.store.groups[0].enabled,false);assert.deepEqual(f.globals,['manual']);
   assert.equal(f.data.x.entries[1].disable,false);assert.equal(f.data.y.entries[1].disable,false);
 }
-console.log('Worldbook bundles passed: defaults, chat locks, multi-book rollback, group plans, conflicts, ownership, persistence rollback and stale drafts.');
+{
+  const f=fixture();await f.e.saveGroup({name:'Edit',books:['x','y']});const g=f.store.groups[0].id;
+  const s=await create(f,'group',g,'original');
+  const d=await f.e.editBundle(s.id);
+  assert.equal(d.data.x.entries[1].disable,true,'Editor reads saved snapshot, not live switches');
+  assert.equal(f.data.x.entries[1].disable,false,'Opening editor does not apply');
+  d.data.x.entries[2].disable=false;
+  await f.e.updateBundle({...d,name:'edited'});
+  assert.equal(f.store.snapshots.length,1);assert.equal(f.store.snapshots[0].id,s.id);
+  assert.equal(f.data.x.entries[2].disable,true,'Save-only leaves worldbook unchanged');
+  await f.e.selectGroupPlan(g,s.id);await f.e.toggleGroup(g);
+  const e=await f.e.editBundle(s.id);e.data.x.entries[1].disable=false;
+  await f.e.updateBundle(e,true);
+  assert.equal(f.data.x.entries[1].disable,false,'Explicit sync applies active group');
+  assert.equal(f.store.groups[0].snapshot,s.id);
+  assert.equal(f.store.defaults[0].books.x[2],true,'Default untouched');
+  const stale=await f.e.editBundle(s.id);f.select('a');
+  await assert.rejects(f.e.updateBundle(stale),/聊天已切换/);
+}
+console.log('Worldbook bundles passed: defaults, chat locks, editing, rollback, group plans, conflicts and stale drafts.');
