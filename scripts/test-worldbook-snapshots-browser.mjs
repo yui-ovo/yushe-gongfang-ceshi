@@ -77,6 +77,21 @@ try {
     await page.getByText('进入角色聊天后使用',{exact:true}).waitFor();
     await page.click('[data-hub-tab="global"]');
     assert.equal(await page.locator('.pmm-wbs-subnav button').first().getAttribute('data-wbs'), 'groups');
+    await page.evaluate(()=>{
+      // Model the helper's option update and native change listeners, with workshop closed.
+      __PMM_WORLDBOOK_STITCH_TEST3__.close();
+      const select=document.createElement('select');select.id='world_editor_select';select.hidden=true;
+      for(const name of Object.keys(fixture.data))select.add(new Option(name,name));
+      select.value='剧情补充';document.body.append(select);
+      fixture.nativeReloads=0;
+      select.addEventListener('change',()=>{fixture.nativeReloads++;fixture.nativeDisabled=fixture.data[select.value].entries[0].disable;});
+      const globals=document.createElement('select');globals.id='world_info';globals.multiple=true;globals.hidden=true;document.body.append(globals);
+      globals.addEventListener('change',()=>{fixture.nativeTags=[...globals.selectedOptions].map(o=>o.textContent);});
+      const rebind=TavernHelper.rebindGlobalWorldbooks;
+      TavernHelper.rebindGlobalWorldbooks=async names=>{
+        await rebind(names);globals.replaceChildren(...Object.keys(fixture.data).map(n=>new Option(n,n,names.includes(n),names.includes(n))));
+      };
+    });
     assert.equal(await page.locator('[data-wbs="new-group"]').count(), 1, 'Global tab opens groups by default');
     await page.click('[data-wbs="groups"]');
     await page.click('[data-wbs="new-group"]');
@@ -89,9 +104,11 @@ try {
     assert.equal(await page.locator('[data-wbs="plans"]').count(),0,'No separate plan page');
     await page.click('[data-wbs="toggle-group"]');
     await page.waitForFunction(() => fixture.globals.includes('剧情补充'));
+    assert.ok(await page.evaluate(()=>fixture.nativeTags.includes('剧情补充')),'Global tags refresh without opening picker');
     await page.screenshot({ path:fileURLToPath(new URL(`groups-${width}.png`, output)) });
     await page.click('[data-wbs="toggle-group"]');
     await page.waitForFunction(() => !fixture.globals.includes('剧情补充'));
+    assert.equal(await page.evaluate(()=>fixture.nativeTags.includes('剧情补充')),false);
     assert.ok(await page.evaluate(() => fixture.globals.includes('手动保留')));
     assert.equal(await page.locator('[data-wbs="edit-group"]').count(),0,'Edit/delete hidden until More');
     const toggle=await page.locator('.pmm-wbs-toggle span').boundingBox();
@@ -128,7 +145,7 @@ try {
     if(!await page.locator('[data-wbs="edit-snapshot"]').count())await page.click('[data-wbs="menu"]');
     await page.click('[data-wbs="edit-snapshot"]');
     await page.click('[data-wbs="save-draft"]');
-    assert.equal(await page.locator('[data-wbs="use-plan"]').count(),1,'Editing does not duplicate snapshot');
+    assert.equal(await page.locator('[data-wbs="use-plan"]').count(),0,'Plan selection only belongs in group dropdown');
     await page.click('[data-wbs="dismiss-message"]');
     assert.equal(await page.locator('[data-message]').isVisible(),false);
     await page.click('[data-hub-tab="global"]');
@@ -137,18 +154,24 @@ try {
     await page.locator('[data-wbs="choose"]').click();
     await page.getByText('分组 · 剧情模式',{exact:true}).waitFor();
     assert.equal(await page.evaluate(()=>fixture.data['剧情补充'].entries[0].disable),true,'Save group snapshot is inert');
-    await page.click('[data-wbs="use-plan"]');
     await page.click('[data-wbs="groups"]');
+    const planId=await page.locator('[data-group-plan] option').nth(1).getAttribute('value');
+    await page.selectOption('[data-group-plan]',planId);
     assert.equal(await page.locator('[data-group-plan] option').count(),2);
     await page.click('[data-wbs="toggle-group"]');
     await page.waitForFunction(()=>fixture.data['剧情补充'].entries[0].disable===false);
+    await page.waitForFunction(()=>fixture.nativeDisabled===false);
     assert.equal(await page.evaluate(()=>fixture.data['手动保留'].entries[0].disable),false,'Second book switch also applied');
     await page.screenshot({path:fileURLToPath(new URL('group-plan-'+width+'.png',output))});
     await page.selectOption('[data-group-plan]','');
     await page.waitForFunction(()=>fixture.data['剧情补充'].entries[0].disable===true);
+    await page.waitForFunction(()=>fixture.nativeDisabled===true);
     assert.equal(await page.evaluate(()=>fixture.data['手动保留'].entries[0].disable),true,'Both books restore default');
     assert.equal(await page.locator('[data-wbs="new-group"]').count(),1,'Dropdown stays on group page');
     await page.click('[data-wbs="group-menu"]');
+    const menuBounds=await page.locator('.pmm-wbs-menu').boundingBox();
+    const switchBounds=await page.locator('[data-wbs="toggle-group"]').boundingBox();
+    assert.ok(menuBounds.y>=switchBounds.y+switchBounds.height,'Menu cannot cover group switch');
     assert.equal(await page.locator('[data-wbs="edit-group"]').isEnabled(),true);
     assert.equal(await page.locator('[data-wbs="delete-group"]').isEnabled(),true);
     page.removeAllListeners('dialog');

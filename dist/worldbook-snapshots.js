@@ -8,6 +8,17 @@ const STITCH = '__PMM_WORLDBOOK_STITCH_TEST3__';
 TOP[KEY]?.cleanup?.();
 const h = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 const ctx = () => TOP.SillyTavern?.getContext?.() || {};
+function notifyNativeSelect(select) {
+  if(!select)return;
+  select.dispatchEvent(new TOP.Event('change',{bubbles:true}));
+  const jq=TOP.jQuery || TOP.$;
+  if(typeof jq==='function')jq(select).trigger('change.select2');
+}
+function refreshNativeBook(name) {
+  const select=DOC.querySelector('#world_editor_select');
+  const selected=select?.selectedOptions?.[0];
+  if(selected && String(selected.textContent).trim()===String(name).trim()) notifyNativeSelect(select);
+}
 function helper(name) {
   for (const source of [SELF, SELF.TavernHelper, TOP.TavernHelper]) {
     if (typeof source?.[name] === 'function') return source[name].bind(source);
@@ -53,7 +64,10 @@ const engine = createWorldbookSnapshots({
   writeStore: store => TOP.localStorage.setItem(STORAGE, JSON.stringify(store)),
   id: () => TOP.crypto.randomUUID(), character, chat, catalog,
   globals: () => helper('getGlobalWorldbookNames')(),
-  setGlobals: names => helper('rebindGlobalWorldbooks')(names),
+  setGlobals: async names => {
+    await helper('rebindGlobalWorldbooks')(names);
+    notifyNativeSelect(DOC.querySelector('#world_info'));
+  },
   load: name => ctx().loadWorldInfo(name),
   exists: async name => (await helper('getWorldbookNames')()).includes(name),
   notice: message => TOP.toastr?.warning?.(message),
@@ -61,7 +75,10 @@ const engine = createWorldbookSnapshots({
   hasUnsaved: names => ['top', 'bottom'].some(side => {
     const value = TOP[STITCH]?.state?.[side]; return value?.dirty && names.includes(value.name);
   }),
-  changed: (name, data) => TOP[STITCH]?.refreshSnapshotBook?.(name, data),
+  changed: async (name, data) => {
+    try { await TOP[STITCH]?.refreshSnapshotBook?.(name, data, true); }
+    finally { refreshNativeBook(name); }
+  },
 });
 
 let overlay = null, viewportCleanup = null, themeCleanup = null, busy = false, disposed = false;
@@ -178,7 +195,7 @@ style.textContent = `
 .pmm-wbs-row [data-wbs="menu"] { border:none; padding:6px; font-size:20px; }
 .pmm-wbs-menu { border-color:var(--wbs-line); }
 .pmm-wbs-row { position:relative; }
-.pmm-wbs-row .pmm-wbs-menu { position:absolute; right:10px; top:45px; z-index:4; margin:0; padding:5px; width:max-content; max-width:calc(100% - 20px); gap:3px; border:1px solid var(--wbs-line); border-radius:10px; background:var(--pm-panel-bg); box-shadow:0 4px 14px var(--wbs-shadow); }
+.pmm-wbs-row .pmm-wbs-menu { position:relative; right:auto; top:auto; z-index:4; margin:6px 0 0 auto; padding:5px; width:max-content; max-width:100%; gap:3px; border:1px solid var(--wbs-line); border-radius:10px; background:var(--pm-panel-bg); box-shadow:0 4px 14px var(--wbs-shadow); }
 .pmm-wbs-row .pmm-wbs-menu button { padding:4px 7px; min-height:28px; border-radius:7px; font-size:11px; }
 .pmm-wbs-message { display:flex; align-items:center; gap:8px; }
 .pmm-wbs-message>span { flex:1; }
@@ -379,7 +396,7 @@ function snapshotMarkup() {
       const attrs='data-id="'+h(item.id)+'"';
       const count=Object.values(item.books).reduce((n,s)=>n+Object.keys(s).length,0);
       return '<article class="pmm-wbs-row"><div class="pmm-wbs-row-main"><div class="pmm-wbs-copy"><strong>'+h(item.name)+'</strong><small>'+Object.keys(item.books).length+' 本 · '+count+' 条</small></div>'
-        +(page==='character'?button('bind',item.chat===chat()?'🔒':'🔓',attrs+' class="pmm-wbs-lock" aria-label="绑定当前聊天" aria-pressed="'+(item.chat===chat())+'"')+button('apply','应用',attrs):button('use-plan','组选用',attrs))
+        +(page==='character'?button('bind',item.chat===chat()?'🔒':'🔓',attrs+' class="pmm-wbs-lock" aria-label="绑定当前聊天" aria-pressed="'+(item.chat===chat())+'"')+button('apply','应用',attrs):'')
         +button('menu','⋯',attrs+' aria-label="更多操作"')+'</div>'
         +(menuId===item.id?'<div class="pmm-wbs-menu">'+button('edit-snapshot','编辑开关',attrs)+button('rename','改名',attrs)+button('delete','删除',attrs)+'</div>':'')+'</article>';
     }).join('')
@@ -578,11 +595,6 @@ function onClick(event) {
       await loadItems();
     }
     else if (action === 'group-menu') menuId=menuId===id?'':id;
-    else if (action === 'use-plan') {
-      const groupId=book;
-      await conflictAction(force=>engine.selectGroupPlan(groupId,id,force));
-      say(engine.read().groups.find(g=>g.id===groupId)?.enabled?'分组方案已应用':'分组方案已选择；开启时生效');
-    }
     else if (action === 'new-group' || action === 'edit-group') {
       if(action==='edit-group' && !await prepareGroupChange(id,'编辑'))return;
       await refresh(); editGroup = action === 'new-group' ? { name: '', books: [] } : copy(engine.read().groups.find(group => group.id === id));

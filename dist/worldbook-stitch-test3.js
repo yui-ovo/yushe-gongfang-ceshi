@@ -2863,7 +2863,7 @@
   DOC.addEventListener('drop', onDrop, true);
   DOC.addEventListener('dragend', clearDrag, true);
   TOP[API_KEY] = { open, close, cleanup, state,
-    async refreshSnapshotBook(name, data) {
+    async refreshSnapshotBook(name, data, skipNative = false) {
       if (!state.open) return;
       saveScrolls();
       for (const side of [state.top, state.bottom]) {
@@ -2873,7 +2873,7 @@
         side.history.length = 0;
       }
       renderPanels();
-      await reloadOpenNativeWorldbook(name);
+      if (!skipNative) await reloadOpenNativeWorldbook(name);
     },
   };
   console.info('[预设工坊测试版] test.3 世界书已接入原生双卡片布局。');
