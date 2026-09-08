@@ -42,6 +42,16 @@ try {
     const camera = page.locator('[data-pmm-wb-panel="top"] [data-wb-action="snapshots"]');
     await camera.waitFor();
     await camera.click();
+    await page.locator('[data-wbs="sources"]').waitFor();
+    const initial = await page.locator('.pmm-wbs-dialog').boundingBox();
+    assert.ok(initial.height <= 381, 'First open must remain a compact sheet');
+    assert.equal(await page.locator('[data-wbs="choose"]').count(), 0, 'Do not open the whole catalog on entry');
+    await page.click('[data-hub-tab="global"]');
+    await page.click('[data-hub-tab="character"]');
+    const returned = await page.locator('.pmm-wbs-dialog').boundingBox();
+    assert.ok(Math.abs(initial.height-returned.height) < 1, 'Tab roundtrip changed sheet height');
+    await page.screenshot({ path:fileURLToPath(new URL(`compact-${width}.png`, output)) });
+    await page.click('[data-wbs="sources"]');
     await page.locator('[data-wbs="choose"][data-book="角色世界"]').waitFor();
     assert.equal(await page.locator('[data-wbs="choose"][data-scope="global"]').count(), 2);
     await page.screenshot({ path:fileURLToPath(new URL(`sources-${width}.png`, output)) });
@@ -99,5 +109,37 @@ try {
     assert.deepEqual(errors, []);
     await page.close();
     console.log(`Browser UI passed: ${width}px, drafts, binding/return, groups, tabs and reduced viewport.`);
+  }
+  // Many books must scroll inside the same compact sheet; verify all three theme palettes.
+  for (const [mode, colors, tone] of [
+    ['light', ['#f8f9fb','#fff','#252932','#797471'], 'light'],
+    ['dark', ['#191d26','#232936','#e4e8ef','#81aaeb'], 'dark'],
+    ['magic', ['#211d2b','#30283c','#ede4f6','#cba0ea'], 'dark'],
+  ]) {
+    const page = await browser.newPage({ viewport:{width:390,height:844} });
+    await page.goto(`http://127.0.0.1:${server.address().port}/`);
+    await page.waitForFunction(() => !!window.__PMM_WORLDBOOK_SNAPSHOTS__);
+    await page.evaluate(({ colors }) => {
+      const root=document.querySelector('#preset-manager-main-panel');
+      ['--pm-panel-bg','--pm-card-bg','--pm-text-primary','--pm-accent'].forEach((key,i)=>root.style.setProperty(key,colors[i]));
+      for(let i=0;i<50;i++){const name='世界书 '+i;fixture.data[name]=fixture.data['剧情补充'];fixture.globals.push(name);}
+    }, { colors });
+    await page.click('#camera');
+    await page.locator('[data-wbs="sources"]:enabled').waitFor();
+    assert.equal(await page.locator('.pmm-wbs-overlay').getAttribute('data-wbs-tone'), tone);
+    await page.screenshot({path:fileURLToPath(new URL(`compact-${mode}.png`, output))});
+    await page.click('[data-wbs="sources"]');
+    await page.locator('[data-wbs="choose"]').first().waitFor();
+    assert.ok((await page.locator('.pmm-wbs-dialog').boundingBox()).height<=381);
+    assert.ok(await page.locator('.pmm-wbs-body').evaluate(node => node.scrollHeight > node.clientHeight));
+    await page.locator('.pmm-wbs-body').evaluate(node => { node.scrollTop=node.scrollHeight; });
+    await page.locator('[data-wbs="choose"]').last().click();
+    await page.click('[data-wbs="new"]');
+    await page.screenshot({path:fileURLToPath(new URL(`editor-${mode}.png`, output))});
+    await page.click('[data-wbs="cancel-edit"]');
+    await page.evaluate(() => document.querySelector('#preset-manager-main-panel').style.setProperty('--pm-text-primary', '#111111'));
+    await page.waitForFunction(() => document.querySelector('.pmm-wbs-overlay').dataset.wbsTone==='light');
+    await page.close();
+    console.log(`Compact sheet, long list and theme passed: ${mode}.`);
   }
 } finally { await browser.close(); await new Promise(resolve => server.close(resolve)); }

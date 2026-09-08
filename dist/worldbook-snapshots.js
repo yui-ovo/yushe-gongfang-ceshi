@@ -59,7 +59,7 @@ const engine = createWorldbookSnapshots({
   changed: (name, data) => TOP[STITCH]?.refreshSnapshotBook?.(name, data),
 });
 
-let overlay = null, viewportCleanup = null, busy = false, disposed = false;
+let overlay = null, viewportCleanup = null, themeCleanup = null, busy = false, disposed = false;
 let page = 'character', section = 'snapshots', book = '', books = [], items = [], draft = null;
 let picker = false, editGroup = null, renameId = '', menuId = '', message = '', lastFocus = null;
 let eventSource = null, eventType = '', eventTimer = 0;
@@ -109,16 +109,94 @@ style.textContent = `
 .pmm-wbs-message { padding:8px 20px; color:inherit; font-size:13px; background:var(--pm-hover-bg,#303030); flex-shrink:0; }
 .pmm-wbs-dialog [hidden] { display:none!important; }
 @media(max-width:600px) { .pmm-wbs-overlay { align-items:flex-end; padding:max(8px,env(safe-area-inset-top)) 8px max(8px,env(safe-area-inset-bottom)); } .pmm-wbs-dialog { width:100%; border-radius:18px; } .pmm-wbs-body { padding:12px; } .pmm-wbs-head { padding:15px 14px 10px; } .pmm-wbs-foot { padding:12px; } }
+
+/* Compact, theme-derived soft surfaces shared by the three snapshot categories. */
+.pmm-wbs-overlay,.pmm-snapshot-hub-preset {
+  --wbs-base:#202124; --wbs-ink:var(--pm-text-primary,#eee);
+  --wbs-surface:color-mix(in srgb,var(--pm-panel-bg,var(--wbs-base)) 92%,var(--wbs-base));
+  --wbs-raised:color-mix(in srgb,var(--pm-card-bg,var(--wbs-base)) 88%,var(--wbs-ink) 4%);
+  --wbs-line:color-mix(in srgb,var(--wbs-ink) 10%,transparent);
+  --wbs-shadow:rgba(0,0,0,.23); --wbs-shine:rgba(255,255,255,.045);
+}
+[data-wbs-tone="light"] { --wbs-base:#f5f5f5; --wbs-shadow:rgba(35,39,48,.085); --wbs-shine:rgba(255,255,255,.85); }
+.pmm-wbs-overlay { background:rgba(0,0,0,.27); }
+.pmm-wbs-dialog,.pmm-snapshot-hub-preset .pmm-switch-snapshot-dialog {
+  background:linear-gradient(145deg,var(--wbs-shine),transparent 46%),var(--wbs-surface);
+  color:var(--wbs-ink); border:1px solid var(--wbs-line); border-radius:28px;
+  box-shadow:0 18px 50px var(--wbs-shadow),inset 0 1px 0 var(--wbs-shine);
+  font-family:var(--pm-font-family,system-ui,sans-serif); text-shadow:none;
+}
+.pmm-wbs-dialog { width:600px; height:min(380px,calc(var(--wbs-visible-height,100dvh) - 32px)); }
+.pmm-wbs-dialog.is-editing { height:min(680px,calc(var(--wbs-visible-height,100dvh) - 32px)); }
+.pmm-wbs-head { padding:22px 22px 12px; }
+.pmm-wbs-heading { display:flex; align-items:center; gap:12px; min-width:0; }
+.pmm-wbs-heading>div { min-width:0; }
+.pmm-wbs-heading p { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.pmm-wbs-head h2 { font-size:19px; font-weight:650; letter-spacing:.015em; }
+.pmm-wbs-symbol { display:inline-flex; align-items:center; justify-content:center; flex:none; width:40px; height:40px; border-radius:14px; background:var(--wbs-raised); box-shadow:3px 4px 10px var(--wbs-shadow),inset 0 1px 0 var(--wbs-shine); }
+.pmm-wbs-svg { width:20px; height:20px; display:block; flex:none; }
+.pmm-wbs-dialog button { border-color:var(--wbs-line); border-radius:999px; }
+.pmm-wbs-icon { width:34px; height:34px; min-height:34px!important; padding:8px!important; display:grid; place-items:center; background:var(--wbs-raised)!important; box-shadow:2px 3px 9px var(--wbs-shadow); }
+.pmm-snapshot-tabs { border:1px solid var(--wbs-line); border-radius:17px; padding:4px; margin:0 20px 8px; gap:3px; background:color-mix(in srgb,var(--wbs-ink) 3%,transparent); }
+.pmm-snapshot-tabs button { display:flex; align-items:center; justify-content:center; gap:6px; border-radius:13px!important; font-size:12px!important; line-height:1.25; padding:10px 3px!important; color:var(--wbs-ink); opacity:.68; }
+.pmm-snapshot-tabs .pmm-wbs-svg { width:15px; height:15px; }
+.pmm-snapshot-tabs button[aria-selected="true"] { background:var(--wbs-raised)!important; opacity:1; box-shadow:2px 3px 7px var(--wbs-shadow),inset 0 1px 0 var(--wbs-shine); }
+.pmm-wbs-body { flex:1; padding:12px 20px 16px; scrollbar-width:thin; }
+.pmm-wbs-body h3 { font-weight:550; font-size:12px; margin:14px 3px 9px; opacity:.68; }
+.pmm-wbs-source { display:flex; align-items:center; gap:10px; border-radius:17px!important; padding:13px!important; background:var(--wbs-raised)!important; border:1px solid var(--wbs-line)!important; }
+.pmm-wbs-source-copy { min-width:0; flex:1; line-height:1.5; }
+.pmm-wbs-source-copy>span { display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+.pmm-wbs-source-copy small { overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
+.pmm-wbs-source>.pmm-wbs-svg { opacity:.5; width:16px; }
+.pmm-wbs-tools { flex-wrap:nowrap; gap:8px; margin:3px 0 12px; }
+.pmm-wbs-tools button { padding:10px 13px; font-size:12px; }
+.pmm-wbs-tools .grow { display:flex; align-items:center; justify-content:space-between; gap:8px; background:var(--wbs-raised); border-radius:13px; }
+.pmm-wbs-tools .grow>span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.pmm-wbs-primary { background:var(--wbs-ink)!important; color:var(--wbs-base)!important; border-color:transparent!important; box-shadow:0 4px 12px var(--wbs-shadow); }
+.pmm-wbs-empty { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:7px; min-height:140px; padding:18px 5px; opacity:1; }
+.pmm-wbs-empty .pmm-wbs-symbol { width:48px; height:48px; border-radius:50%; margin-bottom:4px; }
+.pmm-wbs-empty strong { font-weight:500; font-size:13px; }
+.pmm-wbs-empty small { max-width:240px; line-height:1.7; margin:0; font-size:11px; }
+.pmm-wbs-row,.pmm-snapshot-hub-preset .pmm-switch-snapshot-row { border:1px solid var(--wbs-line)!important; background:var(--wbs-raised)!important; border-radius:18px!important; box-shadow:0 3px 9px var(--wbs-shadow),inset 0 1px 0 var(--wbs-shine); }
+.pmm-wbs-row-main { gap:9px; }
+.pmm-wbs-row .pmm-wbs-symbol { width:32px; height:36px; border-radius:11px; box-shadow:none; }
+.pmm-wbs-row .pmm-wbs-copy small { font-size:11px; }
+.pmm-wbs-row [data-wbs="menu"] { border:none; padding:6px; font-size:20px; }
+.pmm-wbs-menu { border-color:var(--wbs-line); }
+.pmm-wbs-entry { padding:13px 8px; border-color:var(--wbs-line); font-size:13px; }
+.pmm-wbs-dialog input[type="text"],.pmm-wbs-dialog input[type="search"] { border-color:var(--wbs-line); background:var(--wbs-raised); border-radius:14px; }
+.pmm-wbs-foot { border-color:var(--wbs-line); padding:12px 20px; background:color-mix(in srgb,var(--wbs-surface) 85%,transparent); }
+.pmm-wbs-foot small { font-size:10px; line-height:1.6; }
+.pmm-wbs-subnav { padding:3px; border-radius:999px; background:color-mix(in srgb,var(--wbs-ink) 4%,transparent); }
+.pmm-wbs-subnav button { flex:1; border:none; padding:7px 9px; }
+.pmm-wbs-picker-head { display:flex; align-items:center; gap:10px; margin-bottom:8px; }
+.pmm-wbs-picker-head strong { font-size:13px; font-weight:550; }
+.pmm-snapshot-hub-preset .pmm-switch-snapshot-head { border-bottom:0!important; }
+.pmm-snapshot-hub-preset .pmm-switch-snapshot-actions>button,.pmm-snapshot-hub-preset .pmm-switch-snapshot-default-actions>button,.pmm-snapshot-hub-preset .pmm-switch-snapshot-create>button { border-radius:999px!important; }
+@media(max-width:600px) { .pmm-wbs-head { padding:18px 16px 12px; } .pmm-wbs-body { padding:10px 14px 14px; } .pmm-snapshot-tabs { margin:0 14px 8px; } .pmm-wbs-foot { padding:10px 15px; } .pmm-wbs-dialog { border-radius:26px; } }
 `;
 DOC.head.append(style);
 const tabLabels = { preset: '预设', character: '角色世界书', global: '全局世界书' };
+function icon(name) {
+  const paths = {
+    camera: '<path d="M8 5l1-2h6l1 2h4v14H4V5z"/><circle cx="12" cy="12" r="4"/>',
+    preset: '<path d="M5 4h14v16H5zM8 8h8M8 12h8M8 16h5"/>',
+    character: '<circle cx="12" cy="8" r="4"/><path d="M5 21v-3a7 7 0 0114 0v3"/>',
+    global: '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c-5 5-5 13 0 18 5-5 5-13 0-18z"/>',
+    book: '<path d="M4 4h7l1 2 1-2h7v16h-7l-1 1-1-1H4zM12 6v15"/>',
+    arrow: '<path d="M9 5l7 7-7 7"/>', back: '<path d="M15 5l-7 7 7 7"/>',
+    close: '<path d="M6 6l12 12M18 6L6 18"/>',
+  };
+  return `<svg class="pmm-wbs-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths[name] || paths.camera}</svg>`;
+}
 function tabs(active, locked = false) {
-  return `<nav class="pmm-snapshot-tabs" aria-label="快照分类">${Object.entries(tabLabels).map(([key, label]) => `<button type="button" data-hub-tab="${key}" aria-selected="${key === active}"${locked ? ' disabled' : ''}>${label}</button>`).join('')}</nav>`;
+  return `<nav class="pmm-snapshot-tabs" aria-label="快照分类">${Object.entries(tabLabels).map(([key, label]) => `<button type="button" data-hub-tab="${key}" aria-selected="${key === active}"${locked ? ' disabled' : ''}>${icon(key)}<span>${label}</span></button>`).join('')}</nav>`;
 }
 function decoratePreset(root) {
   const dialog = root?.querySelector('.pmm-switch-snapshot-dialog');
   if (!dialog || dialog.querySelector('.pmm-snapshot-tabs')) return;
   root.classList.add('pmm-snapshot-hub-preset');
+  theme(root);
   const locked = !!TOP[PRESET]?.isCapturing?.();
   dialog.querySelector('header')?.insertAdjacentHTML('afterend', tabs('preset', locked));
   dialog.querySelector('.pmm-snapshot-tabs')?.addEventListener('click', event => {
@@ -133,12 +211,31 @@ function decoratePreset(root) {
     if (menu) for (const control of row.querySelectorAll('.pmm-switch-snapshot-lock')) menu.append(control);
   }
 }
-function theme() {
-  const source = DOC.querySelector('#preset-manager-main-panel .preset-panel') || DOC.body;
+function theme(target = overlay) {
+  if (!target) return;
+  const source = DOC.querySelector('#preset-manager-main-panel .pmm-wb-inline-panel') || DOC.querySelector('#preset-manager-main-panel .preset-panel') || DOC.body;
   const css = TOP.getComputedStyle(source);
   for (const key of ['--pm-panel-bg', '--pm-card-bg', '--pm-text-primary', '--pm-border', '--pm-accent', '--pm-hover-bg', '--pm-font-family']) {
-    const value = css.getPropertyValue(key); if (value) overlay.style.setProperty(key, value);
+    const value = css.getPropertyValue(key); if (value) target.style.setProperty(key, value); else target.style.removeProperty(key);
   }
+  // Resolve inherited/custom colors through CSS itself, including magic-wand theme variables.
+  const probe = DOC.createElement('span');
+  probe.style.cssText = 'position:absolute;visibility:hidden;color:var(--pm-text-primary,currentColor)';
+  target.append(probe);
+  const rgb = TOP.getComputedStyle(probe).color.match(/[\d.]+/g)?.slice(0,3).map(Number);
+  probe.remove();
+  const dark = rgb ? .2126*rgb[0] + .7152*rgb[1] + .0722*rgb[2] > 145 : true;
+  target.dataset.wbsTone = dark ? 'dark' : 'light';
+}
+function watchTheme() {
+  themeCleanup?.();
+  let frame = 0;
+  const update = () => { if (!frame) frame = TOP.requestAnimationFrame(() => { frame = 0; theme(); }); };
+  const observer = new TOP.MutationObserver(update);
+  const sources = [DOC.documentElement, DOC.body, DOC.getElementById('preset-manager-main-panel'), DOC.querySelector('#preset-manager-main-panel .pm-panel-container'), DOC.querySelector('#preset-manager-main-panel .preset-panel')];
+  sources.filter(Boolean).forEach(node => observer.observe(node, { attributes:true, attributeFilter:['class','style','data-theme'] }));
+  TOP.addEventListener('storage', update);
+  themeCleanup = () => { observer.disconnect(); TOP.removeEventListener('storage', update); if (frame) TOP.cancelAnimationFrame(frame); };
 }
 function bindViewport() {
   const vv = TOP.visualViewport;
@@ -154,6 +251,7 @@ function bindViewport() {
       top: `${keyboard ? vv.offsetTop : (vv?.pageTop ?? TOP.scrollY)}px`,
       width: `${vv?.width || TOP.innerWidth}px`, height: `${vv?.height || TOP.innerHeight}px`,
     });
+    overlay.style.setProperty('--wbs-visible-height', `${vv?.height || TOP.innerHeight}px`);
   };
   const schedule = () => { if (!frame) frame = TOP.requestAnimationFrame(update); };
   const targets = [[TOP, 'resize'], [TOP, 'scroll'], [TOP, 'orientationchange'], [vv, 'resize'], [vv, 'scroll'], [overlay, 'focusin'], [overlay, 'focusout']];
@@ -181,14 +279,14 @@ async function refresh() { books = await catalog(); }
 function button(action, label, extra = '') { return `<button type="button" data-wbs="${action}" ${extra}>${label}</button>`; }
 function sourceMarkup() {
   const sectionMarkup = (scope, label, rows) => `<h3>${label}</h3>${rows.length ? rows.map(row =>
-    `<button type="button" class="pmm-wbs-source" data-wbs="choose" data-book="${h(row.name)}" data-scope="${scope}">${h(row.name)}<small>${scope === 'character' ? h(row.characters.map(c => c.name).join('、')) : '已挂载到全局'}</small></button>`).join('') : '<p class="pmm-wbs-empty">暂无符合条件的世界书</p>'}`;
-  return sectionMarkup('character', '角色绑定世界书', books.filter(row => row.characters.length))
+    `<button type="button" class="pmm-wbs-source" data-wbs="choose" data-book="${h(row.name)}" data-scope="${scope}"><span class="pmm-wbs-symbol">${icon('book')}</span><span class="pmm-wbs-source-copy"><span>${h(row.name)}</span><small>${scope === 'character' ? h(row.characters.map(c => c.name).join('、')) : '已挂载到全局'}</small></span>${icon('arrow')}</button>`).join('') : '<p class="pmm-wbs-empty">暂无符合条件的世界书</p>'}`;
+  return `<div class="pmm-wbs-picker-head">${button('back-sources', icon('back'), 'class="pmm-wbs-icon" aria-label="返回快照"')}<strong>选择世界书</strong></div>` + sectionMarkup('character', '角色绑定世界书', books.filter(row => row.characters.length))
     + sectionMarkup('global', '全局世界书 · 未绑定角色', books.filter(row => !row.characters.length && row.global));
 }
 function snapshotMarkup() {
   const store = engine.read(), c = character();
   const list = store.snapshots.filter(item => item.scope === page && (!book || item.book === book));
-  return `<div class="pmm-wbs-tools">${button('sources', h(book || '选择世界书'), 'class="grow"')}${button('new', '＋ 新快照', `class="pmm-wbs-primary" ${book ? '' : 'disabled'}`)}</div>
+  return `<div class="pmm-wbs-tools">${button('sources', `<span>${h(book || '选择世界书')}</span>${icon('arrow')}`, 'class="grow"')}${button('new', '＋ 新快照', `class="pmm-wbs-primary" ${book ? '' : 'disabled'}`)}</div>
     ${list.length ? list.map(item => {
       const active = items.length && item.book === book && Object.entries(item.states).every(([uid, disabled]) => {
         const entry = items.find(entry => String(entry.uid) === uid); return entry && !!entry.disable === disabled;
@@ -197,7 +295,7 @@ function snapshotMarkup() {
       const canBind = item.scope === 'character' && books.find(row => row.name === item.book)?.characters.some(row => row.key === c?.key);
       const attrs = `data-id="${h(item.id)}"`;
       return `<article class="pmm-wbs-row"><div class="pmm-wbs-row-main"><div class="pmm-wbs-copy"><strong>${h(item.name)}</strong><small>${h(item.book)} · ${Object.keys(item.states).length} 条${active ? ' · 当前开关一致' : ''}</small>${item.characters.length ? `<small>自动应用：${h(characters().filter(c => item.characters.includes(c.key)).map(c => c.name).join('、') || '绑定角色已不存在')}</small>` : ''}</div>${button('apply', '应用', attrs)}${button('menu', '⋯', `${attrs} aria-label="更多操作" aria-expanded="${menuId === item.id}"`)}</div>${menuId === item.id ? `<div class="pmm-wbs-menu">${button('rename', '改名', attrs)}${item.scope === 'character' ? button('bind', bound ? '取消当前角色绑定' : '绑定当前角色并应用', `${attrs} ${canBind ? '' : 'disabled'} title="请进入绑定这本书的角色聊天"`) : ''}${button('delete', '删除', attrs)}</div>` : ''}</article>`;
-    }).join('') : '<p class="pmm-wbs-empty">还没有快照<br>选择世界书，保存第一套开关方案</p>'}`;
+    }).join('') : `<div class="pmm-wbs-empty"><span class="pmm-wbs-symbol">${icon('camera')}</span><strong>还没有快照</strong><small>选择世界书，保存第一套开关方案</small></div>`}`;
 }
 function groupMarkup() {
   return `${button('new-group', '＋ 新建分组', 'class="pmm-wbs-source"')}${engine.read().groups.map(group => {
@@ -222,10 +320,10 @@ function render() {
   const content = draft ? draftMarkup() : editGroup ? groupEditorMarkup() : rename
     ? `<label>快照名称<input type="text" data-rename value="${h(rename.name)}" maxlength="100"></label>`
     : picker ? sourceMarkup() : section === 'groups' ? groupMarkup() : snapshotMarkup();
-  overlay.innerHTML = `<section class="pmm-wbs-dialog" role="dialog" aria-modal="true" aria-label="世界书快照">
-    <header class="pmm-wbs-head"><div><h2>${draft ? '调整开关' : editGroup ? '世界书分组' : '快照'}</h2><p>${h(draft ? book : character()?.name || '酒馆主页')}</p></div>${button('close', '×', 'class="pmm-wbs-icon" aria-label="关闭"')}</header>
+  overlay.innerHTML = `<section class="pmm-wbs-dialog${editing ? ' is-editing' : ''}" role="dialog" aria-modal="true" aria-label="世界书快照">
+    <header class="pmm-wbs-head"><div class="pmm-wbs-heading"><span class="pmm-wbs-symbol">${icon('camera')}</span><div><h2>${draft ? '调整开关' : editGroup ? '世界书分组' : '快照'}</h2><p>${h(draft ? book : character()?.name || '酒馆主页')}</p></div></div>${button('close', icon('close'), 'class="pmm-wbs-icon" aria-label="关闭"')}</header>
     ${tabs(page, !!editing)}<div class="pmm-wbs-message" data-message role="status" ${message ? '' : 'hidden'}>${h(message)}</div>
-    <div class="pmm-wbs-body">${page === 'global' && !editing && !picker ? `<div class="pmm-wbs-tools">${button('snapshots', '条目快照', section === 'snapshots' ? 'class="pmm-wbs-primary"' : '')}${button('groups', '世界书分组', section === 'groups' ? 'class="pmm-wbs-primary"' : '')}</div>` : ''}${content}</div>
+    <div class="pmm-wbs-body">${page === 'global' && !editing && !picker ? `<div class="pmm-wbs-tools pmm-wbs-subnav">${button('snapshots', '条目快照', section === 'snapshots' ? 'class="pmm-wbs-primary"' : '')}${button('groups', '世界书分组', section === 'groups' ? 'class="pmm-wbs-primary"' : '')}</div>` : ''}${content}</div>
     <footer class="pmm-wbs-foot"><small>${draft ? '仅记录开关；保存后应用，取消不修改世界书。' : section === 'groups' ? '关闭分组会保留手动挂载及其他开启分组需要的书。' : '手动应用 · 可选角色绑定 · 返回主页恢复进入前状态'}</small>${editing ? button('cancel-edit', '取消') + button(draft ? 'save-draft' : editGroup ? 'save-group' : 'save-rename', '保存', 'class="pmm-wbs-primary"') : ''}</footer>
     </section>`;
 }
@@ -241,20 +339,20 @@ async function open(scope = 'character', selected = '') {
   if (TOP[PRESET]?.isCapturing?.()) { TOP.toastr?.info?.('请先保存或取消预设快照'); return; }
   if (overlay) return;
   TOP[PRESET]?.close?.();
-  page = scope; section = 'snapshots'; book = selected; message = ''; picker = !selected;
+  page = scope; section = 'snapshots'; book = selected; message = ''; picker = false;
   lastFocus = DOC.activeElement;
   overlay = DOC.createElement('div'); overlay.className = 'pmm-wbs-overlay';
   overlay.addEventListener('click', onClick);
   overlay.addEventListener('input', onInput);
   overlay.addEventListener('change', onChange);
   overlay.addEventListener('keydown', onKey);
-  DOC.body.append(overlay); theme(); bindViewport(); render();
+  DOC.body.append(overlay); theme(); watchTheme(); bindViewport(); render();
   overlay.querySelector('[data-wbs="close"]')?.focus({ preventScroll: true });
   await run(async () => {
     await refresh();
     const row = books.find(row => row.name === book);
     if (row) page = row.characters.length ? 'character' : 'global';
-    if (!row || (!row.characters.length && !row.global)) { book = ''; picker = true; }
+    if (!row || (!row.characters.length && !row.global)) book = '';
     await loadItems(); render();
   });
 }
@@ -269,6 +367,7 @@ async function close(force = false) {
   draft = null; editGroup = null; renameId = ''; menuId = '';
   engine.setCapturing(false);
   viewportCleanup?.(); viewportCleanup = null;
+  themeCleanup?.(); themeCleanup = null;
   overlay?.remove(); overlay = null;
   lastFocus?.isConnected && lastFocus.focus?.({ preventScroll: true });
   if (!force) try { await engine.transition(); } catch (error) { TOP.toastr?.warning?.(error.message); }
@@ -314,6 +413,7 @@ function onClick(event) {
     } else if (action === 'choose') {
       book = target.dataset.book; page = target.dataset.scope; section = 'snapshots'; picker = false; await loadItems();
     } else if (action === 'sources') { await refresh(); picker = true; }
+    else if (action === 'back-sources') picker = false;
     else if (action === 'snapshots' || action === 'groups') { section = action; picker = false; await refresh(); }
     else if (action === 'new') {
       if (TOP[PRESET]?.isCapturing?.()) throw new Error('请先完成预设快照');
