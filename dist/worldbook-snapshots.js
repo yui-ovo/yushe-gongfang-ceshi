@@ -61,7 +61,7 @@ const engine = createWorldbookSnapshots({
 
 let overlay = null, viewportCleanup = null, themeCleanup = null, busy = false, disposed = false;
 let page = 'character', section = 'snapshots', book = '', books = [], items = [], draft = null;
-let picker = false, editGroup = null, renameId = '', menuId = '', message = '', lastFocus = null;
+let picker = false, sourceQuery = '', editGroup = null, renameId = '', menuId = '', message = '', lastFocus = null;
 let eventSource = null, eventType = '', eventTimer = 0;
 const style = DOC.createElement('style');
 style.id = 'pmm-worldbook-snapshot-style';
@@ -126,8 +126,16 @@ style.textContent = `
   box-shadow:0 18px 50px var(--wbs-shadow),inset 0 1px 0 var(--wbs-shine);
   font-family:var(--pm-font-family,system-ui,sans-serif); text-shadow:none;
 }
-.pmm-wbs-dialog { width:600px; height:min(380px,calc(var(--wbs-visible-height,100dvh) - 32px)); }
-.pmm-wbs-dialog.is-editing { height:min(680px,calc(var(--wbs-visible-height,100dvh) - 32px)); }
+.pmm-wbs-dialog { width:600px; }
+.pmm-wbs-dialog,.pmm-snapshot-hub-preset .pmm-switch-snapshot-dialog {
+  height:min(460px,calc(var(--wbs-visible-height,var(--pmm-switch-snapshot-visible-height,100dvh)) - 32px))!important;
+  max-height:100%!important; color:var(--wbs-ink)!important;
+}
+.pmm-snapshot-hub-preset .pmm-switch-snapshot-list { flex:1!important; min-height:0!important; max-height:none!important; }
+.pmm-snapshot-hub-preset .pmm-switch-snapshot-head,.pmm-snapshot-hub-preset .pmm-switch-snapshot-default,.pmm-snapshot-hub-preset .pmm-switch-snapshot-create,.pmm-snapshot-hub-preset .pmm-switch-snapshot-footer { flex-shrink:0!important; }
+.pmm-wbs-source-section[hidden],.pmm-wbs-source[hidden] { display:none!important; }
+.pmm-wbs-source-search { position:sticky; top:-10px; z-index:1; background:var(--wbs-surface); padding-top:4px; }
+.pmm-wbs-dialog.is-editing { height:min(680px,calc(var(--wbs-visible-height,100dvh) - 32px))!important; }
 .pmm-wbs-head { padding:22px 22px 12px; }
 .pmm-wbs-heading { display:flex; align-items:center; gap:12px; min-width:0; }
 .pmm-wbs-heading>div { min-width:0; }
@@ -213,18 +221,50 @@ function decoratePreset(root) {
 }
 function theme(target = overlay) {
   if (!target) return;
-  const source = DOC.querySelector('#preset-manager-main-panel .pmm-wb-inline-panel') || DOC.querySelector('#preset-manager-main-panel .preset-panel') || DOC.body;
-  const css = TOP.getComputedStyle(source);
-  for (const key of ['--pm-panel-bg', '--pm-card-bg', '--pm-text-primary', '--pm-border', '--pm-accent', '--pm-hover-bg', '--pm-font-family']) {
-    const value = css.getPropertyValue(key); if (value) target.style.setProperty(key, value); else target.style.removeProperty(key);
+  const main = DOC.querySelector('#preset-manager-main-panel .pmm-wb-inline-panel') || DOC.querySelector('#preset-manager-main-panel .preset-panel');
+  const floating = DOC.querySelector('#preset-manager-floating-panel .floating-panel-root') || DOC.querySelector('#preset-manager-floating-panel .panel-wrapper')
+    || SELF.document.querySelector('.floating-panel-root');
+  const source = main || floating || DOC.body;
+  const view = source.ownerDocument.defaultView;
+  const css = view.getComputedStyle(source);
+  const useFloating = !main && !!floating;
+  let mode = ''; try { mode = TOP.localStorage.getItem('preset-manager-theme-mode') || ''; } catch (_) {}
+  const defaults = mode === 'dark'
+    ? { ink:'#e6e8ed', surface:'#20232b', card:'#282d36', border:'#424752' }
+    : { ink:'#35363b', surface:'#fafafa', card:'#f3f4f6', border:'#dadce1' };
+  // Resolve in the source tree: --fp-* and magic-theme references do not exist on a body-mounted modal.
+  const probe = source.ownerDocument.createElement('span');
+  probe.style.cssText = 'position:absolute;visibility:hidden;pointer-events:none';
+  source.append(probe);
+  const resolve = (expression, fallback) => {
+    probe.style.setProperty('color', fallback, 'important');
+    probe.style.setProperty('color', expression, 'important');
+    return view.getComputedStyle(probe).color;
+  };
+  const fields = [
+    ['--pm-text-primary','--fp-text-color','--SmartThemeBodyColor',defaults.ink],
+    ['--pm-panel-bg','--fp-glass-bg','--SmartThemeBlurTintColor',defaults.surface],
+    ['--pm-card-bg','--fp-card-bg','--SmartThemeBlurTintColor',defaults.card],
+    ['--pm-border','--fp-border-color','--SmartThemeBorderColor',defaults.border],
+    ['--pm-accent','--fp-accent-color','--SmartThemeQuoteColor',defaults.ink],
+    ['--pm-hover-bg','--fp-glass-hover-bg','--SmartThemeBlurTintColor',defaults.card],
+  ];
+  for (const [key, fp, smart, fallback] of fields) {
+    const primary = useFloating ? fp : key;
+    const expression = `var(${primary},var(${smart},${fallback}))`;
+    target.style.setProperty(key, resolve(expression, fallback));
   }
-  // Resolve inherited/custom colors through CSS itself, including magic-wand theme variables.
-  const probe = DOC.createElement('span');
-  probe.style.cssText = 'position:absolute;visibility:hidden;color:var(--pm-text-primary,currentColor)';
-  target.append(probe);
-  const rgb = TOP.getComputedStyle(probe).color.match(/[\d.]+/g)?.slice(0,3).map(Number);
+  // Explicit day/night mode also works before either workshop surface is mounted.
+  if (!main && !floating && ['light','dark'].includes(mode)) {
+    target.style.setProperty('--pm-text-primary',defaults.ink);
+    target.style.setProperty('--pm-panel-bg',defaults.surface);
+    target.style.setProperty('--pm-card-bg',defaults.card);
+  }
+  const font = css.getPropertyValue('--pm-font-family') || css.fontFamily;
+  target.style.setProperty('--pm-font-family',font);
+  const rgb = target.style.getPropertyValue('--pm-text-primary').match(/[\d.]+/g)?.slice(0,3).map(Number);
   probe.remove();
-  const dark = rgb ? .2126*rgb[0] + .7152*rgb[1] + .0722*rgb[2] > 145 : true;
+  const dark = rgb?.length === 3 ? .2126*rgb[0] + .7152*rgb[1] + .0722*rgb[2] > 145 : mode === 'dark';
   target.dataset.wbsTone = dark ? 'dark' : 'light';
 }
 function watchTheme() {
@@ -232,7 +272,7 @@ function watchTheme() {
   let frame = 0;
   const update = () => { if (!frame) frame = TOP.requestAnimationFrame(() => { frame = 0; theme(); }); };
   const observer = new TOP.MutationObserver(update);
-  const sources = [DOC.documentElement, DOC.body, DOC.getElementById('preset-manager-main-panel'), DOC.querySelector('#preset-manager-main-panel .pm-panel-container'), DOC.querySelector('#preset-manager-main-panel .preset-panel')];
+  const sources = [DOC.documentElement, DOC.body, DOC.getElementById('preset-manager-main-panel'), DOC.querySelector('#preset-manager-main-panel .pm-panel-container'), DOC.querySelector('#preset-manager-main-panel .preset-panel'), DOC.querySelector('#preset-manager-floating-panel .floating-panel-root')];
   sources.filter(Boolean).forEach(node => observer.observe(node, { attributes:true, attributeFilter:['class','style','data-theme'] }));
   TOP.addEventListener('storage', update);
   themeCleanup = () => { observer.disconnect(); TOP.removeEventListener('storage', update); if (frame) TOP.cancelAnimationFrame(frame); };
@@ -278,10 +318,28 @@ async function run(action) {
 async function refresh() { books = await catalog(); }
 function button(action, label, extra = '') { return `<button type="button" data-wbs="${action}" ${extra}>${label}</button>`; }
 function sourceMarkup() {
-  const sectionMarkup = (scope, label, rows) => `<h3>${label}</h3>${rows.length ? rows.map(row =>
-    `<button type="button" class="pmm-wbs-source" data-wbs="choose" data-book="${h(row.name)}" data-scope="${scope}"><span class="pmm-wbs-symbol">${icon('book')}</span><span class="pmm-wbs-source-copy"><span>${h(row.name)}</span><small>${scope === 'character' ? h(row.characters.map(c => c.name).join('、')) : '已挂载到全局'}</small></span>${icon('arrow')}</button>`).join('') : '<p class="pmm-wbs-empty">暂无符合条件的世界书</p>'}`;
-  return `<div class="pmm-wbs-picker-head">${button('back-sources', icon('back'), 'class="pmm-wbs-icon" aria-label="返回快照"')}<strong>选择世界书</strong></div>` + sectionMarkup('character', '角色绑定世界书', books.filter(row => row.characters.length))
-    + sectionMarkup('global', '全局世界书 · 未绑定角色', books.filter(row => !row.characters.length && row.global));
+  const sectionMarkup = (scope, label, rows) => `<section class="pmm-wbs-source-section" data-source-section><h3>${label}</h3>${rows.length ? rows.map(row =>
+    `<button type="button" class="pmm-wbs-source" data-wbs="choose" data-book="${h(row.name)}" data-scope="${scope}" data-source-search="${h(normalizeSearch([row.name, ...row.characters.map(c => c.name)].join(' ')))}"><span class="pmm-wbs-symbol">${icon('book')}</span><span class="pmm-wbs-source-copy"><span>${h(row.name)}</span><small>${scope === 'character' ? h(row.characters.map(c => c.name).join('、')) : '已挂载到全局'}</small></span>${icon('arrow')}</button>`).join('') : '<p class="pmm-wbs-empty">暂无符合条件的世界书</p>'}</section>`;
+  return `<div class="pmm-wbs-picker-head">${button('back-sources', icon('back'), 'class="pmm-wbs-icon" aria-label="返回快照"')}<strong>选择世界书</strong></div><div class="pmm-wbs-source-search"><input type="search" data-source-query value="${h(sourceQuery)}" placeholder="搜索角色姓名或世界书名" aria-label="搜索角色姓名或世界书名" autocomplete="off"></div>` + sectionMarkup('character', '角色绑定世界书', books.filter(row => row.characters.length))
+    + sectionMarkup('global', '全局世界书 · 未绑定角色', books.filter(row => !row.characters.length && row.global))
+    + '<p class="pmm-wbs-empty" data-source-empty hidden role="status">没有匹配的角色或世界书</p>';
+}
+function normalizeSearch(value) { return String(value || '').normalize('NFKC').toLocaleLowerCase().trim(); }
+function filterSources() {
+  if (!overlay || !picker) return;
+  const query = normalizeSearch(sourceQuery);
+  let count = 0;
+  for (const section of overlay.querySelectorAll('[data-source-section]')) {
+    let visible = 0;
+    for (const row of section.querySelectorAll('[data-source-search]')) {
+      row.hidden = !row.dataset.sourceSearch.includes(query);
+      if (!row.hidden) visible++;
+    }
+    section.hidden = !!query && !visible;
+    count += visible;
+  }
+  const empty = overlay.querySelector('[data-source-empty]');
+  if (empty) empty.hidden = !query || count > 0;
 }
 function snapshotMarkup() {
   const store = engine.read(), c = character();
@@ -323,9 +381,10 @@ function render() {
   overlay.innerHTML = `<section class="pmm-wbs-dialog${editing ? ' is-editing' : ''}" role="dialog" aria-modal="true" aria-label="世界书快照">
     <header class="pmm-wbs-head"><div class="pmm-wbs-heading"><span class="pmm-wbs-symbol">${icon('camera')}</span><div><h2>${draft ? '调整开关' : editGroup ? '世界书分组' : '快照'}</h2><p>${h(draft ? book : character()?.name || '酒馆主页')}</p></div></div>${button('close', icon('close'), 'class="pmm-wbs-icon" aria-label="关闭"')}</header>
     ${tabs(page, !!editing)}<div class="pmm-wbs-message" data-message role="status" ${message ? '' : 'hidden'}>${h(message)}</div>
-    <div class="pmm-wbs-body">${page === 'global' && !editing && !picker ? `<div class="pmm-wbs-tools pmm-wbs-subnav">${button('snapshots', '条目快照', section === 'snapshots' ? 'class="pmm-wbs-primary"' : '')}${button('groups', '世界书分组', section === 'groups' ? 'class="pmm-wbs-primary"' : '')}</div>` : ''}${content}</div>
+    <div class="pmm-wbs-body">${page === 'global' && !editing && !picker ? `<div class="pmm-wbs-tools pmm-wbs-subnav">${button('groups', '世界书分组', section === 'groups' ? 'class="pmm-wbs-primary"' : '')}${button('snapshots', '条目快照', section === 'snapshots' ? 'class="pmm-wbs-primary"' : '')}</div>` : ''}${content}</div>
     <footer class="pmm-wbs-foot"><small>${draft ? '仅记录开关；保存后应用，取消不修改世界书。' : section === 'groups' ? '关闭分组会保留手动挂载及其他开启分组需要的书。' : '手动应用 · 可选角色绑定 · 返回主页恢复进入前状态'}</small>${editing ? button('cancel-edit', '取消') + button(draft ? 'save-draft' : editGroup ? 'save-group' : 'save-rename', '保存', 'class="pmm-wbs-primary"') : ''}</footer>
     </section>`;
+  filterSources();
 }
 async function loadItems() {
   items = [];
@@ -339,7 +398,7 @@ async function open(scope = 'character', selected = '') {
   if (TOP[PRESET]?.isCapturing?.()) { TOP.toastr?.info?.('请先保存或取消预设快照'); return; }
   if (overlay) return;
   TOP[PRESET]?.close?.();
-  page = scope; section = 'snapshots'; book = selected; message = ''; picker = false;
+  page = scope; section = scope === 'global' && !selected ? 'groups' : 'snapshots'; book = selected; message = ''; picker = false; sourceQuery = '';
   lastFocus = DOC.activeElement;
   overlay = DOC.createElement('div'); overlay.className = 'pmm-wbs-overlay';
   overlay.addEventListener('click', onClick);
@@ -373,6 +432,7 @@ async function close(force = false) {
   if (!force) try { await engine.transition(); } catch (error) { TOP.toastr?.warning?.(error.message); }
 }
 function onInput(event) {
+  if (event.target.matches('[data-source-query]')) { sourceQuery = event.target.value; filterSources(); }
   if (draft && event.target.matches('[data-name]')) draft.name = event.target.value;
   if (editGroup && event.target.matches('[data-group-name]')) editGroup.name = event.target.value;
   if (event.target.matches('[data-filter]')) {
@@ -407,12 +467,12 @@ function onClick(event) {
   void run(async () => {
     if (target.dataset.hubTab) {
       if (draft || editGroup || renameId) return;
-      page = target.dataset.hubTab; book = ''; menuId = ''; section = 'snapshots'; picker = false; items = [];
+      page = target.dataset.hubTab; book = ''; menuId = ''; section = page === 'global' ? 'groups' : 'snapshots'; picker = false; items = [];
       if (page === 'preset') { await close(true); TOP[PRESET]?.open?.(); return; }
       await refresh();
     } else if (action === 'choose') {
       book = target.dataset.book; page = target.dataset.scope; section = 'snapshots'; picker = false; await loadItems();
-    } else if (action === 'sources') { await refresh(); picker = true; }
+    } else if (action === 'sources') { await refresh(); picker = true; sourceQuery = ''; }
     else if (action === 'back-sources') picker = false;
     else if (action === 'snapshots' || action === 'groups') { section = action; picker = false; await refresh(); }
     else if (action === 'new') {

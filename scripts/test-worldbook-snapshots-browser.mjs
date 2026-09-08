@@ -44,7 +44,7 @@ try {
     await camera.click();
     await page.locator('[data-wbs="sources"]').waitFor();
     const initial = await page.locator('.pmm-wbs-dialog').boundingBox();
-    assert.ok(initial.height <= 381, 'First open must remain a compact sheet');
+    assert.ok(initial.height >= 450 && initial.height <= 461, 'Default sheet should match the taller preset panel');
     assert.equal(await page.locator('[data-wbs="choose"]').count(), 0, 'Do not open the whole catalog on entry');
     await page.click('[data-hub-tab="global"]');
     await page.click('[data-hub-tab="character"]');
@@ -54,6 +54,16 @@ try {
     await page.click('[data-wbs="sources"]');
     await page.locator('[data-wbs="choose"][data-book="角色世界"]').waitFor();
     assert.equal(await page.locator('[data-wbs="choose"][data-scope="global"]').count(), 2);
+    const query = page.locator('[data-source-query]');
+    await query.fill('小雨');
+    assert.equal(await page.locator('[data-wbs="choose"]:visible').count(), 1);
+    assert.equal(await page.locator('[data-wbs="choose"]:visible').getAttribute('data-book'), '角色世界');
+    await query.fill('日常辅助');
+    assert.equal(await page.locator('[data-wbs="choose"]:visible').getAttribute('data-book'), '日常辅助');
+    await query.fill('找不到这个角色');
+    assert.equal(await page.locator('[data-source-empty]:visible').count(), 1);
+    assert.equal(await query.evaluate(node => document.activeElement===node), true, 'Search must not replace the focused input');
+    await query.fill('');
     await page.screenshot({ path:fileURLToPath(new URL(`sources-${width}.png`, output)) });
     await page.click('[data-wbs="choose"][data-book="角色世界"]');
     await page.click('[data-wbs="new"]');
@@ -78,6 +88,8 @@ try {
     await page.evaluate(() => fixture.select(undefined));
     await page.waitForFunction(() => fixture.data['角色世界'].entries[0].disable===true);
     await page.click('[data-hub-tab="global"]');
+    assert.equal(await page.locator('.pmm-wbs-subnav button').first().getAttribute('data-wbs'), 'groups');
+    assert.equal(await page.locator('[data-wbs="new-group"]').count(), 1, 'Global tab opens groups by default');
     await page.click('[data-wbs="groups"]');
     await page.click('[data-wbs="new-group"]');
     await page.locator('[data-group-name]').fill('常用搭配');
@@ -130,7 +142,7 @@ try {
     await page.screenshot({path:fileURLToPath(new URL(`compact-${mode}.png`, output))});
     await page.click('[data-wbs="sources"]');
     await page.locator('[data-wbs="choose"]').first().waitFor();
-    assert.ok((await page.locator('.pmm-wbs-dialog').boundingBox()).height<=381);
+    assert.ok((await page.locator('.pmm-wbs-dialog').boundingBox()).height<=461);
     assert.ok(await page.locator('.pmm-wbs-body').evaluate(node => node.scrollHeight > node.clientHeight));
     await page.locator('.pmm-wbs-body').evaluate(node => { node.scrollTop=node.scrollHeight; });
     await page.locator('[data-wbs="choose"]').last().click();
@@ -141,5 +153,31 @@ try {
     await page.waitForFunction(() => document.querySelector('.pmm-wbs-overlay').dataset.wbsTone==='light');
     await page.close();
     console.log(`Compact sheet, long list and theme passed: ${mode}.`);
+  }
+  // Floating entry: main workshop unmounted, palette only exists as --fp-* references.
+  for (const mode of ['light','dark','magic']) {
+    const page = await browser.newPage({viewport:{width:390,height:844}});
+    await page.goto(`http://127.0.0.1:${server.address().port}/`);
+    await page.waitForFunction(() => !!window.__PMM_WORLDBOOK_SNAPSHOTS__);
+    await page.evaluate(mode => {
+      document.querySelector('#preset-manager-main-panel').remove();
+      document.body.style.color='#fafafa';
+      localStorage.setItem('preset-manager-theme-mode',mode==='magic'?'auto':mode);
+      const root=document.createElement('div');root.id='preset-manager-floating-panel';
+      root.innerHTML='<div class="floating-panel-root">浮动入口</div>';
+      document.body.append(root);
+      const floating=root.firstElementChild;
+      floating.style.cssText='--custom-ink:'+(mode==='dark'?'#e7e8ee':'#514b53')+';--custom-paper:'+(mode==='dark'?'#20252f':mode==='magic'?'#f8f0fa':'#ffffff')+';--fp-text-color:var(--custom-ink);--fp-card-bg:var(--custom-paper);--fp-glass-bg:var(--custom-paper);--fp-border-color:#aaaaaa;--fp-accent-color:#9983a4';
+      __PMM_SWITCH_SNAPSHOTS_TEST52__.open();
+    },mode);
+    const colors=await page.locator('#preset-fixture .pmm-switch-snapshot-dialog').evaluate(node=>({ink:getComputedStyle(node).color,root:node.parentElement.style.getPropertyValue('--pm-text-primary')}));
+    assert.equal(colors.ink,mode==='dark'?'rgb(231, 232, 238)':'rgb(81, 75, 83)');
+    assert.ok(!colors.root.includes('var('),'Palette must be resolved before leaving the floating DOM');
+    await page.click('#preset-fixture [data-hub-tab="character"]');
+    await page.locator('[data-wbs="sources"]:enabled').waitFor();
+    assert.equal(await page.locator('.pmm-wbs-dialog').evaluate(node=>getComputedStyle(node).color),colors.ink);
+    await page.screenshot({path:fileURLToPath(new URL(`floating-${mode}.png`,output))});
+    await page.close();
+    console.log(`Floating-only theme passed: ${mode}.`);
   }
 } finally { await browser.close(); await new Promise(resolve => server.close(resolve)); }
