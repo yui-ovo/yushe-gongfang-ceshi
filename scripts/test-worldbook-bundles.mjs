@@ -1,0 +1,84 @@
+import assert from 'node:assert/strict';
+import {createWorldbookSnapshots,copy,switches,emptyStore} from '../dist/worldbook-snapshot-core.js';
+function fixture(){
+  let store=emptyStore(),c=null,chat='',globals=['manual'],seq=0,fail='',quota=false;
+  const world=()=>({entries:{1:{uid:1,disable:false,content:'keep'},2:{uid:2,disable:true,order:7}}});
+  const data={role:world(),extra:world(),x:world(),y:world(),manual:world()},links={role:['a'],extra:['a']};
+  const host={readStore:()=>copy(store),writeStore:s=>{if(quota){quota=false;throw Error('quota');}store=copy(s);},id:()=>String(++seq),character:()=>c?{key:c}:null,chat:()=>chat,
+    catalog:async()=>Object.keys(data).map(name=>({name,characters:(links[name]||[]).map(key=>({key})),global:globals.includes(name)})),load:async n=>copy(data[n]),
+    save:async(n,d)=>{if(fail===n)throw Error('failed');data[n]=copy(d);},exists:async n=>!!data[n],globals:async()=>globals,setGlobals:async n=>{globals=[...n];}};
+  let e=createWorldbookSnapshots(host);
+  return {get e(){return e;},data,links,get store(){return copy(store);},get globals(){return globals;},select:(key,id='one')=>{c=key;chat=key?id:'';},reload:()=>{e=createWorldbookSnapshots(host);},fail:n=>{fail=n;},quota:()=>{quota=true;}};
+}
+async function create(f,scope,owner,name,flip=true){const d=await f.e.captureBundle(scope,owner);if(flip)for(const b of Object.values(d.data))b.entries[1].disable=true;return f.e.createBundle({...d,scope,owner,name});}
+{
+  const f=fixture();
+  await assert.rejects(f.e.captureBundle('character','a'),/进入/);
+  f.select('a'); const item=await create(f,'character','a','B');
+  assert.deepEqual(Object.keys(item.books),['role','extra']);
+  assert.equal(f.store.defaults[0].books.role[1],false);
+  assert.equal(f.data.role.entries[1].disable,true);
+  assert.equal(f.store.session.before.role[1],false);
+  await f.e.bindChat(item.id);
+  f.select('a','two');await f.e.transition();
+  assert.equal(f.data.role.entries[1].disable,false,'Other chat restores A');
+  f.select('a','one');await f.e.transition();
+  assert.equal(f.data.role.entries[1].disable,true,'Bound chat applies B');
+  f.data.role.entries[1].disable=false;
+  await f.e.transition();assert.equal(f.data.role.entries[1].disable,false,'Repeat event must not overwrite');
+  await f.e.applyBundle(item.id);
+  await create(f,'character','a','C',false);
+  assert.equal(f.store.defaults[0].books.role[1],false,'Repeated new does not overwrite default');
+  f.reload();f.select(null);await f.e.transition();
+  assert.equal(f.data.role.entries[1].disable,false,'Reload then home restores A');
+  assert.equal(f.data.extra.entries[1].disable,false);
+  assert.equal(f.data.role.entries[1].content,'keep');
+  f.select('b');await assert.rejects(f.e.applyBundle(item.id),/当前角色/);
+  f.select('a');const d=await f.e.captureBundle('character','a');f.select('a','two');
+  await assert.rejects(f.e.createBundle({...d,scope:'character',owner:'a',name:'stale'}),/聊天已切换/);
+}
+{
+  const f=fixture();f.select('a');
+  const d=await f.e.captureBundle('character','a');for(const b of Object.values(d.data))b.entries[1].disable=true;
+  f.fail('extra');await assert.rejects(f.e.createBundle({...d,scope:'character',owner:'a',name:'fail'}),/failed/);
+  assert.equal(f.data.role.entries[1].disable,false,'Multi-book failed save rolls earlier writes back');
+  assert.equal(f.store.snapshots.length,0);
+  f.fail('');f.select(null);await f.e.transition();
+}
+{
+  const f=fixture();
+  await f.e.saveGroup({name:'G',books:['x','manual']});const g=f.store.groups[0].id;
+  const s=await create(f,'group',g,'剧情');
+  assert.equal(f.data.x.entries[1].disable,false,'Group draft saves without applying');
+  assert.deepEqual(f.globals,['manual']);
+  await f.e.selectGroupPlan(g,s.id);assert.equal(f.data.x.entries[1].disable,false);
+  await f.e.toggleGroup(g);assert.equal(f.data.x.entries[1].disable,true);
+  assert.ok(f.globals.includes('x'));
+  await f.e.selectGroupPlan(g,'');assert.equal(f.data.x.entries[1].disable,false,'Live default selection applies');
+  await f.e.toggleGroup(g);assert.deepEqual(f.globals,['manual']);
+  await f.e.selectGroupPlan(g,s.id);
+  await assert.rejects(f.e.remove(s.id),/默认/);
+  await f.e.saveGroup({name:'H',books:['x','y']});const h=f.store.groups[1].id;
+  await create(f,'group',h,'原始',false);
+  await f.e.toggleGroup(h);
+  await assert.rejects(f.e.toggleGroup(g),e=>e.code==='GROUP_CONFLICT');
+  assert.equal(f.store.groups[0].enabled,false);assert.equal(f.data.x.entries[1].disable,false);
+  await f.e.toggleGroup(g,true);assert.equal(f.data.x.entries[1].disable,true);
+  await f.e.toggleGroup(g);assert.ok(f.globals.includes('x'),'Other group retains shared book');
+  f.data.manual.entries[1].disable=false;
+  f.fail('manual');await assert.rejects(f.e.toggleGroup(g,true),/failed/);
+  assert.equal(f.store.groups[0].enabled,false);
+  f.fail('');
+  await f.e.saveGroup({id:g,name:'G',books:['manual']});
+  assert.equal(f.store.groups[0].snapshot,'','Member change resets selection');
+  await assert.rejects(f.e.selectGroupPlan(g,s.id),/成员已变化/);
+  f.links.manual=['a'];await assert.rejects(f.e.captureBundle('group',g),/绑定角色/);
+}
+{
+  const f=fixture();await f.e.saveGroup({name:'Q',books:['x','y']});const g=f.store.groups[0].id;
+  const s=await create(f,'group',g,'on');await f.e.selectGroupPlan(g,s.id);
+  f.quota();await assert.rejects(f.e.toggleGroup(g),/quota/);
+  assert.equal(f.store.groups[0].enabled,false);assert.deepEqual(f.globals,['manual']);
+  assert.equal(f.data.x.entries[1].disable,false);assert.equal(f.data.y.entries[1].disable,false);
+}
+console.log('Worldbook bundles passed: defaults, chat locks, multi-book rollback, group plans, conflicts, ownership, persistence rollback and stale drafts.');

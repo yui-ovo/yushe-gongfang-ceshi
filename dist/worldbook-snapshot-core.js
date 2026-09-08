@@ -32,7 +32,9 @@ export function createWorldbookSnapshots(host) {
     if (value.version !== 1 || !Array.isArray(value.snapshots) || !Array.isArray(value.groups)) {
       throw new Error('世界书快照数据无法识别，已停止写入');
     }
-    return copy(value);
+    const store = copy(value);
+    store.defaults ||= [];
+    return store;
   };
   const persist = store => host.writeStore(copy(store));
   const find = (store, id) => {
@@ -99,9 +101,21 @@ export function createWorldbookSnapshots(host) {
     if (capturing) return { deferred: true };
     const store = read();
     const character = host.character();
+    const bundleKey = contextKey();
+    if (store.session?.bundle && store.session.key !== bundleKey) await restore(store);
+    const bound = character && store.snapshots.find(item => item.bundle && item.scope === 'character'
+      && item.owner === character.key && item.chat === host.chat?.());
+    if (bound) {
+      if (store.session?.bundle && store.session.key === bundleKey && store.session.chosen) return {};
+      await validateBundle(bound);
+      await applyCharacter(store, bound);
+      return {};
+    }
+    if (store.session?.bundle) return {};
     if (store.session && store.session.key !== character?.key) await restore(store);
     if (!character) return { restored: true };
-    const targets = store.snapshots.filter(item => item.scope === 'character' && item.characters.includes(character.key));
+    const migrated = store.snapshots.some(item=>item.bundle && item.scope==='character' && item.owner===character.key);
+    const targets = migrated ? [] : store.snapshots.filter(item => !item.bundle && item.scope === 'character' && item.characters.includes(character.key));
     if (!targets.length) { await restore(store); return {}; }
     const catalog = await host.catalog();
     const valid = targets.filter(item => bookRow(catalog, item.book)?.characters.some(row => row.key === character.key));
@@ -114,11 +128,142 @@ export function createWorldbookSnapshots(host) {
     if (host.character()?.key !== character.key) return transition();
     return {};
   }
+  const contextKey = () => JSON.stringify([host.character()?.key || '', host.chat?.() || '']);
+  async function target(scope, owner) {
+    const catalog = await host.catalog();
+    if (scope === 'character') {
+      const c = host.character();
+      if (!c || !host.chat?.() || c.key !== owner) throw new Error('请进入当前角色聊天后使用');
+      const names = catalog.filter(row => row.characters.some(c => c.key === owner)).map(row => row.name);
+      if (!names.length) throw new Error('当前角色没有绑定世界书');
+      return names;
+    }
+    const group = read().groups.find(g => g.id === owner);
+    if (!group) throw new Error('请先选择世界书分组');
+    if (group.books.some(name => !bookRow(catalog, name) || bookRow(catalog, name).characters.length)) throw new Error('分组成员已删除或绑定角色，请先编辑分组');
+    return group.books;
+  }
+  async function validateBundle(item) {
+    const key=contextKey();
+    const names = await target(item.scope, item.owner);
+    if (key!==contextKey()) throw new Error('聊天已切换，请重试');
+    if (JSON.stringify([...names].sort()) !== JSON.stringify(Object.keys(item.books).sort())) throw new Error('世界书成员已变化，请重新创建快照或更新默认');
+    assertDrafts(names);
+  }
+  async function loadBundle(names) {
+    assertDrafts(names);
+    return Object.fromEntries(await Promise.all(names.map(async name => {
+      const data = await host.load(name);
+      if (!data?.entries) throw new Error(`无法读取世界书“${name}”`);
+      return [name, data];
+    })));
+  }
+  const statesOf = data => Object.fromEntries(Object.entries(data).map(([name, data]) => [name, switches(data)]));
+  async function batch(states, commit) {
+    const before = statesOf(await loadBundle(Object.keys(states))), written = [];
+    try {
+      for (const [name, value] of Object.entries(states)) { written.push(name); await writeSwitches(name, value); }
+      await commit();
+    } catch (error) {
+      const failures = [];
+      for (const name of written.reverse()) try { await writeSwitches(name, before[name], true); } catch (_) { failures.push(name); }
+      if (failures.length) throw new Error(`${error.message}；未能恢复：${failures.join('、')}，请勿继续切换`);
+      throw error;
+    }
+  }
+  async function applyCharacter(store, item) {
+    const key = contextKey();
+    await validateBundle(item);
+    if (contextKey()!==key) throw new Error('聊天已切换，请重试');
+    if (store.session && (!store.session.bundle || store.session.key !== key)) await restore(store);
+    if (!store.session) store.session = { bundle:true, key, before:{}, applied:{} };
+    const before = statesOf(await loadBundle(Object.keys(item.books)));
+    for (const [name, states] of Object.entries(before)) if (!Object.hasOwn(store.session.before,name)) {
+      Object.defineProperty(store.session.before,name,{ value:states, enumerable:true, configurable:true, writable:true });
+    }
+    persist(store);
+    if (contextKey() !== key) throw new Error('聊天已切换，请重试');
+    await batch(item.books, () => { store.session.chosen = item.id || 'default'; persist(store); });
+    if (contextKey() !== key) await restore(store);
+  }
+  const groupPlan = (store, group) => group.snapshot
+    ? store.snapshots.find(s => s.bundle && s.scope === 'group' && s.owner === group.id && s.id === group.snapshot)
+    : store.defaults?.find(s => s.scope === 'group' && s.owner === group.id);
+  function checkConflict(store, group, plan, force) {
+    if (!plan) return;
+    const conflicts = store.groups.filter(g => g.enabled && g.id !== group.id).filter(g => {
+      const other = groupPlan(store,g);
+      return other && Object.keys(plan.books).some(name => other.books[name] && Object.entries(plan.books[name]).some(([uid,v]) => Object.hasOwn(other.books[name],uid) && other.books[name][uid] !== v));
+    });
+    if (conflicts.length && !force) {
+      const error = new Error(`与开启分组「${conflicts.map(g=>g.name).join('、')}」的共享世界书开关冲突。使用当前方案会覆盖共享条目的开关。`);
+      error.code = 'GROUP_CONFLICT'; throw error;
+    }
+  }
+  async function ensureDefault(store, scope, owner, data) {
+    store.defaults ||= [];
+    let item = store.defaults.find(s => s.scope === scope && s.owner === owner);
+    if (!item) { item = { bundle:true, scope, owner, books:statesOf(data), name:'默认' }; store.defaults.push(item); persist(store); }
+    return item;
+  }
   return {
     read,
     idle: () => tail,
     setCapturing(value) { capturing = !!value; },
     transition: () => queued(transition),
+    captureBundle: (scope, owner) => queued(async () => {
+      const key = contextKey(), data = await loadBundle(await target(scope,owner));
+      if (key !== contextKey()) throw new Error('聊天已切换，请重试');
+      await ensureDefault(read(),scope,owner,data);
+      return { data, contextKey:key };
+    }),
+    createBundle: ({scope,owner,name,data,contextKey:key}) => queued(async () => {
+      if (key !== contextKey()) throw new Error('聊天已切换，请取消草稿后重建');
+      if (!name.trim()) throw new Error('请填写快照名称');
+      const item = { bundle:true,id:host.id(),scope,owner,name:name.trim(),books:statesOf(data),created:Date.now(),chat:null };
+      await validateBundle(item);
+      const store = read(); store.snapshots.push(item); persist(store);
+      // Group drafts never mount books or change a live group until explicitly selected.
+      if (scope === 'character') {
+        try { await applyCharacter(store,item); }
+        catch (error) { store.snapshots = store.snapshots.filter(s=>s.id!==item.id); persist(store); throw error; }
+      }
+      return copy(item);
+    }),
+    applyBundle: (id, scope, owner) => queued(async () => {
+      const store=read(), item=id ? find(store,id) : store.defaults?.find(s=>s.scope===scope && s.owner===owner);
+      if (!item) throw new Error('尚未保存默认');
+      await validateBundle(item);
+      if (item.scope !== 'character') throw new Error('请在世界书分组中选择方案');
+      await applyCharacter(store,item);
+    }),
+    updateDefault: (scope,owner) => queued(async () => {
+      const data=await loadBundle(await target(scope,owner)),store=read(); store.defaults ||= [];
+      store.defaults=store.defaults.filter(s=>s.scope!==scope || s.owner!==owner);
+      store.defaults.push({bundle:true,scope,owner,name:'默认',books:statesOf(data)}); persist(store);
+    }),
+    bindChat: id => queued(async () => {
+      const store=read(), item=find(store,id), previous=copy(store.snapshots); await validateBundle(item);
+      if (item.scope!=='character') throw new Error('只能绑定角色快照');
+      const chat=host.chat?.(); if (!chat) throw new Error('请先进入角色聊天');
+      const unbind=item.chat===chat;
+      for (const s of store.snapshots) if (s.bundle && s.scope==='character' && s.owner===item.owner && s.chat===chat) s.chat=null;
+      if (!unbind) item.chat=chat;
+      persist(store);
+      if (!unbind) try { await applyCharacter(store,item); }
+      catch(error) { store.snapshots=previous; persist(store); throw error; }
+      return !unbind;
+    }),
+    selectGroupPlan: (id, snapshot='', force=false) => queued(async () => {
+      const store=read(),group=store.groups.find(g=>g.id===id);
+      if (!group) throw new Error('分组已不存在');
+      group.snapshot=snapshot;
+      const plan=groupPlan(store,group);
+      if (!plan) throw new Error('方案已不存在，请先创建快照保存默认');
+      await validateBundle(plan);
+      if (group.enabled) { checkConflict(store,group,plan,force); await batch(plan.books,()=>persist(store)); }
+      else persist(store);
+    }),
     capture: (book, scope) => queued(async () => {
       eligible(await host.catalog(), book, scope);
       assertDrafts([book]);
@@ -151,6 +296,7 @@ export function createWorldbookSnapshots(host) {
     }),
     remove: id => queued(async () => {
       const store = read(); find(store, id);
+      if (store.groups.some(g=>g.snapshot===id)) throw new Error('请先将使用此快照的分组切换到默认');
       store.snapshots = store.snapshots.filter(item => item.id !== id); persist(store);
       await transition();
     }),
@@ -179,10 +325,18 @@ export function createWorldbookSnapshots(host) {
       let group = store.groups.find(group => group.id === id);
       if (group?.enabled) throw new Error('请先关闭分组再编辑成员');
       if (!group) { group = { id: host.id(), enabled: false }; store.groups.push(group); }
+      if (group.books && JSON.stringify([...group.books].sort()) !== JSON.stringify([...new Set(books)].sort())) {
+        group.snapshot='';
+        const baseline=store.defaults?.find(s=>s.scope==='group' && s.owner===group.id);
+        if (baseline) {
+          const current=statesOf(await loadBundle(books));
+          baseline.books=Object.fromEntries(books.map(name=>[name,baseline.books[name] || current[name]]));
+        }
+      }
       Object.assign(group, { name: name.trim(), books: [...new Set(books)] });
       persist(store);
     }),
-    toggleGroup: id => queued(async () => {
+    toggleGroup: (id, force=false) => queued(async () => {
       const store = read(), group = store.groups.find(group => group.id === id);
       if (!group) throw new Error('分组已不存在');
       const catalog = await host.catalog();
@@ -190,6 +344,14 @@ export function createWorldbookSnapshots(host) {
         throw new Error('分组中有世界书被删除或绑定了角色，请先编辑分组');
       }
       const current = await host.globals();
+      let plan;
+      if (!group.enabled) {
+        await ensureDefault(store,'group',id,await loadBundle(group.books));
+        plan=groupPlan(store,group);
+        if (!plan) throw new Error('分组方案已不存在，请重新选择');
+        await validateBundle(plan);
+        checkConflict(store,group,plan,force);
+      }
       const owned = new Set((store.owned || []).filter(name => current.includes(name)));
       let next;
       if (!group.enabled) {
@@ -202,9 +364,12 @@ export function createWorldbookSnapshots(host) {
         next = current.filter(name => !remove.has(name));
         for (const name of remove) owned.delete(name);
       }
-      await host.setGlobals(next);
       group.enabled = !group.enabled; store.owned = [...owned];
-      try { persist(store); }
+      try {
+        await host.setGlobals(next);
+        if (plan) await batch(plan.books,()=>persist(store));
+        else persist(store);
+      }
       catch (error) { await host.setGlobals(current); throw error; }
     }),
     removeGroup: id => queued(() => {
