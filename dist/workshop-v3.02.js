@@ -12223,12 +12223,25 @@ html.pmm-dnd-compat-active #preset-manager-main-panel{user-select:none!important
     button.textContent = selected ? `删除所选（${selected}）` : '删除所选';
   }
 
+  function normalizeBatchSearchText(value) {
+    const source = String(value ?? '');
+    const normalized = typeof source.normalize === 'function' ? source.normalize('NFKC') : source;
+    return normalized.trim().toLocaleLowerCase();
+  }
+
   function filterBatchList(dialog) {
-    const query = String(dialog.querySelector('[data-pmm-preset-search]')?.value || '').trim().toLocaleLowerCase();
+    const query = normalizeBatchSearchText(dialog.querySelector('[data-pmm-preset-search]')?.value);
+    let visibleCount = 0;
     for (const row of dialog.querySelectorAll('.pmm-preset-batch-row')) {
-      const name = String(row.dataset.pmmPresetName || '').toLocaleLowerCase();
-      row.hidden = Boolean(query && !name.includes(query));
+      const name = normalizeBatchSearchText(row.dataset.pmmPresetName);
+      const filtered = Boolean(query && !name.includes(query));
+      row.hidden = filtered;
+      row.classList.toggle('pmm-preset-batch-row--filtered', filtered);
+      row.setAttribute('aria-hidden', filtered ? 'true' : 'false');
+      if (!filtered) visibleCount += 1;
     }
+    const empty = dialog.querySelector('[data-pmm-preset-empty]');
+    if (empty) empty.hidden = visibleCount !== 0;
   }
 
   async function deleteSelectedPresets(dialog, root) {
@@ -12312,6 +12325,7 @@ html.pmm-dnd-compat-active #preset-manager-main-panel{user-select:none!important
         <input type="search" class="pmm-preset-batch-search" data-pmm-preset-search placeholder="搜索预设" autocomplete="off" enterkeyhint="search" />
         <label class="pmm-preset-batch-all"><input type="checkbox" data-pmm-preset-all />全选</label>
         <div class="pmm-preset-batch-list"></div>
+        <div class="pmm-preset-batch-empty" data-pmm-preset-empty hidden>没有找到相关预设</div>
         <footer class="pmm-preset-batch-footer">
           <button type="button" data-pmm-preset-cancel>取消</button>
           <button type="button" class="pmm-preset-batch-delete" data-pmm-preset-delete disabled>删除所选</button>
@@ -12342,7 +12356,9 @@ html.pmm-dnd-compat-active #preset-manager-main-panel{user-select:none!important
     });
     overlay.querySelector('[data-pmm-preset-close]').addEventListener('click', closeBatchDialog);
     overlay.querySelector('[data-pmm-preset-cancel]').addEventListener('click', closeBatchDialog);
-    overlay.querySelector('[data-pmm-preset-search]').addEventListener('input', () => filterBatchList(overlay));
+    const searchInput = overlay.querySelector('[data-pmm-preset-search]');
+    const updateFilter = () => filterBatchList(overlay);
+    for (const type of ['input', 'search', 'change', 'compositionend']) searchInput.addEventListener(type, updateFilter);
     overlay.querySelector('[data-pmm-preset-all]').addEventListener('change', event => {
       for (const checkbox of overlay.querySelectorAll('[data-pmm-preset-choice]')) {
         const row = checkbox.closest('.pmm-preset-batch-row');
@@ -12451,10 +12467,13 @@ html.pmm-dnd-compat-active #preset-manager-main-panel{user-select:none!important
 .pmm-preset-batch-all{padding:0 5px;opacity:.78}
 .pmm-preset-batch-list{min-height:60px;overflow:auto;overscroll-behavior:contain;border-block:1px solid var(--SmartThemeBorderColor,rgba(148,163,184,.26));padding:5px 0}
 .pmm-preset-batch-row{padding:4px 7px;border-radius:8px}
+.pmm-preset-batch-row.pmm-preset-batch-row--filtered{display:none!important}
 .pmm-preset-batch-row:hover{background:rgba(127,127,127,.08)}
 .pmm-preset-batch-row span{min-width:0;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .pmm-preset-batch-row small{flex:0 0 auto;padding:2px 7px;border-radius:999px;background:rgba(127,127,127,.1);font-size:10px;opacity:.72}
 .pmm-preset-batch-row input,.pmm-preset-batch-all input{width:17px;height:17px;margin:0;accent-color:var(--SmartThemeQuoteColor,#64748b)}
+.pmm-preset-batch-empty{padding:13px 8px;text-align:center;font-size:12px;opacity:.58}
+.pmm-preset-batch-empty[hidden]{display:none!important}
 .pmm-preset-batch-footer{display:flex;justify-content:flex-end;gap:9px}
 .pmm-preset-batch-footer button{min-height:36px;padding:0 15px;border:1px solid var(--SmartThemeBorderColor,rgba(148,163,184,.32));border-radius:999px;background:rgba(127,127,127,.08);color:inherit;font:inherit}
 .pmm-preset-batch-footer button:disabled{opacity:.42}
@@ -12568,9 +12587,146 @@ html.pmm-dnd-compat-active #preset-manager-main-panel{user-select:none!important
   TOP[ENTRY_API_KEY] = {
     activeBranchName: readAppliedBranchName,
     branchVisible: floatingBranchEnabled,
+    openBatch: () => openBatchDialog(currentRoot?.isConnected ? currentRoot : null),
     openWorkshopHome,
     setBranchVisibility: setFloatingBranchEnabled,
     workshopHomeVisible,
+  };
+
+  install();
+})();
+
+/* ===== PMM_NATIVE_PRESET_ENTRY_TEST80：酒馆原生预设栏入口 ===== */
+;(() => {
+  const SELF = window;
+  let TOP = SELF;
+  try { if (SELF.top) TOP = SELF.top; } catch (_) {}
+  const DOC = (() => { try { return TOP.document || SELF.document; } catch (_) { return SELF.document; } })();
+  const CLEANUP_KEY = '__PMM_NATIVE_PRESET_ENTRY_TEST80_CLEANUP__';
+  const BATCH_API_KEY = '__PMM_FLOATING_SNAPSHOT_ENTRY_TEST69__';
+  const SNAPSHOT_API_KEY = '__PMM_SWITCH_SNAPSHOTS_TEST52__';
+  const BUTTON_CLASS = 'pmm-native-preset-entry';
+  const AUTO_CLOSE_EVENTS = ['mousedown', 'pointerdown', 'touchstart', 'click'];
+  const WORKSHOP_EVENT_SELECTORS = [
+    `.${BUTTON_CLASS}`,
+    '.pmm-switch-snapshot-overlay',
+    '.pmm-preset-batch-overlay',
+    '#preset-manager-floating-panel',
+    '#preset-manager-main-panel',
+  ];
+  let discoveryObserver = null;
+  let scheduled = 0;
+  let guardedBody = null;
+
+  try { TOP[CLEANUP_KEY]?.(); } catch (_) {}
+
+  function notify(message) {
+    const toastr = TOP.toastr || SELF.toastr;
+    if (typeof toastr?.warning === 'function') toastr.warning(message);
+    else console.warn(`[预设工坊] ${message}`);
+  }
+
+  function activate(action) {
+    if (action === 'batch') {
+      const openBatch = TOP[BATCH_API_KEY]?.openBatch;
+      if (typeof openBatch !== 'function') return notify('批量管理尚未准备好，请稍候重试');
+      void openBatch();
+      return;
+    }
+    const openSnapshot = TOP[SNAPSHOT_API_KEY]?.open;
+    if (typeof openSnapshot !== 'function') return notify('开关快照尚未准备好，请稍候重试');
+    void openSnapshot({ source: 'native-preset' });
+  }
+
+  function makeButton(action, label, icon) {
+    const button = DOC.createElement('button');
+    button.type = 'button';
+    button.className = `menu_button menu_button_icon interactable ${BUTTON_CLASS}`;
+    button.dataset.pmmNativePresetAction = action;
+    button.title = label;
+    button.setAttribute('aria-label', label);
+    button.innerHTML = `<i class="fa-solid ${icon}" aria-hidden="true"></i>`;
+    // 酒馆在上层监听按下/点击来关闭原生预设抽屉；入口本身属于抽屉内部操作，
+    // 必须在按钮处截断，不能让它被误判为“点击菜单外部”。
+    for (const type of ['pointerdown', 'mousedown', 'touchstart']) {
+      button.addEventListener(type, event => event.stopPropagation(), { passive: true });
+    }
+    button.addEventListener('click', event => {
+      event.preventDefault();
+      event.stopPropagation();
+      activate(action);
+    });
+    return button;
+  }
+
+  function preventNativePresetAutoClose(event) {
+    // 酒馆在 body 之上的 mousedown/click 监听中判断“点击抽屉外部”。
+    // 仅允许明确的工坊根节点建立边界；禁止使用 pmm class 前缀模糊选择器，
+    // 因为 <html> 带 pmm-mobile-toolbar-ready 时会令全站点击都匹配。
+    const target = typeof event.target?.closest === 'function' ? event.target : event.target?.parentElement;
+    if (WORKSHOP_EVENT_SELECTORS.some(selector => target?.closest?.(selector))) event.stopPropagation();
+  }
+
+  function bindNativePresetAutoCloseGuard() {
+    const body = DOC.body;
+    if (!body || body === guardedBody) return;
+    if (guardedBody) {
+      for (const type of AUTO_CLOSE_EVENTS) guardedBody.removeEventListener(type, preventNativePresetAutoClose);
+    }
+    guardedBody = body;
+    for (const type of AUTO_CLOSE_EVENTS) {
+      guardedBody.addEventListener(type, preventNativePresetAutoClose, { capture: false, passive: true });
+    }
+  }
+
+  function sync() {
+    scheduled = 0;
+    bindNativePresetAutoCloseGuard();
+    const anchor = DOC.getElementById('update_oai_preset');
+    const host = anchor?.parentElement;
+    if (!host) return;
+    try { discoveryObserver?.disconnect(); } catch (_) {}
+    discoveryObserver = null;
+    const ensure = (action, label, icon) => {
+      let button = host.querySelector(`.${BUTTON_CLASS}[data-pmm-native-preset-action="${action}"]`);
+      if (!button) {
+        button = makeButton(action, label, icon);
+        host.append(button);
+      }
+      return button;
+    };
+    ensure('batch', '批量管理预设', 'fa-list-check');
+    ensure('snapshot', '开关快照', 'fa-camera');
+  }
+
+  function scheduleSync() {
+    if (scheduled) return;
+    const request = TOP.requestAnimationFrame || SELF.requestAnimationFrame;
+    scheduled = typeof request === 'function'
+      ? request.call(TOP, sync)
+      : TOP.setTimeout(sync, 16);
+  }
+
+  function install() {
+    bindNativePresetAutoCloseGuard();
+    scheduleSync();
+    discoveryObserver = new MutationObserver(scheduleSync);
+    discoveryObserver.observe(DOC.documentElement, { childList: true, subtree: true });
+  }
+
+  TOP[CLEANUP_KEY] = () => {
+    try { discoveryObserver?.disconnect(); } catch (_) {}
+    discoveryObserver = null;
+    if (scheduled) {
+      try { (TOP.cancelAnimationFrame || SELF.cancelAnimationFrame || TOP.clearTimeout).call(TOP, scheduled); } catch (_) {}
+      scheduled = 0;
+    }
+    DOC.querySelectorAll?.(`.${BUTTON_CLASS}`).forEach(button => button.remove());
+    if (guardedBody) {
+      for (const type of AUTO_CLOSE_EVENTS) guardedBody.removeEventListener(type, preventNativePresetAutoClose);
+      guardedBody = null;
+    }
+    try { delete TOP[CLEANUP_KEY]; } catch (_) {}
   };
 
   install();
@@ -12936,7 +13092,14 @@ html.pmm-dnd-compat-active #preset-manager-main-panel{user-select:none!important
     return false
   }
 
+  function isSnapshotCaptureActive(){
+    try{return!!sharedRoot.document?.querySelector?.('.pmm-switch-snapshot-capture-mode')}
+    catch(_){return false}
+  }
+
   async function syncEnabledStates({presetName='',prompts=[]}={}){
+    /* 条目开关与分组开关一样，只能停留在快照隔离画布中。 */
+    if(isSnapshotCaptureActive())return true;
     if(!presetName||!Array.isArray(prompts)||hasAppliedBranch(presetName))return false;
     const setter=sharedRoot.setPreset||localRoot.setPreset;
     if(typeof setter!=='function')return false;
@@ -12960,6 +13123,9 @@ html.pmm-dnd-compat-active #preset-manager-main-panel{user-select:none!important
   }
 
   async function syncGroupEnabledState({presetName='',sectionId='',enabled=true}={}){
+    /* 快照录制是一块隔离画布：分组开关只改工坊临时状态，供快照读取，
+       绝不能提前写进柏宝箱原生分组，否则退出时会与异步刷新竞争并污染默认。 */
+    if(isSnapshotCaptureActive())return true;
     if(compat.__suspendGroupPowerSync===true)return true;
     const resolvedPreset=resolveNativePresetName(presetName);
     const rawSectionId=text(sectionId);
@@ -12971,16 +13137,10 @@ html.pmm-dnd-compat-active #preset-manager-main-panel{user-select:none!important
     const group=(state.groups||[]).find(item=>text(item?.id)===groupId);
     if(!group)return false;
     group.enabled=enabled!==false;
-    /* 快照录制时频繁拨动分组不弹提示；普通模式仍保留一句简短反馈。 */
-    let snapshotCaptureActive=false;
-    try{snapshotCaptureActive=!!sharedRoot.document?.querySelector?.('.pmm-switch-snapshot-capture-mode')}
-    catch(_){ }
-    if(snapshotCaptureActive)compat.__suppressNextSuccessMessage=true;
-    else compat.__nextSuccessMessage='分组开关已同步';
+    compat.__nextSuccessMessage='分组开关已同步';
     try{return await writeNativeState(resolvedPreset,state,{onlyGroupId:groupId})}
     finally{
       delete compat.__nextSuccessMessage;
-      delete compat.__suppressNextSuccessMessage
     }
   }
 
@@ -13110,6 +13270,7 @@ html.pmm-dnd-compat-active #preset-manager-main-panel{user-select:none!important
   let autoApplySerial = 0;
   let lastAutoContextKey = '';
   let snapshotViewportCleanup = null;
+  let overlayContext = null;
 
   const text = value => String(value ?? '').trim();
   const clone = value => {
@@ -13155,6 +13316,26 @@ html.pmm-dnd-compat-active #preset-manager-main-panel{user-select:none!important
     return bridge;
   }
 
+  function currentPresetDraftStore() {
+    try {
+      const app = DOC?.getElementById?.('preset-manager-main-panel')?.__vue_app__;
+      const provides = app?._context?.provides;
+      const candidates = [app?.config?.globalProperties?.$pinia];
+      if (provides) {
+        for (const key of Reflect.ownKeys(provides)) candidates.push(provides[key]);
+      }
+      for (const pinia of candidates) {
+        if (!(pinia?._s instanceof Map)) continue;
+        for (const store of pinia._s.values()) {
+          if (typeof store?.refreshDisplayedPrompts !== 'function') continue;
+          if (!Array.isArray(store?.prompts)) continue;
+          return store;
+        }
+      }
+    } catch (_) {}
+    return null;
+  }
+
   function draftPrompts() {
     try {
       const prompts = currentDraftBridge()?.prompts?.();
@@ -13177,7 +13358,23 @@ html.pmm-dnd-compat-active #preset-manager-main-panel{user-select:none!important
     return displayed && displayed !== 'in_use' ? displayed : '';
   }
 
+  function nativeSelectedPresetName() {
+    try {
+      const name = text(getPresetManager()?.getSelectedPresetName?.());
+      if (name && name !== 'in_use') return name;
+    } catch (_) {}
+    try {
+      const name = text((TOP.getLoadedPresetName || SELF.getLoadedPresetName)?.());
+      if (name && name !== 'in_use') return name;
+    } catch (_) {}
+    return '';
+  }
+
   function currentPresetName() {
+    if (overlayContext?.source === 'native-preset') {
+      const nativeName = text(overlayContext.presetName) || nativeSelectedPresetName();
+      if (nativeName) return nativeName;
+    }
     const workshopName = workshopPresetName();
     if (workshopName) return workshopName;
     try {
@@ -13191,11 +13388,7 @@ html.pmm-dnd-compat-active #preset-manager-main-panel{user-select:none!important
     return '';
   }
 
-  function getPrompts(presetName) {
-    if (!isBranchMode() && text(presetName) === currentPresetName()) {
-      const prompts = draftPrompts();
-      if (prompts.length) return prompts;
-    }
+  function storedPrompts(presetName) {
     for (const source of [TOP, SELF]) {
       try {
         const prompts = source?.getPreset?.(presetName)?.prompts;
@@ -13204,13 +13397,24 @@ html.pmm-dnd-compat-active #preset-manager-main-panel{user-select:none!important
     }
     try {
       const context = getContext();
-      const selected = text(getPresetManager()?.getSelectedPresetName?.());
+      const selected = nativeSelectedPresetName();
       if (!selected || selected === presetName) {
         const prompts = context?.chatCompletionSettings?.prompts;
         if (Array.isArray(prompts)) return clone(prompts);
       }
     } catch (_) {}
     return [];
+  }
+
+  function getPrompts(presetName) {
+    // 从酒馆原生相机打开时，隐藏工坊可能仍保留上一次草稿；原生入口必须以
+    // 酒馆当前预设为基准，否则首次应用会被误判为“没有变化”而跳过同步。
+    if (overlayContext?.source === 'native-preset') return storedPrompts(presetName);
+    if (!isBranchMode() && text(presetName) === currentPresetName()) {
+      const prompts = draftPrompts();
+      if (prompts.length) return prompts;
+    }
+    return storedPrompts(presetName);
   }
 
   function workshopDocuments() {
@@ -13814,12 +14018,80 @@ html.pmm-dnd-compat-active #preset-manager-main-panel{user-select:none!important
     return true;
   }
 
+  // 录制快照只是一次临时预览。退出时应一次性恢复进入前的草稿及其基线，
+  // 不能再逐条走普通 update 通道，否则 Vue 的延迟更新可能把旧开关写回来，
+  // 并把右上角保存按钮错误地留在“有未保存修改”的高亮状态。
+  async function restoreCapturedDraft(nextPrompts, entryWasDirty = false) {
+    const bridge = currentDraftBridge();
+    if (!bridge) return false;
+    if (!entryWasDirty && typeof bridge.restoreClean === 'function') {
+      const restored = bridge.restoreClean(clone(nextPrompts));
+      if (restored === false) return false;
+      await settleDraft();
+      return true;
+    }
+    if (!entryWasDirty) {
+      const store = currentPresetDraftStore();
+      if (store && text(store.currentPresetName) === currentPresetName()) {
+        store.refreshDisplayedPrompts(clone(nextPrompts));
+        await settleDraft();
+        return true;
+      }
+    }
+    return writeSwitchesToDraft(nextPrompts, '', false);
+  }
+
+  async function refreshNativePromptManager() {
+    const context = getContext();
+    const eventType = context?.eventTypes?.OAI_PRESET_CHANGED_AFTER
+      || context?.event_types?.OAI_PRESET_CHANGED_AFTER;
+    let refreshed = false;
+    if (eventType && typeof context?.eventSource?.emit === 'function') {
+      await context.eventSource.emit(eventType);
+      refreshed = true;
+    }
+
+    // 酒馆对上面的事件采用防抖重绘；从原生预设栏打开轻量快照页时，
+    // 弹层关闭可能早于防抖任务，列表便会一直显示旧开关，直到切换预设。
+    // 直接复用酒馆导出的 Prompt Manager 重建列表，数据和交互仍完全由原生实现负责。
+    try {
+      const moduleUrl = new URL('/scripts/openai.js', TOP.location?.href || SELF.location?.href).href;
+      const openaiModule = await import(moduleUrl);
+      const promptManager = openaiModule?.promptManager;
+      if (typeof promptManager?.renderPromptManagerListItems === 'function') {
+        await promptManager.renderPromptManagerListItems();
+        refreshed = true;
+      } else if (typeof promptManager?.render === 'function') {
+        promptManager.render(false);
+        refreshed = true;
+      }
+    } catch (error) {
+      console.warn('[预设工坊·开关快照] 原生 Prompt Manager 直接刷新失败，保留事件刷新兜底', error);
+    }
+    return refreshed;
+  }
+
+  // 快照录制期间只操作工坊草稿。退出时还须同步酒馆当前运行态，
+  // 否则工坊会显示已回滚、而主预设仍停在录制时的旧开关状态。
+  // 这里只写 in_use，绝不触发原生“保存预设”，也不会覆盖命名预设文件。
+  async function syncRuntimeSwitches(presetName, prompts) {
+    const loaded = text((TOP.getLoadedPresetName || SELF.getLoadedPresetName)?.());
+    const setPreset = TOP.setPreset || SELF.setPreset;
+    if (!presetName || loaded !== presetName || typeof setPreset !== 'function') return false;
+    await setPreset('in_use', { prompts: clone(prompts) });
+    await refreshNativePromptManager();
+    return true;
+  }
+
   async function persistPromptsDirectly(presetName, prompts) {
     const setPreset = TOP.setPreset || SELF.setPreset;
     if (typeof setPreset !== 'function') throw new Error('未找到 setPreset');
     await setPreset(presetName, { prompts: clone(prompts) });
     const loaded = text((TOP.getLoadedPresetName || SELF.getLoadedPresetName)?.());
-    if (loaded === presetName) await setPreset('in_use', { prompts: clone(prompts) });
+    if (loaded === presetName) {
+      await setPreset('in_use', { prompts: clone(prompts) });
+      await refreshNativePromptManager();
+    }
     const context = getContext();
     const eventType = context?.eventTypes?.PRESET_CHANGED || context?.event_types?.PRESET_CHANGED;
     if (eventType && typeof context?.eventSource?.emit === 'function') {
@@ -13837,6 +14109,7 @@ html.pmm-dnd-compat-active #preset-manager-main-panel{user-select:none!important
         const setPreset = TOP.setPreset || SELF.setPreset;
         if (loaded === presetName && typeof setPreset === 'function') {
           await setPreset('in_use', { prompts: clone(prompts) });
+          await refreshNativePromptManager();
         }
         return true;
       }
@@ -13847,6 +14120,7 @@ html.pmm-dnd-compat-active #preset-manager-main-panel{user-select:none!important
 
   async function applySnapshot(id) {
     const options = arguments[1] && typeof arguments[1] === 'object' ? arguments[1] : {};
+    const applyFromNativePreset = overlayContext?.source === 'native-preset';
     if (isBranchMode()) {
       notify('warning', '开关快照只应用到主预设；请先退出分支模式');
       return false;
@@ -13874,10 +14148,12 @@ html.pmm-dnd-compat-active #preset-manager-main-panel{user-select:none!important
 
     try {
       const canUpdateCurrentDraft = presetName === currentPresetName();
-      const draftUpdated = changed > 0 && canUpdateCurrentDraft
+      const draftUpdated = !applyFromNativePreset && changed > 0 && canUpdateCurrentDraft
         ? await writeSwitchesToDraft(nextPrompts, `应用开关快照：${snapshot.name}`, false)
-        : canUpdateCurrentDraft && !!currentDraftBridge();
-      const notifiedByNativeSave = changed > 0
+        : !applyFromNativePreset && canUpdateCurrentDraft && !!currentDraftBridge();
+      // 原生相机入口的“应用”必须是幂等同步：即使隐藏草稿或运行缓存令 changed
+      // 暂时为 0，也仍写回当前预设与 in_use 并重绘，保证第一次点击即可见。
+      const notifiedByNativeSave = changed > 0 || applyFromNativePreset
         ? await saveAppliedDraft(presetName, nextPrompts, draftUpdated)
         : false;
       const groupResult = await applyGroupSnapshotStates(presetName, snapshot.groupStates);
@@ -14412,6 +14688,7 @@ html.pmm-dnd-compat-active #preset-manager-main-panel{user-select:none!important
     composer = null;
     openMenuId = '';
     characterPicker = null;
+    overlayContext = null;
     DOC?.getElementById?.(OVERLAY_ID)?.remove();
   }
 
@@ -14453,11 +14730,15 @@ html.pmm-dnd-compat-active #preset-manager-main-panel{user-select:none!important
     session.restoring = true;
     closeOverlay();
     try {
-      const current = getPrompts(session.presetName);
-      const { nextPrompts } = mergeSnapshotStates(current, session.entryStates || []);
-      const restored = await writeSwitchesToDraft(nextPrompts, '', false);
+      // 退出时直接恢复进入快照模式那一刻冻结的完整基线。不能再次以当前草稿
+      // 为底合并开关，否则上一轮 Vue 延迟草稿可能在第二次录制时混回主预设。
+      const nextPrompts = Array.isArray(session.entryPrompts) && session.entryPrompts.length
+        ? clone(session.entryPrompts)
+        : mergeSnapshotStates(getPrompts(session.presetName), session.entryStates || []).nextPrompts;
+      const restored = await restoreCapturedDraft(nextPrompts, !!session.entryWasDirty);
+      const runtimeSynced = await syncRuntimeSwitches(session.presetName, nextPrompts);
       await applyGroupSnapshotStates(session.presetName, session.entryGroupStates);
-      if (!restored) notify('warning', '没有找到当前工坊草稿，开关未能自动还原');
+      if (!restored && !runtimeSynced) notify('warning', '没有找到当前工坊草稿，开关未能自动还原');
     } finally {
       captureMode = null;
       syncCaptureModeUI();
@@ -14466,20 +14747,34 @@ html.pmm-dnd-compat-active #preset-manager-main-panel{user-select:none!important
     if (showNotice) notify('info', '已取消快照');
   }
 
-  function enterCaptureMode() {
-    const presetName = currentPresetName();
+  function enterCaptureMode(entryContext = null) {
+    const captureSource = entryContext?.source === 'native-preset' || overlayContext?.source === 'native-preset'
+      ? 'native-preset'
+      : 'workshop';
+    const presetName = text(entryContext?.presetName) || currentPresetName();
     if (blockWhileBranchActive('新建快照')) return;
     if (blockWhileSnapshotActive('新建快照')) return;
-    if (!presetName || !defaultSnapshotForCurrentPreset()) {
+    const hasDefault = readStore().snapshots.some(snapshot => (
+      text(snapshot.presetName) === presetName && isDefaultSnapshot(snapshot)
+    ));
+    if (!presetName || !hasDefault) {
       notify('warning', '请先保存预设默认');
       return;
     }
-    const prompts = getPrompts(presetName);
+    const prompts = captureSource === 'native-preset' ? storedPrompts(presetName) : getPrompts(presetName);
     if (!prompts.length) {
       notify('warning', '当前工坊没有可记录的预设条目');
       return;
     }
-    captureMode = { presetName, entryStates: makeStates(prompts), restoring: false };
+    captureMode = {
+      presetName,
+      source: captureSource,
+      entryPrompts: clone(prompts),
+      entryStates: makeStates(prompts),
+      // 原生相机以酒馆当前预设为基线，不继承隐藏工坊上一轮残留的脏标记。
+      entryWasDirty: captureSource === 'native-preset' ? false : !!currentPresetDraftStore()?.isDirty,
+      restoring: false,
+    };
     captureMode.entryGroupStates = makeGroupStates(presetName);
     composer = null;
     openMenuId = '';
@@ -14500,6 +14795,9 @@ html.pmm-dnd-compat-active #preset-manager-main-panel{user-select:none!important
       notify('warning', '请先打开预设工坊后新建快照');
       return;
     }
+    // 打开工坊首页会令酒馆关闭原生抽屉，先保留原生入口上下文；否则随后
+    // closeOverlay() 清空上下文后，基线可能被误读成隐藏工坊的上一轮草稿。
+    const entryContext = overlayContext ? { ...overlayContext } : null;
     if (!await entryApi.openWorkshopHome()) {
       notify('warning', '无法返回主预设首页，请先关闭分屏后重试');
       return;
@@ -14513,7 +14811,7 @@ html.pmm-dnd-compat-active #preset-manager-main-panel{user-select:none!important
       return;
     }
     closeOverlay();
-    enterCaptureMode();
+    enterCaptureMode(entryContext);
   }
 
   function renderCaptureSavePrompt() {
@@ -14731,6 +15029,11 @@ html.pmm-dnd-compat-active #preset-manager-main-panel{user-select:none!important
       overlay = DOC.createElement('div');
       overlay.id = OVERLAY_ID;
       overlay.className = 'pmm-switch-snapshot-overlay';
+      // 快照弹层挂在顶层 document；若事件继续冒泡到 body，酒馆会按“点到抽屉外”
+      // 自动收起主预设。边界只作用于本弹层，不安装影响其他工坊功能的全局拦截器。
+      for (const type of ['pointerdown', 'mousedown', 'touchstart', 'click']) {
+        overlay.addEventListener(type, event => event.stopPropagation(), { passive: true });
+      }
       overlay.addEventListener('click', event => {
         if (event.target === overlay) closeOverlay();
       });
@@ -14810,9 +15113,22 @@ html.pmm-dnd-compat-active #preset-manager-main-panel{user-select:none!important
   }
 
   function openOverlay() {
-    if (blockWhileBranchActive()) return;
-    if (TOP.__PMM_WORLDBOOK_SNAPSHOTS__?.resumeLast?.()) return;
+    const options = arguments[0] && typeof arguments[0] === 'object' ? arguments[0] : {};
+    const source = text(options.source) === 'native-preset' ? 'native-preset' : 'workshop';
+    overlayContext = {
+      source,
+      presetName: source === 'native-preset' ? nativeSelectedPresetName() : '',
+    };
+    if (blockWhileBranchActive()) {
+      overlayContext = null;
+      return;
+    }
+    if (TOP.__PMM_WORLDBOOK_SNAPSHOTS__?.resumeLast?.()) {
+      overlayContext = null;
+      return;
+    }
     if (!currentPresetName()) {
+      overlayContext = null;
       notify('warning', '请先选择一个预设');
       return;
     }
