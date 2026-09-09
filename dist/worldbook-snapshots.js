@@ -1,4 +1,4 @@
-import { createWorldbookSnapshots, copy } from './worldbook-snapshot-core.js?v=2.98.0-test.15';
+import { createWorldbookSnapshots, copy } from './worldbook-snapshot-core.js?v=2.98.0-test.16';
 
 const SELF = window, TOP = window.parent || window, DOC = TOP.document;
 const KEY = '__PMM_WORLDBOOK_SNAPSHOTS__';
@@ -233,8 +233,17 @@ style.textContent = `
 .pmm-wbs-name-field input { padding-right:38px!important; }
 .pmm-wbs-name-edit { position:absolute; right:7px; top:50%; transform:translateY(-50%); width:28px; height:28px; min-height:28px!important; padding:6px!important; border:0!important; opacity:.52; }
 .pmm-wbs-name-edit:hover,.pmm-wbs-name-edit:focus-visible { opacity:1; }
-.pmm-wbs-book-search { margin:8px 9px 3px!important; width:calc(100% - 18px)!important; font-size:13px!important; padding:8px 10px!important; }
+.pmm-wbs-book-search { width:calc(100% - 18px)!important; height:34px!important; min-height:34px!important; margin:5px 9px 2px!important; padding:5px 9px!important; border-radius:10px!important; font-size:16px!important; }
+.pmm-wbs-entry-block { border-bottom:1px solid var(--wbs-line); }
+.pmm-wbs-entry-block>.pmm-wbs-entry { border-bottom:0; }
 .pmm-wbs-entry { padding:13px 8px; border-color:var(--wbs-line); font-size:13px; }
+.pmm-wbs-entry-title { display:flex; align-items:center; gap:7px; flex:1; min-width:0; min-height:28px!important; padding:2px 0!important; border:0!important; border-radius:5px!important; background:transparent!important; box-shadow:none!important; color:inherit; text-align:left; }
+.pmm-wbs-entry-title .pmm-wbs-svg { width:11px; height:11px; opacity:.48; transition:transform .12s; }
+.pmm-wbs-entry-title[aria-expanded="true"] .pmm-wbs-svg { transform:rotate(90deg); }
+.pmm-wbs-entry-title span { flex:1; }
+.pmm-wbs-entry-preview { max-height:180px; overflow:auto; margin:0 8px; padding:8px 4px 11px 18px; border-top:1px dashed var(--wbs-line); }
+.pmm-wbs-entry-preview small { margin:0 0 5px; font-size:10px; opacity:.52; }
+.pmm-wbs-entry-preview-content { white-space:pre-wrap; overflow-wrap:anywhere; user-select:text; font-size:12px; line-height:1.65; opacity:.82; }
 .pmm-wbs-dialog input[type="text"],.pmm-wbs-dialog input[type="search"] { border-color:var(--wbs-line); background:var(--wbs-raised); border-radius:14px; }
 .pmm-wbs-foot { border-color:var(--wbs-line); padding:12px 20px; background:color-mix(in srgb,var(--wbs-surface) 85%,transparent); }
 .pmm-wbs-foot small { font-size:10px; line-height:1.6; }
@@ -261,12 +270,13 @@ style.textContent = `
 .pmm-wbs-character-snapshot .pmm-switch-snapshot-actions { margin-left:auto; }
 .pmm-wbs-character-snapshot .pmm-switch-snapshot-lock { min-height:27px!important; }
 .pmm-wbs-character-snapshot .pmm-switch-snapshot-actions>button:first-child,.pmm-wbs-character-snapshot .pmm-switch-snapshot-more { min-height:28px!important; }
+.pmm-wbs-character-snapshot [data-wbs="apply"].is-current { opacity:1!important; cursor:default; font-weight:650; border-color:color-mix(in srgb,var(--pm-accent) 70%,transparent)!important; background:color-mix(in srgb,var(--pm-accent) 22%,transparent)!important; }
 .pmm-wbs-body.is-character-snapshots { padding:0!important; }
 .pmm-wbs-body.is-group-home { padding-top:0!important; }
 .pmm-wbs-body.is-group-home>[data-wbs="new-group"] { margin-top:0; }
-.pmm-wbs-body.is-group-editor { display:flex; flex-direction:column; overflow:hidden; }
+.pmm-wbs-body.is-group-editor { display:flex; flex-direction:column; overflow:hidden; padding-top:0!important; }
 .pmm-wbs-group-editor { display:flex; flex:1; min-height:0; flex-direction:column; }
-.pmm-wbs-group-editor-head { flex:0 0 auto; padding-bottom:4px; background:var(--pm-panel-bg,var(--SmartThemeBlurTintColor,#1b1d24)); }
+.pmm-wbs-group-editor-head { flex:0 0 auto; padding-bottom:4px; background:transparent; }
 .pmm-wbs-group-editor-head label { display:block; }
 .pmm-wbs-group-editor-head small { margin-top:2px; line-height:1.4; }
 .pmm-wbs-group-name-field { position:relative; }
@@ -429,12 +439,16 @@ async function beginNewSnapshot() {
     const captured=await engine.captureBundle(scope,owner);
     const label=page==='character'?character().name:engine.read().groups.find(g=>g.id===owner)?.name;
     if(!label)throw new Error('分组已不存在');
-    draft={...captured,scope,owner,name:`${label} 开关`,expanded:Object.fromEntries(Object.keys(captured.data).map(name=>[name,Object.keys(captured.data).length===1])),queries:{}};
+    draft={...captured,scope,owner,name:`${label} 开关`,expanded:Object.fromEntries(Object.keys(captured.data).map(name=>[name,Object.keys(captured.data).length===1])),queries:{},previews:{}};
   } catch(error) { engine.setCapturing(false); await engine.transition(); throw error; }
 }
 function sourceMarkup() {
   return '<h3>选择世界书分组</h3>' + engine.read().groups.map(g => button('choose', h(g.name), 'class="pmm-wbs-source" data-book="'+h(g.id)+'"')).join('')
     + button('back-sources','返回');
+}
+function currentCharacterSnapshotId(store=engine.read()) {
+  const key=JSON.stringify([character()?.key || '',chat() || '']);
+  return store.session?.bundle && store.session.key===key ? String(store.session.chosen || '') : '';
 }
 function snapshotMarkup() {
   const store=engine.read(), owner=scopeOwner(), scope=bundleScope(), c=character();
@@ -447,13 +461,14 @@ function snapshotMarkup() {
   const label=page==='character' ? c.name : ownerGroup?.name;
   if(page==='global' && !ownerGroup) return button('back-groups',icon('back')+'<span>返回世界书分组</span>','class="pmm-wbs-source pmm-wbs-snapshot-back"')+'<p class="pmm-wbs-empty">该分组已不存在</p>';
   if(page==='character') {
+    const currentId=currentCharacterSnapshotId(store);
     const defaultMarkup=baseline?'<section class="pmm-switch-snapshot-default is-saved pmm-wbs-character-default"><div class="pmm-switch-snapshot-default-copy"><div><i class="fa-solid fa-house"></i>默认方案</div><small>'+Object.keys(baseline.books).length+' 本世界书</small></div><div class="pmm-switch-snapshot-default-actions">'
       +button('restore-default','<i class="fa-solid fa-rotate-left"></i>恢复默认')+button('update-default','<i class="fa-solid fa-rotate"></i>更新默认')+button('reset-bundle',icon('trash'),'class="pmm-switch-snapshot-reset-all" title="重置当前角色的世界书快照" aria-label="重置当前角色的世界书快照"')+'</div></section>':'';
     const rows=list.map(item=>{
-      const attrs='data-id="'+h(item.id)+'"',count=Object.values(item.books).reduce((n,s)=>n+Object.keys(s).length,0),bound=item.chat===chat();
+      const attrs='data-id="'+h(item.id)+'"',count=Object.values(item.books).reduce((n,s)=>n+Object.keys(s).length,0),bound=item.chat===chat(),current=currentId===item.id;
       return '<article class="pmm-switch-snapshot-row pmm-wbs-character-snapshot"><div class="pmm-switch-snapshot-copy"><div class="pmm-switch-snapshot-name">'+h(item.name)+'</div><div class="pmm-switch-snapshot-meta">'+Object.keys(item.books).length+' 本 · '+count+' 条</div></div><div class="pmm-switch-snapshot-bindings"><div class="pmm-switch-snapshot-locks">'
         +button('bind','<i class="fa-solid '+(bound?'fa-lock':'fa-lock-open')+'"></i><span>聊天</span>',attrs+' class="pmm-switch-snapshot-lock is-chat'+(bound?' is-bound':'')+'" aria-pressed="'+bound+'"')+'</div></div><div class="pmm-switch-snapshot-actions">'
-        +button('apply','应用',attrs)+button('menu','<i class="fa-solid fa-ellipsis"></i>',attrs+' class="pmm-switch-snapshot-more" aria-label="更多操作"')+'</div>'
+        +button('apply',current?'当前':'应用',attrs+(current?' class="is-current" disabled aria-current="true" aria-label="'+h(item.name)+'，当前正在应用"':' aria-current="false"'))+button('menu','<i class="fa-solid fa-ellipsis"></i>',attrs+' class="pmm-switch-snapshot-more" aria-label="更多操作"')+'</div>'
         +(menuId===item.id?'<div class="pmm-wbs-menu">'+button('edit-snapshot','编辑开关',attrs)+button('rename','改名',attrs)+button('delete','删除',attrs)+'</div>':'')+'</article>';
     }).join('');
     return defaultMarkup+'<div class="pmm-switch-snapshot-create">'+button('new','<i class="fa-solid fa-plus"></i>新建开关快照',names.length?'':'disabled')+'</div>'
@@ -489,8 +504,10 @@ function groupMarkup() {
 function draftMarkup() {
   return '<label>快照名称<div class="pmm-wbs-name-field"><input type="text" data-name value="'+h(draft.name)+'" maxlength="100" autocomplete="off">'+button('focus-name',icon('edit'),'class="pmm-wbs-name-edit" aria-label="编辑快照名称"')+'</div></label>'
     +'<small>共 '+Object.keys(draft.data).length+' 本世界书 · 点击书名展开或收起</small><div data-entries>'
-    +Object.entries(draft.data).map(([name,data])=>'<details class="pmm-wbs-book" data-draft-book="'+h(name)+'" '+(draft.expanded[name]?'open':'')+'><summary>'+icon('arrow')+'<span class="pmm-wbs-book-title">'+h(name)+'</span><small>'+Object.keys(data.entries).length+' 条</small></summary><div class="pmm-wbs-book-entries"><input class="pmm-wbs-book-search" type="search" data-filter-book="'+h(name)+'" value="'+h(draft.queries?.[name]||'')+'" placeholder="搜索条目名称" aria-label="搜索 '+h(name)+' 的条目">'+Object.values(data.entries).sort((a,b)=>Number(a.displayIndex??a.uid)-Number(b.displayIndex??b.uid)).map(entry=>
-      '<label class="pmm-wbs-entry" data-entry-title="'+h(String(entry.comment||entry.key?.[0]||entry.uid).toLocaleLowerCase())+'"><span>'+h(entry.comment||entry.key?.[0]||'条目 '+entry.uid)+'</span><input type="checkbox" data-toggle="'+h(entry.uid)+'" data-toggle-book="'+h(name)+'" aria-label="'+h(entry.comment||'条目 '+entry.uid)+'" '+(entry.disable?'':'checked')+'></label>').join('')+(!Object.keys(data.entries).length?'<small>这本世界书暂无条目</small>':'')+'</div></details>').join('')+'</div>';
+    +Object.entries(draft.data).map(([name,data])=>'<details class="pmm-wbs-book" data-draft-book="'+h(name)+'" '+(draft.expanded[name]?'open':'')+'><summary>'+icon('arrow')+'<span class="pmm-wbs-book-title">'+h(name)+'</span><small>'+Object.keys(data.entries).length+' 条</small></summary><div class="pmm-wbs-book-entries"><input class="pmm-wbs-book-search" type="search" data-filter-book="'+h(name)+'" value="'+h(draft.queries?.[name]||'')+'" placeholder="搜索条目名称" aria-label="搜索 '+h(name)+' 的条目">'+Object.values(data.entries).sort((a,b)=>Number(a.displayIndex??a.uid)-Number(b.displayIndex??b.uid)).map(entry=>{
+      const title=entry.comment||entry.key?.[0]||'条目 '+entry.uid,shown=!!draft.previews?.[name]?.[String(entry.uid)],content=String(entry.content??'');
+      return '<div class="pmm-wbs-entry-block" data-entry-title="'+h(String(title).toLocaleLowerCase())+'"><div class="pmm-wbs-entry">'+button('preview-entry',icon('arrow')+'<span>'+h(title)+'</span>','class="pmm-wbs-entry-title" data-preview-entry data-preview-book="'+h(name)+'" data-preview-uid="'+h(entry.uid)+'" aria-expanded="'+shown+'"')+'<input type="checkbox" data-toggle="'+h(entry.uid)+'" data-toggle-book="'+h(name)+'" aria-label="'+h(title)+'" '+(entry.disable?'':'checked')+'></div><div class="pmm-wbs-entry-preview" '+(shown?'':'hidden')+'><small>当前世界书正文（只读）</small><div class="pmm-wbs-entry-preview-content">'+h(content.trim()?content:'（正文为空）')+'</div></div></div>';
+    }).join('')+(!Object.keys(data.entries).length?'<small>这本世界书暂无条目</small>':'')+'</div></details>').join('')+'</div>';
 }
 function groupEditorMarkup() {
   const rows = books.filter(row => !row.characters.length);
@@ -681,6 +698,15 @@ function onClick(event) {
   const target = event.target.closest('button');
   if (!target || target.disabled || busy) return;
   const action = target.dataset.wbs, id = target.dataset.id;
+  if(action==='preview-entry' && draft) {
+    const name=target.dataset.previewBook,uid=target.dataset.previewUid;
+    draft.previews ||= {}; draft.previews[name] ||= {};
+    const shown=!draft.previews[name][uid]; draft.previews[name][uid]=shown;
+    target.setAttribute('aria-expanded',String(shown));
+    const preview=target.closest('.pmm-wbs-entry-block')?.querySelector('.pmm-wbs-entry-preview');
+    if(preview)preview.hidden=!shown;
+    return;
+  }
   if (action === 'close') { void close(); return; }
   if (action === 'focus-name') { overlay.querySelector('[data-name]')?.focus(); return; }
   if (action === 'focus-group-name') { overlay.querySelector('[data-group-name]')?.focus(); return; }
@@ -705,7 +731,7 @@ function onClick(event) {
       engine.setCapturing(true);say('');
       try {
         const captured=await engine.editBundle(id);
-        draft={...captured,expanded:Object.fromEntries(Object.keys(captured.data).map(name=>[name,Object.keys(captured.data).length===1])),queries:{}};
+        draft={...captured,expanded:Object.fromEntries(Object.keys(captured.data).map(name=>[name,Object.keys(captured.data).length===1])),queries:{},previews:{}};
       } catch(error) { engine.setCapturing(false);throw error; }
     } else if (action === 'save-draft') {
       const returnToGroups=page==='global' && section==='groups' && draft.scope==='group';
