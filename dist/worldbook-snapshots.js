@@ -4,6 +4,14 @@ const SELF = window, TOP = window.parent || window, DOC = TOP.document;
 const KEY = '__PMM_WORLDBOOK_SNAPSHOTS__';
 const STORAGE = 'pmm.test.worldbook-snapshots.v1';
 const PRESET = '__PMM_SWITCH_SNAPSHOTS_TEST52__';
+const LAST_TAB='pmm.snapshot.last-tab.v1';
+function lastTab() { try { return JSON.parse(TOP.localStorage.getItem(LAST_TAB)||'null'); } catch(_) { return null; } }
+function rememberTab(value) { try { TOP.localStorage.setItem(LAST_TAB,JSON.stringify(value)); } catch(_) {} }
+function resumeLast() {
+  const last=lastTab();
+  if(!last || !['character','global'].includes(last.page) || TOP[PRESET]?.isCapturing?.())return false;
+  void open(last.page,'',true);return true;
+}
 const STITCH = '__PMM_WORLDBOOK_STITCH_TEST3__';
 TOP[KEY]?.cleanup?.();
 const h = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
@@ -93,9 +101,8 @@ style.textContent = `
 .pmm-snapshot-tabs button { flex:1; min-width:0; border:0!important; border-radius:9px!important; padding:10px 3px!important; background:transparent!important; color:inherit; font:inherit; font-size:13px!important; cursor:pointer; }
 .pmm-snapshot-tabs button[aria-selected="true"] { background:var(--pm-hover-bg,#303030)!important; font-weight:650; }
 .pmm-snapshot-tabs button:disabled { opacity:.4; }
-.pmm-snapshot-hub-preset .pmm-switch-snapshot-bindings { display:none!important; }
+.pmm-snapshot-hub-preset .pmm-switch-snapshot-bindings { display:flex!important; }
 .pmm-snapshot-hub-preset .pmm-switch-snapshot-row { border-radius:12px!important; }
-.pmm-snapshot-hub-preset .pmm-switch-snapshot-menu .pmm-switch-snapshot-lock { width:100%!important; justify-content:flex-start!important; }
 .pmm-wbs-overlay { box-sizing:border-box; position:fixed; inset:0; z-index:2147483000; background:rgba(0,0,0,.4); backdrop-filter:blur(7px); -webkit-backdrop-filter:blur(7px); display:flex; align-items:center; justify-content:center; padding:16px; color:var(--pm-text-primary,#e7e5e4); font-family:var(--pm-font-family,system-ui,sans-serif); }
 .pmm-wbs-dialog { box-sizing:border-box; display:flex; flex-direction:column; width:680px; max-width:100%; max-height:100%; min-height:0; background:var(--pm-panel-bg,#191919); border:1px solid var(--pm-border,#3c3c3c); border-radius:20px; box-shadow:0 20px 70px #0005; overflow:hidden; font-size:14px; }
 .pmm-wbs-dialog * { box-sizing:border-box; }
@@ -195,8 +202,10 @@ style.textContent = `
 .pmm-wbs-row [data-wbs="menu"] { border:none; padding:6px; font-size:20px; }
 .pmm-wbs-menu { border-color:var(--wbs-line); }
 .pmm-wbs-row { position:relative; }
-.pmm-wbs-row .pmm-wbs-menu { position:relative; right:auto; top:auto; z-index:4; margin:6px 0 0 auto; padding:5px; width:max-content; max-width:100%; gap:3px; border:1px solid var(--wbs-line); border-radius:10px; background:var(--pm-panel-bg); box-shadow:0 4px 14px var(--wbs-shadow); }
-.pmm-wbs-row .pmm-wbs-menu button { padding:4px 7px; min-height:28px; border-radius:7px; font-size:11px; }
+.pmm-wbs-overlay > .pmm-wbs-menu { z-index:4; display:flex; flex-direction:column; flex-wrap:nowrap; margin:0; padding:5px; width:156px; max-width:calc(100vw - 32px); max-height:70dvh; overflow:auto; gap:2px; border:1px solid var(--wbs-line); border-radius:10px; background:var(--pm-panel-bg); box-shadow:0 6px 20px var(--wbs-shadow); color:var(--wbs-ink); }
+.pmm-wbs-menu button { display:flex; align-items:center; gap:8px; width:100%; padding:6px 9px; min-height:29px; border:0; background:transparent; color:inherit; border-radius:6px; font:inherit; font-size:11px; text-align:left; cursor:pointer; }
+.pmm-wbs-menu button:hover { background:var(--wbs-raised); }
+.pmm-wbs-menu .pmm-wbs-svg { width:14px; height:14px; opacity:.7; }
 .pmm-wbs-message { display:flex; align-items:center; gap:8px; }
 .pmm-wbs-message>span { flex:1; }
 .pmm-wbs-message button { border:0; min-height:24px; padding:0 5px; }
@@ -229,7 +238,16 @@ style.textContent = `
 .pmm-wbs-picker-head { display:flex; align-items:center; gap:10px; margin-bottom:8px; }
 .pmm-wbs-picker-head strong { font-size:13px; font-weight:550; }
 .pmm-snapshot-hub-preset .pmm-switch-snapshot-head { border-bottom:0!important; }
-.pmm-snapshot-hub-preset .pmm-switch-snapshot-actions>button,.pmm-snapshot-hub-preset .pmm-switch-snapshot-default-actions>button,.pmm-snapshot-hub-preset .pmm-switch-snapshot-create>button { border-radius:999px!important; }
+.pmm-wbs-head .pmm-wbs-symbol { width:22px; height:24px; border-radius:0; background:none; box-shadow:none; color:var(--pm-accent); align-self:flex-start; margin-top:2px; }
+.pmm-wbs-head .pmm-wbs-icon { border:0; background:transparent!important; box-shadow:none; width:28px; height:28px; min-height:28px!important; padding:5px!important; }
+.pmm-wbs-head h2 { font-size:16px; font-weight:700; }
+.pmm-wbs-dialog button { border-radius:8px; }
+.pmm-wbs-primary,.pmm-wbs-row [data-wbs="apply"],.pmm-wbs-default button { color:var(--wbs-ink)!important; border:1px solid color-mix(in srgb,var(--pm-accent) 45%,transparent)!important; background:color-mix(in srgb,var(--pm-accent) 12%,transparent)!important; box-shadow:none; }
+.pmm-wbs-dialog [data-wbs="new"],.pmm-wbs-dialog [data-wbs="new-group"] { justify-content:center; font-weight:600; border-radius:999px!important; padding:9px!important; border-color:color-mix(in srgb,var(--pm-accent) 45%,transparent)!important; background:color-mix(in srgb,var(--pm-accent) 10%,transparent)!important; }
+.pmm-wbs-subnav .pmm-wbs-primary { border:0!important; border-radius:999px; background:var(--wbs-raised)!important; box-shadow:0 2px 5px var(--wbs-shadow); font-weight:600; }
+.pmm-wbs-default.pmm-wbs-row { border-radius:0!important; box-shadow:none; background:color-mix(in srgb,var(--pm-accent) 7%,transparent)!important; border-width:1px 0!important; }
+.pmm-wbs-row [data-wbs="group-menu"] { border:0; background:transparent; padding:6px; font-size:20px; }
+.pmm-wbs-dialog select.pmm-wbs-plan { border-radius:8px; padding:4px 7px; background:color-mix(in srgb,var(--pm-accent) 8%,transparent); }
 @media(max-width:600px) { .pmm-wbs-head { padding:18px 16px 12px; } .pmm-wbs-body { padding:10px 14px 14px; } .pmm-snapshot-tabs { margin:0 14px 8px; } .pmm-wbs-foot { padding:10px 15px; } .pmm-wbs-dialog { border-radius:26px; } }
 `;
 DOC.head.append(style);
@@ -243,6 +261,8 @@ function icon(name) {
     book: '<path d="M4 4h7l1 2 1-2h7v16h-7l-1 1-1-1H4zM12 6v15"/>',
     arrow: '<path d="M9 5l7 7-7 7"/>', back: '<path d="M15 5l-7 7 7 7"/>',
     close: '<path d="M6 6l12 12M18 6L6 18"/>',
+    edit: '<path d="M4 16L16 4l4 4L8 20H4zM13 7l4 4"/>',
+    trash: '<path d="M4 6h16M9 6V3h6v3M6 6l1 15h10l1-15M10 10v7M14 10v7"/>',
   };
   return `<svg class="pmm-wbs-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths[name] || paths.camera}</svg>`;
 }
@@ -260,13 +280,9 @@ function decoratePreset(root) {
     const tab = event.target.closest('[data-hub-tab]')?.dataset.hubTab;
     if (!tab || tab === 'preset' || locked) return;
     TOP[PRESET]?.close?.();
-    void open(tab);
+    void open(tab,'',false);
   });
-  // Reuse the original binding controls in the existing More menu.
-  for (const row of dialog.querySelectorAll('.pmm-switch-snapshot-row')) {
-    const menu = row.querySelector('.pmm-switch-snapshot-menu');
-    if (menu) for (const control of row.querySelectorAll('.pmm-switch-snapshot-lock')) menu.append(control);
-  }
+  rememberTab({page:'preset'});
 }
 function theme(target = overlay) {
   if (!target) return;
@@ -342,7 +358,12 @@ function bindViewport() {
     });
     overlay.style.setProperty('--wbs-visible-height', `${vv?.height || TOP.innerHeight}px`);
   };
-  const schedule = () => { if (!frame) frame = TOP.requestAnimationFrame(update); };
+  const schedule = event => {
+    if(menuId && ['resize','orientationchange','scroll'].includes(event?.type)) {
+      menuId='';overlay?.querySelectorAll('.pmm-wbs-menu').forEach(node=>node.remove());
+    }
+    if (!frame) frame = TOP.requestAnimationFrame(update);
+  };
   const targets = [[TOP, 'resize'], [TOP, 'scroll'], [TOP, 'orientationchange'], [vv, 'resize'], [vv, 'scroll'], [overlay, 'focusin'], [overlay, 'focusout']];
   targets.forEach(([target, name]) => target?.addEventListener(name, schedule, { passive: true }));
   update();
@@ -367,7 +388,10 @@ async function run(action) {
   finally { busy = false; controls.forEach(([node, disabled]) => { if (node.isConnected) node.disabled = disabled; }); overlay?.removeAttribute('aria-busy'); }
 }
 async function refresh() { books = await catalog(); }
-function button(action, label, extra = '') { return `<button type="button" data-wbs="${action}" ${extra}>${label}</button>`; }
+function button(action, label, extra = '') {
+  const glyph={'edit-group':'edit','edit-snapshot':'edit',rename:'edit','delete-group':'trash',delete:'trash'}[action];
+  return `<button type="button" data-wbs="${action}" ${extra}>${glyph?icon(glyph):''}${label}</button>`;
+}
 function scopeOwner() { return page === 'character' ? character()?.key || '' : book; }
 function bundleScope() { return page === 'character' ? 'character' : 'group'; }
 function sourceMarkup() {
@@ -390,7 +414,7 @@ function snapshotMarkup() {
   return (page==='global' ? '<div class="pmm-wbs-tools">'+button('sources','<span>'+h(label||'选择分组')+'</span>'+icon('arrow'),'class="grow"')+'</div>' : '')
     + button('new','＋ 新快照','class="pmm-wbs-source" '+(names.length?'':'disabled'))
     + (names.length ? '<small>'+h(names.join('、'))+'</small>' : '<p class="pmm-wbs-empty">'+(page==='character'?'当前角色没有绑定世界书':'请先创建并选择一个世界书分组')+'</p>')
-    + (baseline ? '<div class="pmm-wbs-row"><div class="pmm-wbs-row-main"><div class="pmm-wbs-copy"><strong>默认方案</strong><small>'+Object.keys(baseline.books).length+' 本世界书</small></div>'
+    + (baseline ? '<div class="pmm-wbs-row pmm-wbs-default"><div class="pmm-wbs-row-main"><div class="pmm-wbs-copy"><strong>默认方案</strong><small>'+Object.keys(baseline.books).length+' 本世界书</small></div>'
       +(page==='character'?button('restore-default','恢复默认'):'')+button('update-default','更新默认')+'</div></div>' : '')
     + list.map(item=>{
       const attrs='data-id="'+h(item.id)+'"';
@@ -428,32 +452,61 @@ function groupEditorMarkup() {
 function render() {
   if (!overlay) return;
   const editing = draft || editGroup || renameId;
+  if(!editing)rememberTab({page,section,book});
   const rename = renameId && engine.read().snapshots.find(item => item.id === renameId);
   const content = draft ? draftMarkup() : editGroup ? groupEditorMarkup() : rename
     ? `<label>快照名称<input type="text" data-rename value="${h(rename.name)}" maxlength="100"></label>`
     : picker ? sourceMarkup() : section === 'groups' ? groupMarkup() : snapshotMarkup();
   overlay.innerHTML = `<section class="pmm-wbs-dialog${editing ? ' is-editing' : ''}" role="dialog" aria-modal="true" aria-label="世界书快照">
-    <header class="pmm-wbs-head"><div class="pmm-wbs-heading"><span class="pmm-wbs-symbol">${icon('camera')}</span><div><h2>${draft ? '调整开关' : editGroup ? '世界书分组' : '快照'}</h2><p>${h(character()?.name || '酒馆主页')}</p></div></div>${button('close', icon('close'), 'class="pmm-wbs-icon" aria-label="关闭"')}</header>
+    <header class="pmm-wbs-head"><div class="pmm-wbs-heading"><span class="pmm-wbs-symbol">${icon('camera')}</span><div><h2>${draft ? '调整开关' : editGroup ? '世界书分组' : '开关快照'}</h2><p>${h(character()?.name || '酒馆主页')}</p></div></div>${button('close', icon('close'), 'class="pmm-wbs-icon" aria-label="关闭"')}</header>
     ${tabs(page, !!editing)}<div class="pmm-wbs-message" data-message role="status" ${message ? '' : 'hidden'}><span>${h(message)}</span>${button('dismiss-message','×','aria-label="关闭提示"')}</div>
     <div class="pmm-wbs-body">${page === 'global' && !editing && !picker ? `<div class="pmm-wbs-tools pmm-wbs-subnav">${button('groups', '世界书分组', section === 'groups' ? 'class="pmm-wbs-primary"' : '')}${button('snapshots', '分组快照', section === 'snapshots' ? 'class="pmm-wbs-primary"' : '')}</div>` : ''}${content}</div>
     <footer class="pmm-wbs-foot"><small>${draft ? (page==='character'?'只调整开关；保存后应用，取消不改原书。':'保存方案不挂载世界书；请在分组中选用。') : page==='global' ? '分组开启时应用所选方案；关闭不卸载其他分组需要的书。' : '聊天锁自动应用 · 返回主页恢复进入前状态'}</small>${editing ? button('cancel-edit', '取消') + button(draft ? 'save-draft' : editGroup ? 'save-group' : 'save-rename', '保存', 'class="pmm-wbs-primary"') : ''}</footer>
     </section>`;
   filterDraft();
+  positionMenu();
+}
+function positionMenu() {
+  const menu=overlay?.querySelector('.pmm-wbs-menu');
+  const trigger=menu?.parentElement?.querySelector('[data-wbs="menu"],[data-wbs="group-menu"]');
+  if(!menu || !trigger)return;
+  menu.style.cssText='position:fixed;left:-10000px;top:0;visibility:hidden';
+  overlay.append(menu);
+  TOP.requestAnimationFrame(()=>{
+    if(!menu.isConnected || !trigger.isConnected)return;
+    const r=trigger.getBoundingClientRect(),d=overlay.querySelector('.pmm-wbs-dialog').getBoundingClientRect();
+    const row=trigger.closest('.pmm-wbs-row-main')?.getBoundingClientRect() || r;
+    const bottom=overlay.querySelector('footer').getBoundingClientRect().top;
+    const h=menu.scrollHeight,w=menu.getBoundingClientRect().width;
+    const up=bottom-row.bottom-6<h && row.top-d.top>bottom-row.bottom;
+    menu.style.left=Math.max(d.left+8,Math.min(r.right-w,d.right-w-8))+'px';
+    menu.style.top=Math.max(d.top+8,Math.min(up?row.top-h-6:row.bottom+6,bottom-h-8))+'px';
+    menu.style.visibility='visible';menu.dataset.direction=up?'up':'down';
+  });
 }
 async function loadItems() {
   items = [];
 }
-async function open(scope = 'character', selected = '') {
+async function open(scope = 'character', selected = '', restore = true) {
   if (disposed) return;
   if (TOP[PRESET]?.isCapturing?.()) { TOP.toastr?.info?.('请先保存或取消预设快照'); return; }
   if (overlay) return;
+  const last=restore?lastTab():null;
+  if(last?.page==='preset' && TOP[PRESET]?.open) { TOP[PRESET].open();return; }
   TOP[PRESET]?.close?.();
-  page = scope; section = scope === 'global' ? 'groups' : 'snapshots'; book = ''; message = ''; picker = false;
+  page=last && ['character','global'].includes(last.page)?last.page:scope;
+  section=last?.page===page && ['groups','snapshots'].includes(last.section)?last.section:page==='global'?'groups':'snapshots';
+  book=page==='global' && last?.page===page?String(last.book||''):'';message='';picker=false;
   lastFocus = DOC.activeElement;
   overlay = DOC.createElement('div'); overlay.className = 'pmm-wbs-overlay';
   overlay.addEventListener('click', onClick);
   overlay.addEventListener('input', onInput);
   overlay.addEventListener('change', onChange);
+  overlay.addEventListener('scroll', event=>{
+    if(menuId && event.target.classList?.contains('pmm-wbs-body')) {
+      menuId='';overlay.querySelectorAll('.pmm-wbs-menu').forEach(node=>node.remove());
+    }
+  },true);
   overlay.addEventListener('toggle', event=>{
     if(draft && !draft.query && event.target.matches('[data-draft-book]')) draft.expanded[event.target.dataset.draftBook]=event.target.open;
   },true);
@@ -548,7 +601,7 @@ function onClick(event) {
       if (draft || editGroup || renameId) return;
       say('');
       page = target.dataset.hubTab; book = ''; menuId = ''; section = page === 'global' ? 'groups' : 'snapshots'; picker = false; items = [];
-      if (page === 'preset') { await close(true); TOP[PRESET]?.open?.(); return; }
+      if (page === 'preset') { rememberTab({page:'preset'}); await close(true); TOP[PRESET]?.open?.(); return; }
       await refresh();
     } else if (action === 'choose') {
       book = target.dataset.book; section = 'snapshots'; picker = false;
@@ -658,7 +711,7 @@ function cleanup() {
   void close(true); style.remove();
   if (TOP[KEY]?.engine === engine) delete TOP[KEY];
 }
-TOP[KEY] = { open, decoratePreset, engine, cleanup };
+TOP[KEY] = { open, decoratePreset, resumeLast, engine, cleanup };
 syncListener();
 // The persisted return journal also handles a browser refresh while inside a character.
 onChatChanged();

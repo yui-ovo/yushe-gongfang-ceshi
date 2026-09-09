@@ -17,6 +17,8 @@ window.TavernHelper={getWorldbookNames:()=>Object.keys(fixture.data),getGlobalWo
 window.__PMM_WORLDBOOK_STITCH_TEST3__={state:{top:{dirty:false},bottom:{dirty:false}},refreshSnapshotBook:()=>{}};
 window.__PMM_SWITCH_SNAPSHOTS_TEST52__={close:()=>document.querySelector('#preset-fixture')?.remove(),isCapturing:()=>false,open:()=>{const root=document.createElement('div');root.id='preset-fixture';root.innerHTML='<section class="pmm-switch-snapshot-dialog"><header>预设快照</header><div class="pmm-switch-snapshot-row"><div class="pmm-switch-snapshot-bindings"><button class="pmm-switch-snapshot-lock">角色</button></div><div class="pmm-switch-snapshot-menu"></div></div></section>';document.body.append(root);__PMM_WORLDBOOK_SNAPSHOTS__.decoratePreset(root)}};
 document.querySelector('#camera').onclick=()=>window.__PMM_WORLDBOOK_SNAPSHOTS__.open();
+const originalPresetOpen=window.__PMM_SWITCH_SNAPSHOTS_TEST52__.open;
+window.__PMM_SWITCH_SNAPSHOTS_TEST52__.open=()=>{if(window.__PMM_WORLDBOOK_SNAPSHOTS__?.resumeLast?.())return;originalPresetOpen();};
 </script><script type="module" src="/worldbook-snapshots.js"></script></html>`;
 const server = createServer((req, res) => {
   const name = new URL(req.url, 'http://localhost').pathname.slice(1);
@@ -154,6 +156,13 @@ try {
     await page.locator('[data-wbs="choose"]').click();
     await page.getByText('分组 · 剧情模式',{exact:true}).waitFor();
     assert.equal(await page.evaluate(()=>fixture.data['剧情补充'].entries[0].disable),true,'Save group snapshot is inert');
+    await page.click('[data-wbs="close"]');
+    await page.evaluate(()=>__PMM_SWITCH_SNAPSHOTS_TEST52__.open());
+    await page.getByText('分组 · 剧情模式',{exact:true}).waitFor();
+    assert.equal(await page.locator('[data-hub-tab="global"]').getAttribute('aria-selected'),'true','Preset camera resumes last global group');
+    await page.click('[data-wbs="close"]');
+    await page.click('#camera');
+    await page.getByText('分组 · 剧情模式',{exact:true}).waitFor();
     await page.click('[data-wbs="groups"]');
     const planId=await page.locator('[data-group-plan] option').nth(1).getAttribute('value');
     await page.selectOption('[data-group-plan]',planId);
@@ -171,7 +180,10 @@ try {
     await page.click('[data-wbs="group-menu"]');
     const menuBounds=await page.locator('.pmm-wbs-menu').boundingBox();
     const switchBounds=await page.locator('[data-wbs="toggle-group"]').boundingBox();
-    assert.ok(menuBounds.y>=switchBounds.y+switchBounds.height,'Menu cannot cover group switch');
+    assert.ok(menuBounds.y>=switchBounds.y+switchBounds.height || menuBounds.y+menuBounds.height<=switchBounds.y,'Menu cannot cover group switch');
+    const editBounds=await page.locator('[data-wbs="edit-group"]').boundingBox();
+    const deleteBounds=await page.locator('[data-wbs="delete-group"]').boundingBox();
+    assert.ok(deleteBounds.y>=editBounds.y+editBounds.height,'More uses vertical menu rows');
     assert.equal(await page.locator('[data-wbs="edit-group"]').isEnabled(),true);
     assert.equal(await page.locator('[data-wbs="delete-group"]').isEnabled(),true);
     page.removeAllListeners('dialog');
@@ -206,7 +218,11 @@ try {
     await page.click('[data-wbs="cancel-edit"]');
     await page.click('[data-hub-tab="preset"]');
     await page.locator('#preset-fixture .pmm-snapshot-tabs').waitFor();
-    assert.equal(await page.locator('.pmm-switch-snapshot-menu .pmm-switch-snapshot-lock').count(), 1);
+    assert.equal(await page.locator('.pmm-switch-snapshot-menu .pmm-switch-snapshot-lock').count(), 0);
+    assert.equal(await page.locator('.pmm-switch-snapshot-bindings .pmm-switch-snapshot-lock').isVisible(),true);
+    await page.evaluate(()=>__PMM_SWITCH_SNAPSHOTS_TEST52__.close());
+    await page.click('#camera');
+    await page.locator('#preset-fixture .pmm-snapshot-tabs').waitFor();
     await page.click('#preset-fixture [data-hub-tab="character"]');
     await page.locator('.pmm-wbs-dialog').waitFor();
     assert.deepEqual(errors, []);
