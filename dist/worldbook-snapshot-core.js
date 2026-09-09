@@ -262,6 +262,16 @@ export function createWorldbookSnapshots(host) {
       store.defaults=store.defaults.filter(s=>s.scope!==scope || s.owner!==owner);
       store.defaults.push({bundle:true,scope,owner,name:'默认',books:statesOf(data)}); persist(store);
     }),
+    removeDefault: (scope,owner) => queued(() => {
+      const store=read();
+      if(scope==='group') {
+        const group=store.groups.find(group=>group.id===owner);
+        if(!group)throw new Error('分组已不存在');
+        if(group.enabled)throw new Error('请先关闭分组再删除默认方案');
+      }
+      store.defaults=store.defaults.filter(item=>item.scope!==scope || item.owner!==owner);
+      persist(store);
+    }),
     resetBundle: (scope,owner) => queued(async () => {
       const store=read(),baseline=store.defaults?.find(s=>s.scope===scope && s.owner===owner);
       if(!baseline)throw new Error('尚未保存默认');
@@ -412,7 +422,10 @@ export function createWorldbookSnapshots(host) {
     removeGroup: id => queued(() => {
       const store = read(), group = store.groups.find(group => group.id === id);
       if (group?.enabled) throw new Error('请先关闭分组再删除');
-      store.groups = store.groups.filter(group => group.id !== id); persist(store);
+      store.groups = store.groups.filter(group => group.id !== id);
+      store.defaults = store.defaults.filter(item => item.scope !== 'group' || item.owner !== id);
+      store.snapshots = store.snapshots.filter(item => item.scope !== 'group' || item.owner !== id);
+      persist(store);
     }),
   };
 }

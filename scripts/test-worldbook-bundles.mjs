@@ -87,6 +87,24 @@ async function create(f,scope,owner,name,flip=true){const d=await f.e.captureBun
   f.links.manual=['a'];await assert.rejects(f.e.captureBundle('group',g),/绑定角色/);
 }
 {
+  const f=fixture();await f.e.saveGroup({name:'Cleanup',books:['x','y']});const g=f.store.groups[0].id;
+  await create(f,'group',g,'saved');
+  const before=copy(f.data);
+  await f.e.removeDefault('group',g);
+  assert.equal(f.store.defaults.filter(item=>item.scope==='group'&&item.owner===g).length,0,'Deleting group default removes only its saved baseline');
+  assert.equal(f.store.snapshots.filter(item=>item.scope==='group'&&item.owner===g).length,1,'Deleting default keeps named snapshots');
+  assert.deepEqual(f.data,before,'Deleting group default never writes worldbook switches');
+  await f.e.captureBundle('group',g);
+  assert.equal(f.store.defaults.filter(item=>item.scope==='group'&&item.owner===g).length,1,'Next capture recreates the group default');
+  await f.e.toggleGroup(g);
+  await assert.rejects(f.e.removeDefault('group',g),/先关闭分组/);
+  await f.e.toggleGroup(g);
+  await f.e.removeGroup(g);
+  assert.equal(f.store.groups.length,0);
+  assert.equal(f.store.defaults.filter(item=>item.scope==='group'&&item.owner===g).length,0,'Removing group cleans its default');
+  assert.equal(f.store.snapshots.filter(item=>item.scope==='group'&&item.owner===g).length,0,'Removing group cleans its snapshots');
+}
+{
   const f=fixture();await f.e.saveGroup({name:'Q',books:['x','y']});const g=f.store.groups[0].id;
   const s=await create(f,'group',g,'on');await f.e.selectGroupPlan(g,s.id);
   f.quota();await assert.rejects(f.e.toggleGroup(g),/quota/);

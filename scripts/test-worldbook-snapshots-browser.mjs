@@ -89,7 +89,7 @@ try {
     await page.waitForFunction(()=>fixture.data['角色世界'].entries[0].disable===true);
     await page.getByText('进入角色聊天后使用',{exact:true}).waitFor();
     await page.click('[data-hub-tab="global"]');
-    assert.equal(await page.locator('.pmm-wbs-subnav button').first().getAttribute('data-wbs'), 'groups');
+    assert.equal(await page.locator('.pmm-wbs-subnav').count(),0,'Global groups open directly without a one-item subnav');
     await page.evaluate(()=>{
       // Model the helper's option update and native change listeners, with workshop closed.
       __PMM_WORLDBOOK_STITCH_TEST3__.close();
@@ -106,13 +106,14 @@ try {
       };
     });
     assert.equal(await page.locator('[data-wbs="new-group"]').count(), 1, 'Global tab opens groups by default');
-    await page.click('[data-wbs="groups"]');
+    assert.equal(await page.locator('[data-wbs="groups"]').count(),0,'Single-purpose group subnav row is removed');
     await page.click('[data-wbs="new-group"]');
     assert.equal(await page.locator('[data-wbs="save-group"]').isDisabled(),true,'Unnamed empty group cannot be saved');
-    assert.ok((await page.locator('[data-group-name]').boundingBox()).height<=42,'Group name input stays compact');
+    assert.ok((await page.locator('[data-group-name]').boundingBox()).height<=36,'Group name input stays compact');
     await page.click('[data-wbs="focus-group-name"]');
     assert.equal(await page.evaluate(()=>document.activeElement?.matches('[data-group-name]')),true,'Group pencil focuses the name input');
     assert.equal(await page.locator('[data-group-filter]').count(),1,'Group editor has its own worldbook search');
+    assert.ok((await page.locator('[data-group-filter]').boundingBox()).height<=36,'Group search stays compact without shrinking its iOS-safe font');
     await page.locator('[data-group-filter]').fill('手动');
     assert.equal(await page.locator('[data-group-book-row]:visible').count(),1,'Group search filters available worldbooks');
     await page.locator('[data-group-filter]').fill('');
@@ -124,8 +125,11 @@ try {
     await page.locator('[data-group-book="手动保留"]').check();
     await page.screenshot({path:fileURLToPath(new URL(`group-editor-${width}.png`,output))});
     await page.click('[data-wbs="save-group"]');
+    const groupId=await page.locator('[data-group-plan]').getAttribute('data-group-plan');
     assert.equal(await page.locator('[data-group-plan] option').count(),2,'Fresh group has default and inline create in its plan select');
     assert.equal(await page.locator('[data-group-plan] option').last().textContent(),'＋ 新建分组快照');
+    const defaultPlanWidth=(await page.locator('[data-group-plan]').boundingBox()).width;
+    assert.ok(defaultPlanWidth<=82,'Closed default plan select is sized from the selected text, not its longest option');
     assert.equal(await page.locator('[data-wbs="snapshots"]').count(),0,'No independent group snapshot tab');
     await page.click('[data-wbs="toggle-group"]');
     await page.waitForFunction(() => fixture.globals.includes('剧情补充'));
@@ -178,6 +182,15 @@ try {
     await page.getByText('分组 · 剧情模式',{exact:true}).waitFor();
     assert.equal(await page.locator('[data-wbs="back-groups"]').count(),1,'Snapshot manager has one direct route back to groups');
     assert.ok(await page.locator('[data-wbs="new"]').evaluate(node=>!!(node.compareDocumentPosition(document.querySelector('[data-wbs="update-default"]')) & Node.DOCUMENT_POSITION_FOLLOWING)),'New action precedes default');
+    assert.equal(await page.locator('[data-wbs="delete-group-default"].pmm-switch-snapshot-reset-all').count(),1,'Group default has the compact preset-style trash action');
+    const beforeDefaultDelete=await page.evaluate(()=>[fixture.data['剧情补充'].entries[0].disable,fixture.data['手动保留'].entries[0].disable]);
+    await page.click('[data-wbs="delete-group-default"]');
+    await page.waitForFunction(()=>!document.querySelector('.pmm-wbs-default'));
+    assert.equal(await page.getByText('分组 · 剧情模式',{exact:true}).count(),1,'Deleting default keeps named snapshots');
+    assert.deepEqual(await page.evaluate(()=>[fixture.data['剧情补充'].entries[0].disable,fixture.data['手动保留'].entries[0].disable]),beforeDefaultDelete,'Deleting default does not write live worldbooks');
+    await page.click('[data-wbs="new"]');
+    await page.click('[data-wbs="cancel-edit"]');
+    assert.equal(await page.locator('.pmm-wbs-default').count(),1,'Starting the next snapshot recreates the missing default');
     await page.click('[data-wbs="menu"]');
     await page.click('[data-wbs="edit-snapshot"]');
     await page.locator('[data-draft-book="剧情补充"] summary').click();
@@ -200,7 +213,10 @@ try {
     await page.click('[data-wbs="back-groups"]');
     const planId=await page.locator('[data-group-plan] option').nth(1).getAttribute('value');
     await page.selectOption('[data-group-plan]',planId);
+    await page.getByText('分组方案已选择；开启时生效',{exact:true}).waitFor();
     assert.equal(await page.locator('[data-group-plan] option').count(),3);
+    const namedPlanWidth=(await page.locator('[data-group-plan]').boundingBox()).width;
+    assert.ok(namedPlanWidth>defaultPlanWidth && namedPlanWidth<=211,'Named plan grows only to its selected text with a safe maximum');
     await page.selectOption('[data-group-plan]','__new_snapshot__');
     await page.click('[data-wbs="cancel-edit"]');
     assert.equal(await page.locator('[data-group-plan]').inputValue(),planId,'Inline create restores and preserves the currently selected plan');
@@ -209,6 +225,12 @@ try {
     await page.waitForFunction(()=>fixture.nativeDisabled===false);
     assert.equal(await page.evaluate(()=>fixture.data['手动保留'].entries[0].disable),false,'Second book switch also applied');
     await page.screenshot({path:fileURLToPath(new URL('group-plan-'+width+'.png',output))});
+    await page.click('[data-wbs="group-menu"]');
+    await page.click('[data-wbs="manage-snapshots"]');
+    await page.click('[data-wbs="delete-group-default"]');
+    await page.getByText('请先关闭该分组，再删除默认方案',{exact:true}).waitFor();
+    assert.equal(await page.locator('.pmm-wbs-default').count(),1,'Enabled group blocks default deletion');
+    await page.click('[data-wbs="back-groups"]');
     await page.selectOption('[data-group-plan]','');
     await page.waitForFunction(()=>fixture.data['剧情补充'].entries[0].disable===true);
     await page.waitForFunction(()=>fixture.nativeDisabled===true);
@@ -242,6 +264,7 @@ try {
     await page.click('[data-wbs="delete-group"]');
     await page.waitForFunction(()=>!fixture.globals.includes('剧情补充'));
     assert.ok(await page.evaluate(()=>fixture.data['剧情补充'] && fixture.globals.includes('手动保留')),'Deleting active group preserves worldbook files and manual mounts');
+    assert.deepEqual(await page.evaluate(id=>{const store=__PMM_WORLDBOOK_SNAPSHOTS__.engine.read();return [store.defaults.filter(item=>item.scope==='group'&&item.owner===id).length,store.snapshots.filter(item=>item.scope==='group'&&item.owner===id).length];},groupId),[0,0],'Deleting a group removes its orphan defaults and snapshots');
     assert.equal(await page.locator('[data-group-plan]').count(),0);
     // Shrink visible space as with a keyboard; the footer and close button stay in the viewport.
     await page.evaluate(()=>{
