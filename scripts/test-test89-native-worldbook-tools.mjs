@@ -12,6 +12,11 @@ assert.doesNotMatch(source,/批量挂载|批量导出|根据所选世界书直�
 assert.match(source,/角色绑定世界书/,'Batch manager does not group character-bound worldbooks');
 assert.match(source,/非角色绑定世界书/,'Batch manager does not group unbound worldbooks');
 assert.match(source,/row\.characters\.length/,'Batch grouping does not use actual character bindings');
+assert.ok(source.indexOf('非角色绑定世界书')<source.indexOf('角色绑定世界书 ·'),'Unbound worldbooks are not rendered before character-bound worldbooks');
+assert.match(source,/batchBoundExpanded = false/,'Character-bound worldbooks are not collapsed by default');
+assert.match(source,/data-batch-action="toggle-bound"/,'Collapsed character-bound section has no expand control');
+assert.match(source,/if\(!batchBoundExpanded\)for\(const row of batchBooks\.filter\(row=>row\.characters\.length\)\)batchSelected\.delete\(row\.name\)/,'Collapsing character-bound books retains hidden destructive selections');
+assert.match(source,/\(!row\.characters\.length \|\| batchBoundExpanded\)/,'Select all can still include collapsed character-bound worldbooks');
 assert.doesNotMatch(source,/renderBatch\(\);batchOverlay\.querySelector\('\.pmm-wbs-batch-search'\)\?\.focus\(\)/,'Opening batch manager still forces the search field to focus');
 assert.match(source,/names\.length<nativeCatalogNames\.length/,'Native catalog deletion is not distinguished from a rename');
 assert.match(source,/engine\.reconcileBooks\(current\)/,'Native worldbook deletion does not reconcile snapshot group references');
