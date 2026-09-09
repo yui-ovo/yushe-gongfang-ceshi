@@ -1,4 +1,4 @@
-import { createWorldbookSnapshots, copy } from './worldbook-snapshot-core.js?v=2.98.0-test.18';
+import { createWorldbookSnapshots, copy } from './worldbook-snapshot-core.js?v=2.98.0-test.19';
 
 const SELF = window, TOP = window.parent || window, DOC = TOP.document;
 const KEY = '__PMM_WORLDBOOK_SNAPSHOTS__';
@@ -97,7 +97,7 @@ const engine = createWorldbookSnapshots({
 });
 
 let overlay = null, viewportCleanup = null, themeCleanup = null, busy = false, disposed = false;
-let batchOverlay = null, batchNames = [], batchSelected = new Set(), batchQuery = '', batchBusy = false;
+let batchOverlay = null, batchBooks = [], batchNames = [], batchSelected = new Set(), batchQuery = '', batchBusy = false;
 let page = 'character', section = 'snapshots', book = '', books = [], items = [], draft = null;
 let picker = false, pickerReturnBook = '', editGroup = null, groupQuery = '', renameId = '', menuId = '', message = '', lastFocus = null;
 let eventSource = null, eventType = '', eventTimer = 0;
@@ -309,8 +309,11 @@ style.textContent = `
 .pmm-wbs-dialog .pmm-wbs-batch-search { margin:0!important; height:36px!important; min-height:36px!important; }
 .pmm-wbs-batch-select-all { flex:none; white-space:nowrap; min-height:36px!important; padding:7px 11px!important; }
 .pmm-wbs-batch-list { display:flex; flex-direction:column; gap:6px; }
+.pmm-wbs-batch-section+.pmm-wbs-batch-section { margin-top:15px; }
+.pmm-wbs-batch-section-title { display:flex; align-items:center; justify-content:space-between; gap:10px; margin:2px 3px 7px; font-size:12px; font-weight:650; opacity:.68; }
 .pmm-wbs-batch-row { display:flex!important; align-items:center; gap:10px; width:100%; min-height:40px!important; padding:8px 10px!important; text-align:left; border-radius:11px!important; }
 .pmm-wbs-batch-row>span { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.pmm-wbs-batch-row>span small { margin:2px 0 0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .pmm-wbs-batch-check { width:18px; flex:none; text-align:center; color:var(--pm-accent,currentColor); }
 .pmm-wbs-danger { color:#ef6b6b!important; }
 @media(max-width:600px) { .pmm-wbs-head { padding:18px 16px 12px; } .pmm-wbs-body { padding:10px 14px 14px; } .pmm-snapshot-tabs { margin:0 14px 8px; } .pmm-wbs-foot { padding:10px 15px; } .pmm-wbs-dialog { border-radius:26px; } }
@@ -468,10 +471,13 @@ function batchVisibleNames() {
 }
 function renderBatch() {
   if(!batchOverlay)return;
+  const rowMarkup=row=>`<button type="button" class="pmm-wbs-batch-row" data-batch-action="toggle" data-book="${h(row.name)}" data-book-title="${h(row.name.toLocaleLowerCase())}" role="checkbox" aria-checked="${batchSelected.has(row.name)}"><i class="pmm-wbs-batch-check fa-${batchSelected.has(row.name)?'solid fa-square-check':'regular fa-square'}"></i><span title="${h(row.name)}">${h(row.name)}${row.characters.length?`<small>角色：${h(row.characters.map(character=>character.name).join('、'))}</small>`:''}</span></button>`;
+  const sectionMarkup=(key,label,rows)=>`<section class="pmm-wbs-batch-section" data-batch-section="${key}"><div class="pmm-wbs-batch-section-title"><span>${label}</span><span>${rows.length} 本</span></div>${rows.map(rowMarkup).join('')}</section>`;
+  const bound=batchBooks.filter(row=>row.characters.length),unbound=batchBooks.filter(row=>!row.characters.length);
   batchOverlay.innerHTML=`<section class="pmm-wbs-dialog pmm-wbs-batch-dialog" role="dialog" aria-modal="true" aria-label="批量管理世界书">
     <header class="pmm-wbs-head"><div><h2><i class="fa-solid fa-list-check"></i> 批量管理世界书</h2><p>搜索、多选并删除世界书</p></div><button type="button" class="pmm-wbs-icon" data-batch-action="close" aria-label="关闭"><i class="fa-solid fa-xmark"></i></button></header>
     <div class="pmm-wbs-body"><div class="pmm-wbs-batch-tools"><input class="pmm-wbs-batch-search" type="search" value="${h(batchQuery)}" placeholder="搜索世界书" aria-label="搜索世界书"><button type="button" class="pmm-wbs-batch-select-all" data-batch-action="select-all">全选</button></div>
-      <div class="pmm-wbs-batch-list">${batchNames.map(name=>`<button type="button" class="pmm-wbs-batch-row" data-batch-action="toggle" data-book="${h(name)}" data-book-title="${h(name.toLocaleLowerCase())}" role="checkbox" aria-checked="${batchSelected.has(name)}"><i class="pmm-wbs-batch-check fa-${batchSelected.has(name)?'solid fa-square-check':'regular fa-square'}"></i><span title="${h(name)}">${h(name)}</span></button>`).join('')}<div class="pmm-wbs-empty pmm-wbs-batch-empty" hidden>没有匹配的世界书</div></div></div>
+      <div class="pmm-wbs-batch-list">${sectionMarkup('bound','角色绑定世界书',bound)}${sectionMarkup('unbound','非角色绑定世界书',unbound)}<div class="pmm-wbs-empty pmm-wbs-batch-empty" hidden>没有匹配的世界书</div></div></div>
     <footer class="pmm-wbs-foot"><small>已选择 ${batchSelected.size} 本；删除不可撤销</small><button type="button" data-batch-action="close">取消</button><button type="button" class="pmm-wbs-danger" data-batch-action="delete" ${batchSelected.size&&!batchBusy?'':'disabled'}>${batchBusy?'正在删除…':'批量删除'}</button></footer>
   </section>`;
   batchOverlay.setAttribute('aria-busy',String(batchBusy));
@@ -482,13 +488,14 @@ function filterBatchRows() {
   const query=batchQuery.trim().toLocaleLowerCase(),rows=[...batchOverlay.querySelectorAll('.pmm-wbs-batch-row')];
   let visible=0;
   for(const row of rows){row.hidden=!!query&&!row.dataset.bookTitle.includes(query);if(!row.hidden)visible++;}
+  for(const section of batchOverlay.querySelectorAll('[data-batch-section]'))section.hidden=![...section.querySelectorAll('.pmm-wbs-batch-row')].some(row=>!row.hidden);
   batchOverlay.querySelector('.pmm-wbs-batch-empty').hidden=visible!==0;
   const names=batchVisibleNames(),all=names.length>0&&names.every(name=>batchSelected.has(name));
   const selectAll=batchOverlay.querySelector('[data-batch-action="select-all"]');
   if(selectAll){selectAll.disabled=!names.length;selectAll.textContent=all?'取消全选':'全选';}
 }
 function closeBatch() {
-  batchOverlay?.remove(); batchOverlay=null; batchNames=[]; batchSelected.clear(); batchQuery=''; batchBusy=false;
+  batchOverlay?.remove(); batchOverlay=null; batchBooks=[]; batchNames=[]; batchSelected.clear(); batchQuery=''; batchBusy=false;
 }
 async function deleteBatchSelection() {
   if(batchBusy || !batchSelected.size)return;
@@ -507,7 +514,7 @@ async function deleteBatchSelection() {
       try { if(await remove(name)===false)failed.push(name); }
       catch(_) { failed.push(name); }
     }
-    batchNames=(await helper('getWorldbookNames')()).map(String);
+    batchBooks=await catalog();batchNames=batchBooks.map(row=>row.name);
     await reconcileCatalogNames(batchNames);
     batchSelected=new Set(failed.filter(name=>batchNames.includes(name)));
     if(failed.length) TOP.toastr?.warning?.(`有 ${failed.length} 本世界书删除失败：${failed.join('、')}`);
@@ -516,7 +523,7 @@ async function deleteBatchSelection() {
 }
 async function openBatch() {
   if(batchOverlay)return;
-  batchNames=(await helper('getWorldbookNames')()).map(String);batchSelected.clear();batchQuery='';
+  batchBooks=await catalog();batchNames=batchBooks.map(row=>row.name);batchSelected.clear();batchQuery='';
   batchOverlay=DOC.createElement('div');batchOverlay.className='pmm-wbs-overlay pmm-wbs-batch-overlay';
   batchOverlay.addEventListener('input',event=>{ if(event.target.matches('.pmm-wbs-batch-search')) { batchQuery=event.target.value;filterBatchRows(); } });
   batchOverlay.addEventListener('click',event=>{
@@ -529,7 +536,7 @@ async function openBatch() {
     else if(action==='delete')void deleteBatchSelection();
   });
   batchOverlay.addEventListener('keydown',event=>{if(event.key==='Escape'){event.stopPropagation();closeBatch();}});
-  DOC.body.append(batchOverlay);theme(batchOverlay);renderBatch();batchOverlay.querySelector('.pmm-wbs-batch-search')?.focus();
+  DOC.body.append(batchOverlay);theme(batchOverlay);renderBatch();
 }
 function makeNativeWorldbookButton(action,label,iconName) {
   const button=DOC.createElement('button');button.type='button';
