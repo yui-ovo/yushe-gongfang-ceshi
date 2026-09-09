@@ -1,4 +1,4 @@
-import { createWorldbookSnapshots, copy } from './worldbook-snapshot-core.js?v=2.98.0-test.10';
+import { createWorldbookSnapshots, copy } from './worldbook-snapshot-core.js?v=2.98.0-test.11';
 
 const SELF = window, TOP = window.parent || window, DOC = TOP.document;
 const KEY = '__PMM_WORLDBOOK_SNAPSHOTS__';
@@ -261,6 +261,11 @@ style.textContent = `
 .pmm-wbs-character-snapshot .pmm-switch-snapshot-lock { min-height:27px!important; }
 .pmm-wbs-character-snapshot .pmm-switch-snapshot-actions>button:first-child,.pmm-wbs-character-snapshot .pmm-switch-snapshot-more { min-height:28px!important; }
 .pmm-wbs-body.is-character-snapshots { padding:0!important; }
+.pmm-wbs-body.is-group-editor { display:flex; flex-direction:column; overflow:hidden; }
+.pmm-wbs-group-editor { display:flex; flex:1; min-height:0; flex-direction:column; }
+.pmm-wbs-group-editor-head { flex:0 0 auto; padding-bottom:8px; background:var(--pm-panel-bg,var(--SmartThemeBlurTintColor,#1b1d24)); }
+.pmm-wbs-group-editor-head label { display:block; }
+.pmm-wbs-group-editor-list { flex:1; min-height:0; overflow:auto; overscroll-behavior:contain; -webkit-overflow-scrolling:touch; padding-right:2px; }
 .pmm-switch-snapshot-dialog .pmm-wbs-foot { opacity:1!important; }
 .pmm-switch-snapshot-dialog .pmm-wbs-foot>small { opacity:.55!important; }
 @media(max-width:600px) { .pmm-wbs-head { padding:18px 16px 12px; } .pmm-wbs-body { padding:10px 14px 14px; } .pmm-snapshot-tabs { margin:0 14px 8px; } .pmm-wbs-foot { padding:10px 15px; } .pmm-wbs-dialog { border-radius:26px; } }
@@ -359,18 +364,12 @@ function watchTheme() {
 }
 function bindViewport() {
   const vv = TOP.visualViewport;
-  const ios = /iPhone|iPad|iPod/.test(TOP.navigator.userAgent) || (/Mac/.test(TOP.navigator.platform) && TOP.navigator.maxTouchPoints > 1);
   let frame = 0;
   const update = () => {
     frame = 0;
     if (!overlay) return;
-    const keyboard = ios && overlay.contains(DOC.activeElement) && /INPUT|TEXTAREA/.test(DOC.activeElement.tagName) && vv;
-    Object.assign(overlay.style, {
-      position: keyboard ? 'fixed' : 'absolute', inset: 'auto',
-      left: `${keyboard ? vv.offsetLeft : (vv?.pageLeft ?? TOP.scrollX)}px`,
-      top: `${keyboard ? vv.offsetTop : (vv?.pageTop ?? TOP.scrollY)}px`,
-      width: `${vv?.width || TOP.innerWidth}px`, height: `${vv?.height || TOP.innerHeight}px`,
-    });
+    const values={position:'fixed',inset:'auto',left:`${vv?.offsetLeft || 0}px`,top:`${vv?.offsetTop || 0}px`,right:'auto',bottom:'auto',width:`${vv?.width || TOP.innerWidth}px`,height:`${vv?.height || TOP.innerHeight}px`};
+    for(const [name,value] of Object.entries(values))overlay.style.setProperty(name,value,'important');
     overlay.style.setProperty('--wbs-visible-height', `${vv?.height || TOP.innerHeight}px`);
   };
   const schedule = event => {
@@ -474,7 +473,13 @@ function draftMarkup() {
 }
 function groupEditorMarkup() {
   const rows = books.filter(row => !row.characters.length);
-  return `<label>分组名称<input type="text" data-group-name value="${h(editGroup.name)}" maxlength="100"></label><small>可选择尚未挂全局的世界书，开启分组时一起挂载。</small>${rows.map(row => `<label class="pmm-wbs-entry"><span>${h(row.name)}${row.global ? '<small>已挂全局</small>' : ''}</span><input type="checkbox" data-group-book="${h(row.name)}" ${editGroup.books.includes(row.name) ? 'checked' : ''}></label>`).join('')}`;
+  return `<div class="pmm-wbs-group-editor"><div class="pmm-wbs-group-editor-head"><label>分组名称<input type="text" data-group-name value="${h(editGroup.name)}" maxlength="100" autocomplete="off"></label><small>可选择尚未挂全局的世界书，开启分组时一起挂载。</small></div><div class="pmm-wbs-group-editor-list">${rows.map(row => `<label class="pmm-wbs-entry"><span>${h(row.name)}${row.global ? '<small>已挂全局</small>' : ''}</span><input type="checkbox" data-group-book="${h(row.name)}" ${editGroup.books.includes(row.name) ? 'checked' : ''}></label>`).join('')}</div></div>`;
+}
+function syncGroupSave() {
+  const save=overlay?.querySelector('[data-wbs="save-group"]');
+  if(!save || !editGroup)return;
+  save.disabled=!editGroup.name.trim() || !editGroup.books.length;
+  save.title=save.disabled?'请填写分组名称并至少选择一本世界书':'';
 }
 function render() {
   if (!overlay) return;
@@ -487,10 +492,11 @@ function render() {
   overlay.innerHTML = `<section class="pmm-wbs-dialog pmm-switch-snapshot-dialog${editing ? ' is-editing' : ''}" role="dialog" aria-modal="true" aria-label="世界书快照">
     <header class="pmm-wbs-head pmm-switch-snapshot-head"><div><h2><i class="fa-solid fa-camera"></i>${draft ? '调整开关' : editGroup ? '世界书分组' : '开关快照'}</h2><p>${h(character()?.name || '酒馆主页')}</p></div>${button('close', '<i class="fa-solid fa-xmark"></i>', 'class="pmm-wbs-icon pmm-switch-snapshot-close" aria-label="关闭"')}</header>
     ${tabs(page, !!editing)}<div class="pmm-wbs-message" data-message role="status" ${message ? '' : 'hidden'}><span>${h(message)}</span>${button('dismiss-message','×','aria-label="关闭提示"')}</div>
-    <div class="pmm-wbs-body${page==='character'&&!editing&&!picker?' is-character-snapshots':''}">${page === 'global' && !editing && !picker ? `<div class="pmm-wbs-tools pmm-wbs-subnav">${button('groups', '世界书分组', section === 'groups' ? 'class="pmm-wbs-primary"' : '')}${button('snapshots', '分组快照', section === 'snapshots' ? 'class="pmm-wbs-primary"' : '')}</div>` : ''}${content}</div>
+    <div class="pmm-wbs-body${page==='character'&&!editing&&!picker?' is-character-snapshots':''}${editGroup?' is-group-editor':''}">${page === 'global' && !editing && !picker ? `<div class="pmm-wbs-tools pmm-wbs-subnav">${button('groups', '世界书分组', section === 'groups' ? 'class="pmm-wbs-primary"' : '')}${button('snapshots', '分组快照', section === 'snapshots' ? 'class="pmm-wbs-primary"' : '')}</div>` : ''}${content}</div>
     <footer class="pmm-wbs-foot"><small>${draft ? (page==='character'?'只调整开关；保存后应用，取消不改原书。':'保存方案不挂载世界书；请在分组中选用。') : page==='global' ? '分组开启时应用所选方案；关闭不卸载其他分组需要的书。' : '聊天锁自动应用 · 返回主页恢复进入前状态'}</small>${editing ? button('cancel-edit', '取消') + button(draft ? 'save-draft' : editGroup ? 'save-group' : 'save-rename', '保存', 'class="pmm-wbs-primary"') : ''}</footer>
     </section>`;
   filterDraft();
+  syncGroupSave();
   positionMenu();
 }
 function positionMenu() {
@@ -564,7 +570,7 @@ async function close(force = false) {
 }
 function onInput(event) {
   if (draft && event.target.matches('[data-name]')) draft.name = event.target.value;
-  if (editGroup && event.target.matches('[data-group-name]')) editGroup.name = event.target.value;
+  if (editGroup && event.target.matches('[data-group-name]')) { editGroup.name = event.target.value; syncGroupSave(); }
   if (draft && event.target.matches('[data-filter-book]')) {
     draft.queries ||= {};
     draft.queries[event.target.dataset.filterBook]=event.target.value;
@@ -601,6 +607,7 @@ function onChange(event) {
     const name = event.target.dataset.groupBook;
     editGroup.books = editGroup.books.filter(book => book !== name);
     if (event.target.checked) editGroup.books.push(name);
+    syncGroupSave();
   }
 }
 function onKey(event) {

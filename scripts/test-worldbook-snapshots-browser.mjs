@@ -108,9 +108,12 @@ try {
     assert.equal(await page.locator('[data-wbs="new-group"]').count(), 1, 'Global tab opens groups by default');
     await page.click('[data-wbs="groups"]');
     await page.click('[data-wbs="new-group"]');
+    assert.equal(await page.locator('[data-wbs="save-group"]').isDisabled(),true,'Unnamed empty group cannot be saved');
     await page.locator('[data-group-name]').fill('常用搭配');
+    assert.equal(await page.locator('[data-wbs="save-group"]').isDisabled(),true,'Named group still needs one worldbook');
     assert.equal(await page.locator('[data-group-book="角色世界"]').count(), 0);
     await page.locator('[data-group-book="剧情补充"]').check();
+    assert.equal(await page.locator('[data-wbs="save-group"]').isEnabled(),true,'Name and one worldbook enable Save');
     await page.locator('[data-group-book="手动保留"]').check();
     await page.click('[data-wbs="save-group"]');
     assert.equal(await page.locator('[data-group-plan] option').count(),1,'Fresh group has only default in inline select');
@@ -230,12 +233,32 @@ try {
     assert.ok(await page.evaluate(()=>fixture.data['剧情补充'] && fixture.globals.includes('手动保留')),'Deleting active group preserves worldbook files and manual mounts');
     assert.equal(await page.locator('[data-group-plan]').count(),0);
     // Shrink visible space as with a keyboard; the footer and close button stay in the viewport.
+    await page.evaluate(()=>{
+      for(let i=0;i<30;i++)fixture.data['可选世界书 '+i]=fixture.data['剧情补充'];
+    });
     await page.click('[data-wbs="new-group"]');
+    const groupHeadY=await page.locator('.pmm-wbs-group-editor-head').evaluate(node=>node.getBoundingClientRect().y);
+    await page.waitForFunction(()=>{const node=document.querySelector('.pmm-wbs-group-editor-list');return node && node.scrollHeight>node.clientHeight;});
+    await page.locator('.pmm-wbs-group-editor-list').evaluate(node=>{node.scrollTop=node.scrollHeight;});
+    const scrolledHeadY=await page.locator('.pmm-wbs-group-editor-head').evaluate(node=>node.getBoundingClientRect().y);
+    assert.ok(Math.abs(scrolledHeadY-groupHeadY)<1,'Group name stays fixed while only the worldbook list scrolls');
+    let visibleBounds=await page.evaluate(()=>{
+      const overlay=document.querySelector('.pmm-wbs-overlay').getBoundingClientRect();
+      const footer=document.querySelector('.pmm-wbs-foot').getBoundingClientRect();
+      return {overlayBottom:overlay.bottom,footerTop:footer.top,footerBottom:footer.bottom};
+    });
+    assert.ok(visibleBounds.footerTop>=0 && visibleBounds.footerBottom<=visibleBounds.overlayBottom+1,'Group actions are visible before opening the keyboard');
     await page.locator('[data-group-name]').focus();
     await page.setViewportSize({width,height:360});
     await page.waitForFunction(() => document.querySelector('.pmm-wbs-overlay').getBoundingClientRect().height <= 360);
     const bounds = await page.locator('.pmm-wbs-dialog').boundingBox();
     assert.ok(bounds.y >= 0 && bounds.y+bounds.height <= 361 && bounds.x >= 0 && bounds.x+bounds.width <= width);
+    visibleBounds=await page.evaluate(()=>{
+      const overlay=document.querySelector('.pmm-wbs-overlay').getBoundingClientRect();
+      const footer=document.querySelector('.pmm-wbs-foot').getBoundingClientRect();
+      return {overlayBottom:overlay.bottom,footerTop:footer.top,footerBottom:footer.bottom};
+    });
+    assert.ok(visibleBounds.footerTop>=0 && visibleBounds.footerBottom<=visibleBounds.overlayBottom+1,'Group actions remain visible in the reduced visual viewport');
     await page.locator('[data-group-name]').fill('中文输入');
     assert.equal(await page.locator('[data-group-name]').inputValue(), '中文输入');
     await page.click('[data-wbs="cancel-edit"]');
@@ -277,9 +300,9 @@ try {
     await page.click('[data-wbs="snapshots"]');
     await page.click('[data-wbs="sources"]');
     await page.locator('[data-wbs="choose"]').first().waitFor();
-    await page.locator('.pmm-wbs-dialog').waitFor({state:'visible'});
-    const compactDialog=await page.locator('.pmm-wbs-dialog').boundingBox();
-    assert.ok(compactDialog && compactDialog.height<=461);
+    await page.waitForFunction(()=>{const node=document.querySelector('.pmm-wbs-dialog');const rect=node?.getBoundingClientRect();return rect && rect.width>0 && rect.height>0;});
+    const compactHeight=await page.locator('.pmm-wbs-dialog').evaluate(node=>node.getBoundingClientRect().height);
+    assert.ok(compactHeight<=461);
     await page.waitForFunction(()=>{const node=document.querySelector('.pmm-wbs-body');return node && node.scrollHeight>node.clientHeight;});
     await page.locator('.pmm-wbs-body').evaluate(node => { node.scrollTop=node.scrollHeight; });
     await page.locator('[data-wbs="choose"]').last().click();
