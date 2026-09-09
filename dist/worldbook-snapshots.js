@@ -1,4 +1,4 @@
-import { createWorldbookSnapshots, copy } from './worldbook-snapshot-core.js?v=2.98.0-test.16';
+import { createWorldbookSnapshots, copy } from './worldbook-snapshot-core.js?v=2.98.0-test.17';
 
 const SELF = window, TOP = window.parent || window, DOC = TOP.document;
 const KEY = '__PMM_WORLDBOOK_SNAPSHOTS__';
@@ -229,9 +229,9 @@ style.textContent = `
 .pmm-wbs-book-title { flex:1; min-width:0; overflow-wrap:anywhere; }
 .pmm-wbs-book>summary small { margin:0; white-space:nowrap; }
 .pmm-wbs-book:not([open])>.pmm-wbs-book-entries { display:none!important; }
-.pmm-wbs-name-field { position:relative; }
-.pmm-wbs-name-field input { padding-right:38px!important; }
-.pmm-wbs-name-edit { position:absolute; right:7px; top:50%; transform:translateY(-50%); width:28px; height:28px; min-height:28px!important; padding:6px!important; border:0!important; opacity:.52; }
+.pmm-wbs-name-field { position:relative; margin:3px 0 5px; }
+.pmm-wbs-dialog .pmm-wbs-name-field input { height:38px!important; min-height:38px!important; margin:0!important; padding:6px 38px 6px 10px!important; border-radius:11px!important; font-size:16px!important; }
+.pmm-wbs-name-edit { position:absolute; right:7px; top:50%; transform:translateY(-50%); width:26px; height:26px; min-height:26px!important; padding:5px!important; border:0!important; opacity:.52; }
 .pmm-wbs-name-edit:hover,.pmm-wbs-name-edit:focus-visible { opacity:1; }
 .pmm-wbs-book-search { width:calc(100% - 18px)!important; height:34px!important; min-height:34px!important; margin:5px 9px 2px!important; padding:5px 9px!important; border-radius:10px!important; font-size:16px!important; }
 .pmm-wbs-entry-block { border-bottom:1px solid var(--wbs-line); }
@@ -272,6 +272,7 @@ style.textContent = `
 .pmm-wbs-character-snapshot .pmm-switch-snapshot-actions>button:first-child,.pmm-wbs-character-snapshot .pmm-switch-snapshot-more { min-height:28px!important; }
 .pmm-wbs-character-snapshot [data-wbs="apply"].is-current { opacity:1!important; cursor:default; font-weight:650; border-color:color-mix(in srgb,var(--pm-accent) 70%,transparent)!important; background:color-mix(in srgb,var(--pm-accent) 22%,transparent)!important; }
 .pmm-wbs-body.is-character-snapshots { padding:0!important; }
+.pmm-wbs-body.is-draft { padding-top:0!important; }
 .pmm-wbs-body.is-group-home { padding-top:0!important; }
 .pmm-wbs-body.is-group-home>[data-wbs="new-group"] { margin-top:0; }
 .pmm-wbs-body.is-group-editor { display:flex; flex-direction:column; overflow:hidden; padding-top:0!important; }
@@ -550,7 +551,7 @@ function render() {
   overlay.innerHTML = `<section class="pmm-wbs-dialog pmm-switch-snapshot-dialog${editing ? ' is-editing' : ''}" role="dialog" aria-modal="true" aria-label="世界书快照">
     <header class="pmm-wbs-head pmm-switch-snapshot-head"><div><h2><i class="fa-solid fa-camera"></i>${draft ? '调整开关' : editGroup ? '世界书分组' : '开关快照'}</h2><p>${h(character()?.name || '酒馆主页')}</p></div>${button('close', '<i class="fa-solid fa-xmark"></i>', 'class="pmm-wbs-icon pmm-switch-snapshot-close" aria-label="关闭"')}</header>
     ${tabs(page, !!editing)}<div class="pmm-wbs-message" data-message role="status" ${message ? '' : 'hidden'}><span>${h(message)}</span>${button('dismiss-message','×','aria-label="关闭提示"')}</div>
-    <div class="pmm-wbs-body${page==='character'&&!editing&&!picker?' is-character-snapshots':''}${page==='global'&&section==='groups'&&!editing&&!picker?' is-group-home':''}${editGroup?' is-group-editor':''}">${content}</div>
+    <div class="pmm-wbs-body${page==='character'&&!editing&&!picker?' is-character-snapshots':''}${draft?' is-draft':''}${page==='global'&&section==='groups'&&!editing&&!picker?' is-group-home':''}${editGroup?' is-group-editor':''}">${content}</div>
     <footer class="pmm-wbs-foot"><small>${draft ? (page==='character'?'只调整开关；保存后应用，取消不改原书。':'保存方案不挂载世界书；请在分组中选用。') : page==='global' ? '分组开启时应用所选方案；关闭不卸载其他分组需要的书。' : '聊天锁自动应用 · 返回主页恢复进入前状态'}</small>${editing ? button('cancel-edit', '取消') + button(draft ? 'save-draft' : editGroup ? 'save-group' : 'save-rename', '保存', 'class="pmm-wbs-primary"') : ''}</footer>
     </section>`;
   filterDraft();

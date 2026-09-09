@@ -41,7 +41,7 @@ const capture = section('function enterCaptureMode(entryContext = null)', 'funct
 assert.ok(capture.includes("blockWhileSnapshotActive('新建快照')"), '相机入口没有阻止快照套快照');
 
 const overlay = section('function renderOverlay()', 'function ensureOverlay()');
-assert.ok(overlay.includes("${isActive ? '当前' : '应用'}"), '当前快照的应用按钮没有改为“当前”');
+assert.ok(overlay.includes("${isActive ? '当前' : '全局应用'}"), '预设快照按钮没有区分“全局应用”与“当前”');
 assert.ok(overlay.includes("disabled title=\"当前正在应用\""), '当前快照按钮仍可重复点击');
 assert.ok(overlay.includes("activeSnapshot ? ' disabled' : ''"), '应用角色快照时更新默认按钮没有禁用');
 

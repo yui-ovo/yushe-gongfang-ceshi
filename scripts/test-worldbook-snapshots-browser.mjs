@@ -61,6 +61,11 @@ try {
     await page.screenshot({path:fileURLToPath(new URL('role-'+width+'.png',output))});
     await page.click('[data-wbs="new"]');
     assert.equal(await page.locator('[data-wbs="focus-name"]').count(),1,'Editable name has pencil affordance');
+    const draftGap=await page.evaluate(()=>document.querySelector('.pmm-wbs-body.is-draft').getBoundingClientRect().top-document.querySelector('.pmm-snapshot-tabs').getBoundingClientRect().bottom);
+    assert.ok(draftGap<=12,'Snapshot editor starts close to the tabs');
+    const nameBounds=await page.locator('[data-name]').boundingBox(),pencilBounds=await page.locator('[data-wbs="focus-name"]').boundingBox();
+    assert.ok(nameBounds.height<=40,'Snapshot name input stays compact');
+    assert.ok(Math.abs((nameBounds.y+nameBounds.height/2)-(pencilBounds.y+pencilBounds.height/2))<=1,'Snapshot name pencil is vertically centered');
     await page.click('[data-wbs="focus-name"]');
     assert.equal(await page.evaluate(()=>document.activeElement?.matches('[data-name]')),true,'Pencil focuses snapshot name');
     await page.locator('[data-name]').fill('日常 · 温柔模式');

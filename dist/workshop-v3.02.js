@@ -14966,7 +14966,7 @@ html.pmm-dnd-compat-active #preset-manager-main-panel{user-select:none!important
           </div>
         </div>
         <div class="pmm-switch-snapshot-actions">
-          <button type="button" data-pmm-snapshot-action="apply" data-pmm-snapshot-id="${escapeHtml(snapshot.id)}"${isActive ? ' class="is-current" disabled title="当前正在应用"' : ''}>${isActive ? '当前' : '应用'}</button>
+          <button type="button" data-pmm-snapshot-action="apply" data-pmm-snapshot-id="${escapeHtml(snapshot.id)}"${isActive ? ' class="is-current" disabled title="当前正在应用"' : ''}>${isActive ? '当前' : '全局应用'}</button>
           <div class="pmm-switch-snapshot-menu-wrap">
             <button type="button" class="pmm-switch-snapshot-more" data-pmm-snapshot-action="menu" data-pmm-snapshot-id="${escapeHtml(snapshot.id)}" title="更多操作"><i class="fa-solid fa-ellipsis"></i></button>
             ${menu}
