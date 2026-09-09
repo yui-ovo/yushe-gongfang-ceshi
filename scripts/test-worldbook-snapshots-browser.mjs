@@ -107,6 +107,12 @@ try {
     });
     assert.equal(await page.locator('[data-wbs="new-group"]').count(), 1, 'Global tab opens groups by default');
     assert.equal(await page.locator('[data-wbs="groups"]').count(),0,'Single-purpose group subnav row is removed');
+    const groupHomeGap=await page.evaluate(()=>{
+      const tabs=document.querySelector('.pmm-snapshot-tabs').getBoundingClientRect();
+      const action=document.querySelector('[data-wbs="new-group"]').getBoundingClientRect();
+      return action.top-tabs.bottom;
+    });
+    assert.ok(groupHomeGap<=12,'Global group home keeps the create action close to the tabs');
     await page.click('[data-wbs="new-group"]');
     assert.equal(await page.locator('[data-wbs="save-group"]').isDisabled(),true,'Unnamed empty group cannot be saved');
     assert.ok((await page.locator('[data-group-name]').boundingBox()).height<=36,'Group name input stays compact');
