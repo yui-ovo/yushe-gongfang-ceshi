@@ -1,4 +1,4 @@
-import { createWorldbookSnapshots, copy } from './worldbook-snapshot-core.js?v=2.98.0-test.20';
+import { createWorldbookSnapshots, copy } from './worldbook-snapshot-core.js?v=2.98.0-test.21';
 
 const SELF = window, TOP = window.parent || window, DOC = TOP.document;
 const KEY = '__PMM_WORLDBOOK_SNAPSHOTS__';
@@ -473,8 +473,10 @@ function batchVisibleNames() {
   const query=batchQuery.trim().toLocaleLowerCase();
   return batchBooks.filter(row=>(!row.characters.length || batchBoundExpanded) && (!query || row.name.toLocaleLowerCase().includes(query))).map(row=>row.name);
 }
-function renderBatch() {
+function renderBatch(preserveScroll=false) {
   if(!batchOverlay)return;
+  const currentBody=batchOverlay.querySelector('.pmm-wbs-body');
+  const previousScroll=preserveScroll&&currentBody?currentBody.scrollTop:null;
   const rowMarkup=row=>`<button type="button" class="pmm-wbs-batch-row" data-batch-action="toggle" data-book="${h(row.name)}" data-book-title="${h(row.name.toLocaleLowerCase())}" role="checkbox" aria-checked="${batchSelected.has(row.name)}"><i class="pmm-wbs-batch-check fa-${batchSelected.has(row.name)?'solid fa-square-check':'regular fa-square'}"></i><span title="${h(row.name)}">${h(row.name)}${row.characters.length?`<small>角色：${h(row.characters.map(character=>character.name).join('、'))}</small>`:''}</span></button>`;
   const bound=batchBooks.filter(row=>row.characters.length),unbound=batchBooks.filter(row=>!row.characters.length);
   const openSection=`<section class="pmm-wbs-batch-section" data-batch-section="unbound"><div class="pmm-wbs-batch-section-title"><span>非角色绑定世界书</span><span>${unbound.length} 本</span></div>${unbound.map(rowMarkup).join('')}</section>`;
@@ -487,6 +489,14 @@ function renderBatch() {
   </section>`;
   batchOverlay.setAttribute('aria-busy',String(batchBusy));
   filterBatchRows();
+  if(previousScroll!==null)batchOverlay.querySelector('.pmm-wbs-body').scrollTop=previousScroll;
+}
+function revealBatchBoundStart() {
+  TOP.requestAnimationFrame(()=>{
+    const body=batchOverlay?.querySelector('.pmm-wbs-body'),toggle=batchOverlay?.querySelector('[data-batch-action="toggle-bound"]');
+    if(!body || !toggle || !batchBoundExpanded)return;
+    body.scrollTop+=toggle.getBoundingClientRect().top-body.getBoundingClientRect().top-6;
+  });
 }
 function filterBatchRows() {
   if(!batchOverlay)return;
@@ -514,7 +524,7 @@ async function deleteBatchSelection() {
   if(!TOP.confirm(`确定删除：${preview}？\n\n删除不可撤销；它们也会从世界书分组、分组默认方案和命名快照中移除。`))return;
   const remove=optionalHelper('deleteWorldbook');
   if(!remove) { TOP.toastr?.error?.('当前酒馆助手缺少批量删除世界书接口，请更新酒馆助手'); return; }
-  batchBusy=true;renderBatch();
+  batchBusy=true;renderBatch(true);
   const failed=[];
   try {
     for(const name of names) {
@@ -526,7 +536,7 @@ async function deleteBatchSelection() {
     batchSelected=new Set(failed.filter(name=>batchNames.includes(name)));
     if(failed.length) TOP.toastr?.warning?.(`有 ${failed.length} 本世界书删除失败：${failed.join('、')}`);
     else TOP.toastr?.success?.(`已删除 ${names.length} 本世界书，并同步清理分组引用`);
-  } finally { batchBusy=false; renderBatch(); }
+  } finally { batchBusy=false; renderBatch(true); }
 }
 async function openBatch() {
   if(batchOverlay)return;
@@ -538,13 +548,13 @@ async function openBatch() {
     event.preventDefault();event.stopPropagation();
     const action=target.dataset.batchAction;
     if(action==='close')closeBatch();
-    else if(action==='toggle') { const name=target.dataset.book;batchSelected.has(name)?batchSelected.delete(name):batchSelected.add(name);renderBatch(); }
+    else if(action==='toggle') { const name=target.dataset.book;batchSelected.has(name)?batchSelected.delete(name):batchSelected.add(name);renderBatch(true); }
     else if(action==='toggle-bound') {
-      batchBoundExpanded=!batchBoundExpanded;
+      const expanding=!batchBoundExpanded;batchBoundExpanded=expanding;
       if(!batchBoundExpanded)for(const row of batchBooks.filter(row=>row.characters.length))batchSelected.delete(row.name);
-      renderBatch();
+      renderBatch(!expanding);if(expanding)revealBatchBoundStart();
     }
-    else if(action==='select-all') { const visible=batchVisibleNames(),all=visible.length&&visible.every(name=>batchSelected.has(name));for(const name of visible)all?batchSelected.delete(name):batchSelected.add(name);renderBatch(); }
+    else if(action==='select-all') { const visible=batchVisibleNames(),all=visible.length&&visible.every(name=>batchSelected.has(name));for(const name of visible)all?batchSelected.delete(name):batchSelected.add(name);renderBatch(true); }
     else if(action==='delete')void deleteBatchSelection();
   });
   batchOverlay.addEventListener('keydown',event=>{if(event.key==='Escape'){event.stopPropagation();closeBatch();}});
