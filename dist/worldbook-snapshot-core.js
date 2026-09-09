@@ -262,6 +262,19 @@ export function createWorldbookSnapshots(host) {
       store.defaults=store.defaults.filter(s=>s.scope!==scope || s.owner!==owner);
       store.defaults.push({bundle:true,scope,owner,name:'默认',books:statesOf(data)}); persist(store);
     }),
+    resetBundle: (scope,owner) => queued(async () => {
+      const store=read(),baseline=store.defaults?.find(s=>s.scope===scope && s.owner===owner);
+      if(!baseline)throw new Error('尚未保存默认');
+      await validateBundle(baseline);
+      const count=store.snapshots.filter(s=>s.bundle && s.scope===scope && s.owner===owner).length;
+      await batch(baseline.books,()=>{
+        store.snapshots=store.snapshots.filter(s=>!s.bundle || s.scope!==scope || s.owner!==owner);
+        store.defaults=store.defaults.filter(s=>s.scope!==scope || s.owner!==owner);
+        if(scope==='character' && store.session?.bundle && store.session.key===contextKey())store.session=null;
+        persist(store);
+      });
+      return count;
+    }),
     bindChat: id => queued(async () => {
       const store=read(), item=find(store,id), previous=copy(store.snapshots); await validateBundle(item);
       if (item.scope!=='character') throw new Error('只能绑定角色快照');

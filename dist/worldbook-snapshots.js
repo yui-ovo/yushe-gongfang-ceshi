@@ -1,4 +1,4 @@
-import { createWorldbookSnapshots, copy } from './worldbook-snapshot-core.js?v=2.98.0-test.6';
+import { createWorldbookSnapshots, copy } from './worldbook-snapshot-core.js?v=2.98.0-test.9';
 
 const SELF = window, TOP = window.parent || window, DOC = TOP.document;
 const KEY = '__PMM_WORLDBOOK_SNAPSHOTS__';
@@ -91,7 +91,7 @@ const engine = createWorldbookSnapshots({
 
 let overlay = null, viewportCleanup = null, themeCleanup = null, busy = false, disposed = false;
 let page = 'character', section = 'snapshots', book = '', books = [], items = [], draft = null;
-let picker = false, editGroup = null, renameId = '', menuId = '', message = '', lastFocus = null;
+let picker = false, pickerReturnBook = '', editGroup = null, renameId = '', menuId = '', message = '', lastFocus = null;
 let eventSource = null, eventType = '', eventTimer = 0;
 let messageTimer=0;
 const style = DOC.createElement('style');
@@ -228,7 +228,11 @@ style.textContent = `
 .pmm-wbs-book-title { flex:1; min-width:0; overflow-wrap:anywhere; }
 .pmm-wbs-book>summary small { margin:0; white-space:nowrap; }
 .pmm-wbs-book:not([open])>.pmm-wbs-book-entries { display:none!important; }
-.pmm-wbs-lock[aria-pressed="true"] { background:var(--wbs-ink); color:var(--wbs-base); }
+.pmm-wbs-name-field { position:relative; }
+.pmm-wbs-name-field input { padding-right:38px!important; }
+.pmm-wbs-name-edit { position:absolute; right:7px; top:50%; transform:translateY(-50%); width:28px; height:28px; min-height:28px!important; padding:6px!important; border:0!important; opacity:.52; }
+.pmm-wbs-name-edit:hover,.pmm-wbs-name-edit:focus-visible { opacity:1; }
+.pmm-wbs-book-search { margin:8px 9px 3px!important; width:calc(100% - 18px)!important; font-size:13px!important; padding:8px 10px!important; }
 .pmm-wbs-entry { padding:13px 8px; border-color:var(--wbs-line); font-size:13px; }
 .pmm-wbs-dialog input[type="text"],.pmm-wbs-dialog input[type="search"] { border-color:var(--wbs-line); background:var(--wbs-raised); border-radius:14px; }
 .pmm-wbs-foot { border-color:var(--wbs-line); padding:12px 20px; background:color-mix(in srgb,var(--wbs-surface) 85%,transparent); }
@@ -248,6 +252,13 @@ style.textContent = `
 .pmm-wbs-default.pmm-wbs-row { border-radius:0!important; box-shadow:none; background:color-mix(in srgb,var(--pm-accent) 7%,transparent)!important; border-width:1px 0!important; }
 .pmm-wbs-row [data-wbs="group-menu"] { border:0; background:transparent; padding:6px; font-size:20px; }
 .pmm-wbs-dialog select.pmm-wbs-plan { border-radius:8px; padding:4px 7px; background:color-mix(in srgb,var(--pm-accent) 8%,transparent); }
+.pmm-wbs-character-list { min-height:80px; overflow:auto; padding:8px; }
+.pmm-wbs-character-context { padding:2px 18px 0; font-size:10px; opacity:.62; }
+.pmm-wbs-character-default .pmm-wbs-svg { width:10px; height:10px; }
+.pmm-wbs-character-default .pmm-switch-snapshot-reset-all .pmm-wbs-svg { width:13px; height:13px; }
+.pmm-wbs-character-snapshot .pmm-switch-snapshot-bindings { min-width:auto!important; }
+.pmm-wbs-character-snapshot .pmm-switch-snapshot-actions { margin-left:auto; }
+.pmm-wbs-body.is-character-snapshots { padding:0!important; }
 @media(max-width:600px) { .pmm-wbs-head { padding:18px 16px 12px; } .pmm-wbs-body { padding:10px 14px 14px; } .pmm-snapshot-tabs { margin:0 14px 8px; } .pmm-wbs-foot { padding:10px 15px; } .pmm-wbs-dialog { border-radius:26px; } }
 `;
 DOC.head.append(style);
@@ -411,16 +422,28 @@ function snapshotMarkup() {
     return '<div class="pmm-wbs-tools">'+button('sources','选择分组'+icon('arrow'),'class="grow"')+'</div>'
       +(saved.length?'<h3>已有快照的分组</h3>'+saved.map(({g,count})=>button('choose',h(g.name)+' · '+count+' 个快照 '+icon('arrow'),'class="pmm-wbs-source" data-book="'+h(g.id)+'"')).join(''):'<p class="pmm-wbs-empty">选择分组，创建第一份快照</p>');
   }
-  return (page==='global' ? '<div class="pmm-wbs-tools">'+button('sources','<span>'+h(label||'选择分组')+'</span>'+icon('arrow'),'class="grow"')+'</div>' : '')
+  if(page==='character') {
+    const defaultMarkup=baseline?'<section class="pmm-switch-snapshot-default is-saved pmm-wbs-character-default"><div class="pmm-switch-snapshot-default-copy"><div><i class="fa-solid fa-house"></i>默认方案</div><small>'+Object.keys(baseline.books).length+' 本世界书</small></div><div class="pmm-switch-snapshot-default-actions">'
+      +button('restore-default','<i class="fa-solid fa-rotate-left"></i>恢复默认')+button('update-default','<i class="fa-solid fa-rotate"></i>更新默认')+button('reset-bundle',icon('trash'),'class="pmm-switch-snapshot-reset-all" title="重置当前角色的世界书快照" aria-label="重置当前角色的世界书快照"')+'</div></section>':'';
+    const rows=list.map(item=>{
+      const attrs='data-id="'+h(item.id)+'"',count=Object.values(item.books).reduce((n,s)=>n+Object.keys(s).length,0),bound=item.chat===chat();
+      return '<article class="pmm-switch-snapshot-row pmm-wbs-character-snapshot"><div class="pmm-switch-snapshot-copy"><div class="pmm-switch-snapshot-name">'+h(item.name)+'</div><div class="pmm-switch-snapshot-meta">'+Object.keys(item.books).length+' 本 · '+count+' 条</div></div><div class="pmm-switch-snapshot-bindings"><div class="pmm-switch-snapshot-locks">'
+        +button('bind','<i class="fa-solid '+(bound?'fa-lock':'fa-lock-open')+'"></i><span>聊天</span>',attrs+' class="pmm-switch-snapshot-lock is-chat'+(bound?' is-bound':'')+'" aria-pressed="'+bound+'"')+'</div></div><div class="pmm-switch-snapshot-actions">'
+        +button('apply','应用',attrs)+button('menu','<i class="fa-solid fa-ellipsis"></i>',attrs+' class="pmm-switch-snapshot-more" aria-label="更多操作"')+'</div>'
+        +(menuId===item.id?'<div class="pmm-wbs-menu">'+button('edit-snapshot','编辑开关',attrs)+button('rename','改名',attrs)+button('delete','删除',attrs)+'</div>':'')+'</article>';
+    }).join('');
+    return defaultMarkup+'<div class="pmm-switch-snapshot-create">'+button('new','<i class="fa-solid fa-plus"></i>新建开关快照',names.length?'':'disabled')+'</div>'
+      +(names.length?'<div class="pmm-wbs-character-context">'+h(names.join('、'))+'</div>':'<p class="pmm-wbs-empty">当前角色没有绑定世界书</p>')
+      +'<div class="pmm-switch-snapshot-list pmm-wbs-character-list">'+rows+(!list.length&&names.length?'<div class="pmm-wbs-empty"><strong>还没有快照</strong><small>第一次新建前会自动保存默认开关。</small></div>':'')+'</div>';
+  }
+  return '<div class="pmm-wbs-tools">'+button('sources','<span>'+h(label||'选择分组')+'</span>'+icon('arrow'),'class="grow"')+'</div>'
     + button('new','＋ 新快照','class="pmm-wbs-source" '+(names.length?'':'disabled'))
-    + (names.length ? '<small>'+h(names.join('、'))+'</small>' : '<p class="pmm-wbs-empty">'+(page==='character'?'当前角色没有绑定世界书':'请先创建并选择一个世界书分组')+'</p>')
-    + (baseline ? '<div class="pmm-wbs-row pmm-wbs-default"><div class="pmm-wbs-row-main"><div class="pmm-wbs-copy"><strong>默认方案</strong><small>'+Object.keys(baseline.books).length+' 本世界书</small></div>'
-      +(page==='character'?button('restore-default','恢复默认'):'')+button('update-default','更新默认')+'</div></div>' : '')
+    + (names.length ? '<small>'+h(names.join('、'))+'</small>' : '<p class="pmm-wbs-empty">请先创建并选择一个世界书分组</p>')
+    + (baseline ? '<div class="pmm-wbs-row pmm-wbs-default"><div class="pmm-wbs-row-main"><div class="pmm-wbs-copy"><strong>默认方案</strong><small>'+Object.keys(baseline.books).length+' 本世界书</small></div>'+button('update-default','更新默认')+'</div></div>' : '')
     + list.map(item=>{
       const attrs='data-id="'+h(item.id)+'"';
       const count=Object.values(item.books).reduce((n,s)=>n+Object.keys(s).length,0);
       return '<article class="pmm-wbs-row"><div class="pmm-wbs-row-main"><div class="pmm-wbs-copy"><strong>'+h(item.name)+'</strong><small>'+Object.keys(item.books).length+' 本 · '+count+' 条</small></div>'
-        +(page==='character'?button('bind',item.chat===chat()?'🔒':'🔓',attrs+' class="pmm-wbs-lock" aria-label="绑定当前聊天" aria-pressed="'+(item.chat===chat())+'"')+button('apply','应用',attrs):'')
         +button('menu','⋯',attrs+' aria-label="更多操作"')+'</div>'
         +(menuId===item.id?'<div class="pmm-wbs-menu">'+button('edit-snapshot','编辑开关',attrs)+button('rename','改名',attrs)+button('delete','删除',attrs)+'</div>':'')+'</article>';
     }).join('')
@@ -440,9 +463,9 @@ function groupMarkup() {
   }).join('');
 }
 function draftMarkup() {
-  return '<label>快照名称<input type="text" data-name value="'+h(draft.name)+'" maxlength="100" autocomplete="off"></label>'
-    +'<input type="search" data-filter value="'+h(draft.query||'')+'" placeholder="搜索条目名称" aria-label="搜索条目名称"><small>共 '+Object.keys(draft.data).length+' 本世界书 · 点击书名展开或收起</small><div data-entries>'
-    +Object.entries(draft.data).map(([name,data])=>'<details class="pmm-wbs-book" data-draft-book="'+h(name)+'" '+(draft.expanded[name]?'open':'')+'><summary>'+icon('arrow')+'<span class="pmm-wbs-book-title">'+h(name)+'</span><small>'+Object.keys(data.entries).length+' 条</small></summary><div class="pmm-wbs-book-entries">'+Object.values(data.entries).sort((a,b)=>Number(a.displayIndex??a.uid)-Number(b.displayIndex??b.uid)).map(entry=>
+  return '<label>快照名称<div class="pmm-wbs-name-field"><input type="text" data-name value="'+h(draft.name)+'" maxlength="100" autocomplete="off">'+button('focus-name',icon('edit'),'class="pmm-wbs-name-edit" aria-label="编辑快照名称"')+'</div></label>'
+    +'<small>共 '+Object.keys(draft.data).length+' 本世界书 · 点击书名展开或收起</small><div data-entries>'
+    +Object.entries(draft.data).map(([name,data])=>'<details class="pmm-wbs-book" data-draft-book="'+h(name)+'" '+(draft.expanded[name]?'open':'')+'><summary>'+icon('arrow')+'<span class="pmm-wbs-book-title">'+h(name)+'</span><small>'+Object.keys(data.entries).length+' 条</small></summary><div class="pmm-wbs-book-entries"><input class="pmm-wbs-book-search" type="search" data-filter-book="'+h(name)+'" value="'+h(draft.queries?.[name]||'')+'" placeholder="搜索条目名称" aria-label="搜索 '+h(name)+' 的条目">'+Object.values(data.entries).sort((a,b)=>Number(a.displayIndex??a.uid)-Number(b.displayIndex??b.uid)).map(entry=>
       '<label class="pmm-wbs-entry" data-entry-title="'+h(String(entry.comment||entry.key?.[0]||entry.uid).toLocaleLowerCase())+'"><span>'+h(entry.comment||entry.key?.[0]||'条目 '+entry.uid)+'</span><input type="checkbox" data-toggle="'+h(entry.uid)+'" data-toggle-book="'+h(name)+'" aria-label="'+h(entry.comment||'条目 '+entry.uid)+'" '+(entry.disable?'':'checked')+'></label>').join('')+(!Object.keys(data.entries).length?'<small>这本世界书暂无条目</small>':'')+'</div></details>').join('')+'</div>';
 }
 function groupEditorMarkup() {
@@ -460,7 +483,7 @@ function render() {
   overlay.innerHTML = `<section class="pmm-wbs-dialog${editing ? ' is-editing' : ''}" role="dialog" aria-modal="true" aria-label="世界书快照">
     <header class="pmm-wbs-head"><div class="pmm-wbs-heading"><span class="pmm-wbs-symbol">${icon('camera')}</span><div><h2>${draft ? '调整开关' : editGroup ? '世界书分组' : '开关快照'}</h2><p>${h(character()?.name || '酒馆主页')}</p></div></div>${button('close', icon('close'), 'class="pmm-wbs-icon" aria-label="关闭"')}</header>
     ${tabs(page, !!editing)}<div class="pmm-wbs-message" data-message role="status" ${message ? '' : 'hidden'}><span>${h(message)}</span>${button('dismiss-message','×','aria-label="关闭提示"')}</div>
-    <div class="pmm-wbs-body">${page === 'global' && !editing && !picker ? `<div class="pmm-wbs-tools pmm-wbs-subnav">${button('groups', '世界书分组', section === 'groups' ? 'class="pmm-wbs-primary"' : '')}${button('snapshots', '分组快照', section === 'snapshots' ? 'class="pmm-wbs-primary"' : '')}</div>` : ''}${content}</div>
+    <div class="pmm-wbs-body${page==='character'&&!editing&&!picker?' is-character-snapshots':''}">${page === 'global' && !editing && !picker ? `<div class="pmm-wbs-tools pmm-wbs-subnav">${button('groups', '世界书分组', section === 'groups' ? 'class="pmm-wbs-primary"' : '')}${button('snapshots', '分组快照', section === 'snapshots' ? 'class="pmm-wbs-primary"' : '')}</div>` : ''}${content}</div>
     <footer class="pmm-wbs-foot"><small>${draft ? (page==='character'?'只调整开关；保存后应用，取消不改原书。':'保存方案不挂载世界书；请在分组中选用。') : page==='global' ? '分组开启时应用所选方案；关闭不卸载其他分组需要的书。' : '聊天锁自动应用 · 返回主页恢复进入前状态'}</small>${editing ? button('cancel-edit', '取消') + button(draft ? 'save-draft' : editGroup ? 'save-group' : 'save-rename', '保存', 'class="pmm-wbs-primary"') : ''}</footer>
     </section>`;
   filterDraft();
@@ -475,7 +498,7 @@ function positionMenu() {
   TOP.requestAnimationFrame(()=>{
     if(!menu.isConnected || !trigger.isConnected)return;
     const r=trigger.getBoundingClientRect(),d=overlay.querySelector('.pmm-wbs-dialog').getBoundingClientRect();
-    const row=trigger.closest('.pmm-wbs-row-main')?.getBoundingClientRect() || r;
+    const row=trigger.closest('.pmm-wbs-row-main,.pmm-switch-snapshot-row')?.getBoundingClientRect() || r;
     const bottom=overlay.querySelector('footer').getBoundingClientRect().top;
     const h=menu.scrollHeight,w=menu.getBoundingClientRect().width;
     const up=bottom-row.bottom-6<h && row.top-d.top>bottom-row.bottom;
@@ -496,7 +519,7 @@ async function open(scope = 'character', selected = '', restore = true) {
   TOP[PRESET]?.close?.();
   page=last && ['character','global'].includes(last.page)?last.page:scope;
   section=last?.page===page && ['groups','snapshots'].includes(last.section)?last.section:page==='global'?'groups':'snapshots';
-  book=page==='global' && last?.page===page?String(last.book||''):'';message='';picker=false;
+  book=page==='global' && last?.page===page?String(last.book||''):'';message='';picker=false;pickerReturnBook='';
   lastFocus = DOC.activeElement;
   overlay = DOC.createElement('div'); overlay.className = 'pmm-wbs-overlay';
   overlay.addEventListener('click', onClick);
@@ -508,7 +531,7 @@ async function open(scope = 'character', selected = '', restore = true) {
     }
   },true);
   overlay.addEventListener('toggle', event=>{
-    if(draft && !draft.query && event.target.matches('[data-draft-book]')) draft.expanded[event.target.dataset.draftBook]=event.target.open;
+    if(draft && event.target.matches('[data-draft-book]')) draft.expanded[event.target.dataset.draftBook]=event.target.open;
   },true);
   overlay.addEventListener('keydown', onKey);
   DOC.body.append(overlay); theme(); watchTheme(); bindViewport(); render();
@@ -538,22 +561,21 @@ async function close(force = false) {
 function onInput(event) {
   if (draft && event.target.matches('[data-name]')) draft.name = event.target.value;
   if (editGroup && event.target.matches('[data-group-name]')) editGroup.name = event.target.value;
-  if (event.target.matches('[data-filter]')) {
-    draft.query=event.target.value;
-    filterDraft();
+  if (draft && event.target.matches('[data-filter-book]')) {
+    draft.queries ||= {};
+    draft.queries[event.target.dataset.filterBook]=event.target.value;
+    filterDraft(event.target.dataset.filterBook);
   }
 }
-function filterDraft() {
+function filterDraft(onlyBook='') {
   if(!draft || !overlay) return;
-  const query=(draft.query||'').trim().toLocaleLowerCase();
   for(const block of overlay.querySelectorAll('[data-draft-book]')) {
-    let count=0;
+    const name=block.dataset.draftBook;
+    if(onlyBook && name!==onlyBook)continue;
+    const query=(draft.queries?.[name]||'').trim().toLocaleLowerCase();
     for(const row of block.querySelectorAll('[data-entry-title]')) {
       row.hidden=!row.dataset.entryTitle.includes(query);
-      if(!row.hidden)count++;
     }
-    block.hidden=!!query && !count;
-    block.open=query?!!count:!!draft.expanded[block.dataset.draftBook];
   }
 }
 function onChange(event) {
@@ -594,20 +616,21 @@ function onClick(event) {
   if (!target || target.disabled || busy) return;
   const action = target.dataset.wbs, id = target.dataset.id;
   if (action === 'close') { void close(); return; }
+  if (action === 'focus-name') { overlay.querySelector('[data-name]')?.focus(); return; }
   if (action === 'dismiss-message') { say(''); return; }
   if(['choose','sources','back-sources','snapshots','groups'].includes(action))say('');
   void run(async () => {
     if (target.dataset.hubTab) {
       if (draft || editGroup || renameId) return;
       say('');
-      page = target.dataset.hubTab; book = ''; menuId = ''; section = page === 'global' ? 'groups' : 'snapshots'; picker = false; items = [];
+      page = target.dataset.hubTab; book = ''; pickerReturnBook=''; menuId = ''; section = page === 'global' ? 'groups' : 'snapshots'; picker = false; items = [];
       if (page === 'preset') { rememberTab({page:'preset'}); await close(true); TOP[PRESET]?.open?.(); return; }
       await refresh();
     } else if (action === 'choose') {
-      book = target.dataset.book; section = 'snapshots'; picker = false;
-    } else if (action === 'sources') { await refresh(); picker = true; }
-    else if (action === 'back-sources') picker = false;
-    else if (action === 'snapshots' || action === 'groups') { section = action; picker = false; await refresh(); }
+      book = target.dataset.book; pickerReturnBook=''; section = 'snapshots'; picker = false;
+    } else if (action === 'sources') { await refresh(); pickerReturnBook=book; picker = true; }
+    else if (action === 'back-sources') { book=pickerReturnBook; pickerReturnBook=''; picker = false; }
+    else if (action === 'snapshots' || action === 'groups') { section = action; book=''; pickerReturnBook=''; picker = false; await refresh(); }
     else if (action === 'new') {
       if (TOP[PRESET]?.isCapturing?.()) throw new Error('请先完成预设快照');
       say('');
@@ -616,13 +639,13 @@ function onClick(event) {
         const scope=bundleScope(),owner=scopeOwner();
         const captured = await engine.captureBundle(scope,owner);
         const label=page==='character'?character().name:engine.read().groups.find(g=>g.id===owner).name;
-        draft = { ...captured, scope, owner, name: `${label} 开关`, expanded:Object.fromEntries(Object.keys(captured.data).map(name=>[name,Object.keys(captured.data).length===1])),query:'' };
+        draft = { ...captured, scope, owner, name: `${label} 开关`, expanded:Object.fromEntries(Object.keys(captured.data).map(name=>[name,Object.keys(captured.data).length===1])),queries:{} };
       } catch (error) { engine.setCapturing(false); await engine.transition(); throw error; }
     } else if (action === 'edit-snapshot') {
       engine.setCapturing(true);say('');
       try {
         const captured=await engine.editBundle(id);
-        draft={...captured,expanded:Object.fromEntries(Object.keys(captured.data).map(name=>[name,Object.keys(captured.data).length===1])),query:''};
+        draft={...captured,expanded:Object.fromEntries(Object.keys(captured.data).map(name=>[name,Object.keys(captured.data).length===1])),queries:{}};
       } catch(error) { engine.setCapturing(false);throw error; }
     } else if (action === 'save-draft') {
       const editing=!!draft.id;
@@ -636,6 +659,13 @@ function onClick(event) {
     else if (action === 'apply') { await engine.applyBundle(id); say('已应用快照'); }
     else if (action === 'restore-default') { await engine.applyBundle('',bundleScope(),scopeOwner()); say('已恢复默认方案'); }
     else if (action === 'update-default') { if(TOP.confirm('以当前世界书开关覆盖默认方案？')) { await engine.updateDefault(bundleScope(),scopeOwner()); say('默认已更新'); } }
+    else if (action === 'reset-bundle') {
+      const count=engine.read().snapshots.filter(s=>s.bundle && s.scope==='character' && s.owner===scopeOwner()).length;
+      if(TOP.confirm(`确定重置当前角色的世界书快照吗？\n\n将恢复默认并删除默认方案和 ${count} 个快照，删除后不可撤销。`)) {
+        await engine.resetBundle('character',scopeOwner());
+        say('当前角色的世界书快照已重置');
+      }
+    }
     else if (action === 'menu') menuId = menuId === id ? '' : id;
     else if (action === 'rename') renameId = id;
     else if (action === 'save-rename') { await engine.rename(renameId, overlay.querySelector('[data-rename]').value); renameId = ''; }

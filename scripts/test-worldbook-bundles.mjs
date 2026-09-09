@@ -39,6 +39,16 @@ async function create(f,scope,owner,name,flip=true){const d=await f.e.captureBun
 }
 {
   const f=fixture();f.select('a');
+  await create(f,'character','a','B');await create(f,'character','a','C',false);
+  const removed=await f.e.resetBundle('character','a');
+  assert.equal(removed,2,'Reset reports removed character snapshots');
+  assert.equal(f.store.snapshots.filter(s=>s.bundle&&s.owner==='a').length,0,'Reset removes current character snapshots');
+  assert.equal(f.store.defaults.filter(s=>s.scope==='character'&&s.owner==='a').length,0,'Reset removes current character default');
+  assert.equal(f.data.role.entries[1].disable,false,'Reset restores default switches first');
+  assert.equal(f.store.session,null,'Reset clears current bundle session');
+}
+{
+  const f=fixture();f.select('a');
   const d=await f.e.captureBundle('character','a');for(const b of Object.values(d.data))b.entries[1].disable=true;
   f.fail('extra');await assert.rejects(f.e.createBundle({...d,scope:'character',owner:'a',name:'fail'}),/failed/);
   assert.equal(f.data.role.entries[1].disable,false,'Multi-book failed save rolls earlier writes back');
