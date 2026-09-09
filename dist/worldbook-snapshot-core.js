@@ -210,6 +210,42 @@ export function createWorldbookSnapshots(host) {
     read,
     idle: () => tail,
     setCapturing(value) { capturing = !!value; },
+    reconcileBooks: names => queued(() => {
+      const valid = new Set((names || []).map(String));
+      const store = read();
+      let changed = false, removedFromGroups = 0, removedFromPlans = 0;
+      for (const group of store.groups) {
+        const before = Array.isArray(group.books) ? group.books : [];
+        const next = before.filter(name => valid.has(String(name)));
+        removedFromGroups += before.length - next.length;
+        if (next.length !== before.length) {
+          group.books = next;
+          if (!next.length && group.enabled) group.enabled = false;
+          changed = true;
+        }
+      }
+      for (const item of [...(store.defaults || []), ...store.snapshots]) {
+        if (item.scope !== 'group' || !item.books || typeof item.books !== 'object') continue;
+        for (const name of Object.keys(item.books)) {
+          if (valid.has(name)) continue;
+          delete item.books[name];
+          removedFromPlans++;
+          changed = true;
+        }
+      }
+      const owned = (store.owned || []).filter(name => valid.has(String(name)));
+      if (owned.length !== (store.owned || []).length) { store.owned = owned; changed = true; }
+      if (store.session) {
+        for (const key of ['before','applied']) for (const name of Object.keys(store.session[key] || {})) {
+          if (valid.has(name)) continue;
+          delete store.session[key][name];
+          changed = true;
+        }
+        if (!Object.keys(store.session.before || {}).length) { store.session = null; changed = true; }
+      }
+      if (changed) persist(store);
+      return { changed, removedFromGroups, removedFromPlans };
+    }),
     transition: () => queued(transition),
     captureBundle: (scope, owner) => queued(async () => {
       const key = contextKey(), data = await loadBundle(await target(scope,owner));

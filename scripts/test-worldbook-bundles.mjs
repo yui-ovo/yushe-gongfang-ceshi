@@ -105,6 +105,21 @@ async function create(f,scope,owner,name,flip=true){const d=await f.e.captureBun
   assert.equal(f.store.snapshots.filter(item=>item.scope==='group'&&item.owner===g).length,0,'Removing group cleans its snapshots');
 }
 {
+  const f=fixture();await f.e.saveGroup({name:'Prune',books:['x','y']});const g=f.store.groups[0].id;
+  const s=await create(f,'group',g,'saved');await f.e.toggleGroup(g);
+  const result=await f.e.reconcileBooks(['role','extra','y','manual']);
+  assert.equal(result.changed,true,'Missing worldbooks trigger reconciliation');
+  assert.deepEqual(f.store.groups[0].books,['y'],'Missing member is removed from its group');
+  assert.deepEqual(Object.keys(f.store.defaults.find(item=>item.scope==='group'&&item.owner===g).books),['y'],'Missing member is removed from group default');
+  assert.deepEqual(Object.keys(f.store.snapshots.find(item=>item.id===s.id).books),['y'],'Missing member is removed from named group snapshots');
+  assert.equal(f.store.groups[0].enabled,true,'A group with remaining books stays enabled');
+  await f.e.reconcileBooks(['role','extra','manual']);
+  assert.deepEqual(f.store.groups[0].books,[],'Last missing member leaves the group in place');
+  assert.equal(f.store.groups[0].enabled,false,'An empty group is switched off');
+  assert.equal(f.store.groups.length,1,'Empty groups are retained for editing');
+  assert.deepEqual(Object.keys(f.store.snapshots.find(item=>item.id===s.id).books),[],'Named group snapshot no longer keeps orphan book keys');
+}
+{
   const f=fixture();await f.e.saveGroup({name:'Q',books:['x','y']});const g=f.store.groups[0].id;
   const s=await create(f,'group',g,'on');await f.e.selectGroupPlan(g,s.id);
   f.quota();await assert.rejects(f.e.toggleGroup(g),/quota/);
