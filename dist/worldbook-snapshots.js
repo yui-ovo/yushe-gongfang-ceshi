@@ -1,4 +1,4 @@
-import { createWorldbookSnapshots, copy } from './worldbook-snapshot-core.js?v=2.98.0-test.9';
+import { createWorldbookSnapshots, copy } from './worldbook-snapshot-core.js?v=2.98.0-test.10';
 
 const SELF = window, TOP = window.parent || window, DOC = TOP.document;
 const KEY = '__PMM_WORLDBOOK_SNAPSHOTS__';
@@ -258,7 +258,11 @@ style.textContent = `
 .pmm-wbs-character-default .pmm-switch-snapshot-reset-all .pmm-wbs-svg { width:13px; height:13px; }
 .pmm-wbs-character-snapshot .pmm-switch-snapshot-bindings { min-width:auto!important; }
 .pmm-wbs-character-snapshot .pmm-switch-snapshot-actions { margin-left:auto; }
+.pmm-wbs-character-snapshot .pmm-switch-snapshot-lock { min-height:27px!important; }
+.pmm-wbs-character-snapshot .pmm-switch-snapshot-actions>button:first-child,.pmm-wbs-character-snapshot .pmm-switch-snapshot-more { min-height:28px!important; }
 .pmm-wbs-body.is-character-snapshots { padding:0!important; }
+.pmm-switch-snapshot-dialog .pmm-wbs-foot { opacity:1!important; }
+.pmm-switch-snapshot-dialog .pmm-wbs-foot>small { opacity:.55!important; }
 @media(max-width:600px) { .pmm-wbs-head { padding:18px 16px 12px; } .pmm-wbs-body { padding:10px 14px 14px; } .pmm-snapshot-tabs { margin:0 14px 8px; } .pmm-wbs-foot { padding:10px 15px; } .pmm-wbs-dialog { border-radius:26px; } }
 `;
 DOC.head.append(style);
@@ -480,8 +484,8 @@ function render() {
   const content = draft ? draftMarkup() : editGroup ? groupEditorMarkup() : rename
     ? `<label>快照名称<input type="text" data-rename value="${h(rename.name)}" maxlength="100"></label>`
     : picker ? sourceMarkup() : section === 'groups' ? groupMarkup() : snapshotMarkup();
-  overlay.innerHTML = `<section class="pmm-wbs-dialog${editing ? ' is-editing' : ''}" role="dialog" aria-modal="true" aria-label="世界书快照">
-    <header class="pmm-wbs-head"><div class="pmm-wbs-heading"><span class="pmm-wbs-symbol">${icon('camera')}</span><div><h2>${draft ? '调整开关' : editGroup ? '世界书分组' : '开关快照'}</h2><p>${h(character()?.name || '酒馆主页')}</p></div></div>${button('close', icon('close'), 'class="pmm-wbs-icon" aria-label="关闭"')}</header>
+  overlay.innerHTML = `<section class="pmm-wbs-dialog pmm-switch-snapshot-dialog${editing ? ' is-editing' : ''}" role="dialog" aria-modal="true" aria-label="世界书快照">
+    <header class="pmm-wbs-head pmm-switch-snapshot-head"><div><h2><i class="fa-solid fa-camera"></i>${draft ? '调整开关' : editGroup ? '世界书分组' : '开关快照'}</h2><p>${h(character()?.name || '酒馆主页')}</p></div>${button('close', '<i class="fa-solid fa-xmark"></i>', 'class="pmm-wbs-icon pmm-switch-snapshot-close" aria-label="关闭"')}</header>
     ${tabs(page, !!editing)}<div class="pmm-wbs-message" data-message role="status" ${message ? '' : 'hidden'}><span>${h(message)}</span>${button('dismiss-message','×','aria-label="关闭提示"')}</div>
     <div class="pmm-wbs-body${page==='character'&&!editing&&!picker?' is-character-snapshots':''}">${page === 'global' && !editing && !picker ? `<div class="pmm-wbs-tools pmm-wbs-subnav">${button('groups', '世界书分组', section === 'groups' ? 'class="pmm-wbs-primary"' : '')}${button('snapshots', '分组快照', section === 'snapshots' ? 'class="pmm-wbs-primary"' : '')}</div>` : ''}${content}</div>
     <footer class="pmm-wbs-foot"><small>${draft ? (page==='character'?'只调整开关；保存后应用，取消不改原书。':'保存方案不挂载世界书；请在分组中选用。') : page==='global' ? '分组开启时应用所选方案；关闭不卸载其他分组需要的书。' : '聊天锁自动应用 · 返回主页恢复进入前状态'}</small>${editing ? button('cancel-edit', '取消') + button(draft ? 'save-draft' : editGroup ? 'save-group' : 'save-rename', '保存', 'class="pmm-wbs-primary"') : ''}</footer>
@@ -521,7 +525,7 @@ async function open(scope = 'character', selected = '', restore = true) {
   section=last?.page===page && ['groups','snapshots'].includes(last.section)?last.section:page==='global'?'groups':'snapshots';
   book=page==='global' && last?.page===page?String(last.book||''):'';message='';picker=false;pickerReturnBook='';
   lastFocus = DOC.activeElement;
-  overlay = DOC.createElement('div'); overlay.className = 'pmm-wbs-overlay';
+  overlay = DOC.createElement('div'); overlay.className = 'pmm-wbs-overlay pmm-switch-snapshot-overlay';
   overlay.addEventListener('click', onClick);
   overlay.addEventListener('input', onInput);
   overlay.addEventListener('change', onChange);

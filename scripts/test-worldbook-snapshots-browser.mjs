@@ -45,6 +45,9 @@ try {
     await camera.waitFor();
     await camera.click();
     await page.getByText('进入角色聊天后使用',{exact:true}).waitFor();
+    assert.equal(await page.locator('.pmm-wbs-overlay.pmm-switch-snapshot-overlay').count(),1,'Worldbook reuses preset overlay component');
+    assert.equal(await page.locator('.pmm-wbs-dialog.pmm-switch-snapshot-dialog').count(),1,'Worldbook reuses preset dialog component');
+    assert.equal(await page.locator('.pmm-wbs-head.pmm-switch-snapshot-head').count(),1,'Worldbook reuses preset header component');
     assert.equal(await page.locator('[data-source-query]').count(),0);
     assert.equal(await page.locator('[data-wbs="new"]').count(),0);
     const initial=await page.locator('.pmm-wbs-dialog').boundingBox();
