@@ -10,8 +10,8 @@ for (const marker of [
   "const CORNERS = ['nw', 'ne', 'sw', 'se']",
   "cursor: nwse-resize",
   "cursor: nesw-resize",
-  "pointer: fine",
-  "hover: hover",
+  "any-pointer: fine",
+  "any-hover: hover",
   "Math.min(980,",
   "Math.min(560,",
   "Math.min(420,",
@@ -187,7 +187,9 @@ class MockWindow {
     this.innerWidth = opts.innerWidth ?? 1440;
     this.innerHeight = opts.innerHeight ?? 900;
     this.pointerFine = opts.pointerFine ?? true;
+    this.anyPointerFine = opts.anyPointerFine ?? this.pointerFine;
     this.hoverSupport = opts.hoverSupport ?? true;
+    this.anyHoverSupport = opts.anyHoverSupport ?? this.hoverSupport;
     this.localStorage = new MockStorage();
     this.document = new MockDocument(this);
     this.MutationObserver = class {
@@ -198,7 +200,9 @@ class MockWindow {
   }
   matchMedia(query) {
     const self = this;
+    if (query.includes('any-pointer: fine')) return { matches: self.anyPointerFine };
     if (query.includes('pointer: fine')) return { matches: self.pointerFine };
+    if (query.includes('any-hover: hover')) return { matches: self.anyHoverSupport };
     if (query.includes('hover: hover')) return { matches: self.hoverSupport };
     if (query.includes('max-width: 768px')) return { matches: self.innerWidth <= 768 };
     return { matches: false };
@@ -222,14 +226,37 @@ const api = initModule(mockWin, mockWin.document);
 
 assert.ok(api, '模块初始化后成功暴露 TOP API');
 
-// Test 3.1: Desktop Environment Validation
-assert.equal(api.isDesktop(mockWin.document), true, '宽屏 + 精确光标应识别为桌面端');
+// Test 3.1: Desktop Environment Validation (5 Specific Scenarios)
+// 1. 1600x700 + fine pointer -> desktop -> 应启用
+const win1600x700 = new MockWindow({ innerWidth: 1600, innerHeight: 700, pointerFine: true, hoverSupport: true });
+assert.equal(api.isDesktop(win1600x700.document), true, '1600x700 + fine pointer 应识别为桌面端');
 
-const mobileWin = new MockWindow({ innerWidth: 390, innerHeight: 844, pointerFine: false, hoverSupport: false });
-assert.equal(api.isDesktop(mobileWin.document), false, '移动端小屏幕不应识别为桌面端');
+// 2. 1366x650 + fine pointer -> desktop -> 应启用
+const win1366x650 = new MockWindow({ innerWidth: 1366, innerHeight: 650, pointerFine: true, hoverSupport: true });
+assert.equal(api.isDesktop(win1366x650.document), true, '1366x650 + fine pointer 应识别为桌面端');
 
-const touchTabletWin = new MockWindow({ innerWidth: 1024, innerHeight: 768, pointerFine: false, hoverSupport: false });
-assert.equal(api.isDesktop(touchTabletWin.document), false, '触屏平板（无 fine pointer / 无 hover）不应创建桌面缩放热区');
+// 3. 390x844 touch -> mobile -> 不启用
+const win390x844 = new MockWindow({ innerWidth: 390, innerHeight: 844, pointerFine: false, anyPointerFine: false, hoverSupport: false, anyHoverSupport: false });
+assert.equal(api.isDesktop(win390x844.document), false, '390x844 touch 应识别为移动端，不启用');
+
+// 4. 768x1024 touch -> tablet -> 不启用
+const win768x1024 = new MockWindow({ innerWidth: 768, innerHeight: 1024, pointerFine: false, anyPointerFine: false, hoverSupport: false, anyHoverSupport: false });
+assert.equal(api.isDesktop(win768x1024.document), false, '768x1024 touch 应识别为平板，不启用');
+
+// 5. 1280x800 touch + mouse(any-pointer:fine) -> desktop -> 应启用
+const win1280x800TouchMouse = new MockWindow({
+  innerWidth: 1280,
+  innerHeight: 800,
+  pointerFine: false,
+  anyPointerFine: true,
+  hoverSupport: false,
+  anyHoverSupport: true
+});
+assert.equal(api.isDesktop(win1280x800TouchMouse.document), true, '1280x800 touch + mouse(any-pointer:fine) 应识别为桌面端并启用');
+
+// 纯触控平板 (1024x768 无 fine pointer / 无 hover) -> 不启用
+const touchTabletWin = new MockWindow({ innerWidth: 1024, innerHeight: 768, pointerFine: false, anyPointerFine: false, hoverSupport: false, anyHoverSupport: false });
+assert.equal(api.isDesktop(touchTabletWin.document), false, '纯触屏平板（无 fine pointer / 无 hover）不应创建桌面缩放热区');
 
 // Test 3.2: Handles creation on .pm-panel-container
 const rootPanel = mockWin.document.createElement('div');

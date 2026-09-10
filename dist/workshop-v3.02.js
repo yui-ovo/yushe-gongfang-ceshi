@@ -16858,16 +16858,16 @@ console.info('[预设工坊] V2.97.21 已加载：快照模式仅保留条目与
   function isDesktop(doc) {
     const view = doc?.defaultView || TOP || window;
     try {
-      const isMobileWidth = Math.min(view.innerWidth || 9999, view.innerHeight || 9999) <= 768;
-      if (isMobileWidth) return false;
+      const width = view.innerWidth || 0;
+      if (width <= 768) return false;
       const mm = (typeof view.matchMedia === 'function')
         ? q => view.matchMedia(q)
         : (typeof globalThis.matchMedia === 'function')
         ? q => globalThis.matchMedia(q)
         : null;
       if (mm) {
-        const finePointer = Boolean(mm('(pointer: fine)')?.matches);
-        const canHover = Boolean(mm('(hover: hover)')?.matches);
+        const finePointer = Boolean(mm('(any-pointer: fine)')?.matches || mm('(pointer: fine)')?.matches);
+        const canHover = Boolean(mm('(any-hover: hover)')?.matches || mm('(hover: hover)')?.matches);
         if (!finePointer && !canHover) return false;
       }
     } catch (_) {
