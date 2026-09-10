@@ -17,9 +17,11 @@ async function create(f,scope,owner,name,flip=true){const d=await f.e.captureBun
   f.select('a'); const item=await create(f,'character','a','B');
   assert.deepEqual(Object.keys(item.books),['role','extra']);
   assert.equal(f.store.defaults[0].books.role[1],false);
-  assert.equal(f.data.role.entries[1].disable,true);
-  assert.equal(f.store.session.before.role[1],false);
+  assert.equal(f.data.role.entries[1].disable,false,'Creating a character snapshot must not apply it');
+  assert.equal(f.store.session,null,'Creating a character snapshot must not mark it current');
   await f.e.bindChat(item.id);
+  assert.equal(f.data.role.entries[1].disable,true,'Chat binding applies the snapshot immediately');
+  assert.equal(f.store.session.before.role[1],false);
   f.select('a','two');await f.e.transition();
   assert.equal(f.data.role.entries[1].disable,false,'Other chat restores A');
   f.select('a','one');await f.e.transition();
@@ -50,9 +52,12 @@ async function create(f,scope,owner,name,flip=true){const d=await f.e.captureBun
 {
   const f=fixture();f.select('a');
   const d=await f.e.captureBundle('character','a');for(const b of Object.values(d.data))b.entries[1].disable=true;
-  f.fail('extra');await assert.rejects(f.e.createBundle({...d,scope:'character',owner:'a',name:'fail'}),/failed/);
-  assert.equal(f.data.role.entries[1].disable,false,'Multi-book failed save rolls earlier writes back');
-  assert.equal(f.store.snapshots.length,0);
+  f.fail('extra');const item=await f.e.createBundle({...d,scope:'character',owner:'a',name:'saved'});
+  assert.equal(f.data.role.entries[1].disable,false,'Saving does not write worldbook switches');
+  assert.equal(f.store.snapshots.length,1);
+  await assert.rejects(f.e.applyBundle(item.id),/failed/);
+  assert.equal(f.data.role.entries[1].disable,false,'Failed explicit apply rolls earlier writes back');
+  assert.equal(f.store.session,null);
   f.fail('');f.select(null);await f.e.transition();
 }
 {

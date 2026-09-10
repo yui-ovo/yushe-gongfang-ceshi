@@ -1,4 +1,4 @@
-import { createWorldbookSnapshots, copy } from './worldbook-snapshot-core.js?v=2.98.0-test.21';
+import { createWorldbookSnapshots, copy } from './worldbook-snapshot-core.js?v=2.98.0-test.22';
 
 const SELF = window, TOP = window.parent || window, DOC = TOP.document;
 const KEY = '__PMM_WORLDBOOK_SNAPSHOTS__';
@@ -568,7 +568,7 @@ function makeNativeWorldbookButton(action,label,iconName) {
   for(const type of ['pointerdown','mousedown','touchstart'])button.addEventListener(type,event=>event.stopPropagation(),{passive:true});
   button.addEventListener('click',event=>{
     event.preventDefault();event.stopPropagation();
-    if(action==='snapshot'){closeBatch();void open('global','',false);}
+    if(action==='snapshot'){closeBatch();void open('global','',true);}
     else void openBatch();
   });
   return button;
@@ -735,7 +735,7 @@ function render() {
     <header class="pmm-wbs-head pmm-switch-snapshot-head"><div><h2><i class="fa-solid fa-camera"></i>${draft ? '调整开关' : editGroup ? '世界书分组' : '开关快照'}</h2><p>${h(character()?.name || '酒馆主页')}</p></div>${button('close', '<i class="fa-solid fa-xmark"></i>', 'class="pmm-wbs-icon pmm-switch-snapshot-close" aria-label="关闭"')}</header>
     ${tabs(page, !!editing)}<div class="pmm-wbs-message" data-message role="status" ${message ? '' : 'hidden'}><span>${h(message)}</span>${button('dismiss-message','×','aria-label="关闭提示"')}</div>
     <div class="pmm-wbs-body${page==='character'&&!editing&&!picker?' is-character-snapshots':''}${draft?' is-draft':''}${page==='global'&&section==='groups'&&!editing&&!picker?' is-group-home':''}${editGroup?' is-group-editor':''}">${content}</div>
-    <footer class="pmm-wbs-foot"><small>${draft ? (page==='character'?'只调整开关；保存后应用，取消不改原书。':'保存方案不挂载世界书；请在分组中选用。') : page==='global' ? '分组开启时应用所选方案；关闭不卸载其他分组需要的书。' : '聊天锁自动应用 · 返回主页恢复进入前状态'}</small>${editing ? button('cancel-edit', '取消') + button(draft ? 'save-draft' : editGroup ? 'save-group' : 'save-rename', '保存', 'class="pmm-wbs-primary"') : ''}</footer>
+    <footer class="pmm-wbs-foot"><small>${draft ? (page==='character'?'只保存开关；聊天锁或“应用”才会应用。':'保存方案不挂载世界书；请在分组中选用。') : page==='global' ? '分组开启时应用所选方案；关闭不卸载其他分组需要的书。' : '聊天锁自动应用 · 返回主页恢复进入前状态'}</small>${editing ? button('cancel-edit', '取消') + button(draft ? 'save-draft' : editGroup ? 'save-group' : 'save-rename', '保存', 'class="pmm-wbs-primary"') : ''}</footer>
     </section>`;
   filterDraft();
   filterGroupBooks();
@@ -925,7 +925,7 @@ function onClick(event) {
         const sync=active && TOP.confirm('该快照正被开启的分组选用。确定同步应用修改？取消则只保存方案，不改当前开关。');
         await conflictAction(force=>engine.updateBundle(draft,sync,force));
       } else await engine.createBundle(draft);
-      draft = null; engine.setCapturing(false); if(returnToGroups)book=''; await engine.transition(); say(editing?'快照修改已保存':page==='character'?'快照已保存并应用':'分组快照已保存，请在分组中选择方案');
+      draft = null; engine.setCapturing(false); if(returnToGroups)book=''; await engine.transition(); say(editing?'快照修改已保存':page==='character'?'快照已保存，请手动应用或绑定当前聊天':'分组快照已保存，请在分组中选择方案');
     } else if (action === 'cancel-edit') { await cancelEdit(); return; }
     else if (action === 'apply') { await engine.applyBundle(id); say('已应用快照'); }
     else if (action === 'restore-default') { await engine.applyBundle('',bundleScope(),scopeOwner()); say('已恢复默认方案'); }

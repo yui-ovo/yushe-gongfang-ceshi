@@ -176,14 +176,21 @@ export function createWorldbookSnapshots(host) {
     await validateBundle(item);
     if (contextKey()!==key) throw new Error('聊天已切换，请重试');
     if (store.session && (!store.session.bundle || store.session.key !== key)) await restore(store);
+    const previousSession = copy(store.session);
     if (!store.session) store.session = { bundle:true, key, before:{}, applied:{} };
     const before = statesOf(await loadBundle(Object.keys(item.books)));
     for (const [name, states] of Object.entries(before)) if (!Object.hasOwn(store.session.before,name)) {
       Object.defineProperty(store.session.before,name,{ value:states, enumerable:true, configurable:true, writable:true });
     }
-    persist(store);
-    if (contextKey() !== key) throw new Error('聊天已切换，请重试');
-    await batch(item.books, () => { store.session.chosen = item.id || 'default'; persist(store); });
+    try {
+      persist(store);
+      if (contextKey() !== key) throw new Error('聊天已切换，请重试');
+      await batch(item.books, () => { store.session.chosen = item.id || 'default'; persist(store); });
+    } catch (error) {
+      store.session = previousSession;
+      persist(store);
+      throw error;
+    }
     if (contextKey() !== key) await restore(store);
   }
   const groupPlan = (store, group) => group.snapshot
@@ -279,11 +286,7 @@ export function createWorldbookSnapshots(host) {
       const item = { bundle:true,id:host.id(),scope,owner,name:name.trim(),books:statesOf(data),created:Date.now(),chat:null };
       await validateBundle(item);
       const store = read(); store.snapshots.push(item); persist(store);
-      // Group drafts never mount books or change a live group until explicitly selected.
-      if (scope === 'character') {
-        try { await applyCharacter(store,item); }
-        catch (error) { store.snapshots = store.snapshots.filter(s=>s.id!==item.id); persist(store); throw error; }
-      }
+      // Creating a snapshot only records its switches. Applying and chat binding stay explicit actions.
       return copy(item);
     }),
     applyBundle: (id, scope, owner) => queued(async () => {

@@ -5,7 +5,8 @@ const source=fs.readFileSync(new URL('../dist/worldbook-snapshots.js',import.met
 
 assert.match(source,/data-pmm-native-worldbook-action="batch"/,'Native worldbook header is missing the batch manager');
 assert.match(source,/data-pmm-native-worldbook-action="snapshot"/,'Native worldbook header is missing the snapshot camera');
-assert.match(source,/void open\('global','',false\)/,'Worldbook camera does not open the global snapshot page directly');
+assert.match(source,/void open\('global','',true\)/,'Worldbook camera does not restore the last snapshot category');
+assert.match(source,/快照已保存，请手动应用或绑定当前聊天/,'Character snapshot save still claims or implies an automatic apply');
 assert.match(source,/optionalHelper\('deleteWorldbook'\)/,'Batch deletion does not reuse Tavern Helper worldbook deletion');
 assert.match(source,/搜索、多选并删除世界书/,'Batch manager has expanded beyond the agreed search/select/delete scope');
 assert.doesNotMatch(source,/批量挂载|批量导出|根据所选世界书直接新建分组/,'Batch manager contains unapproved extra actions');

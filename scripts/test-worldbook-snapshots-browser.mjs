@@ -93,8 +93,12 @@ try {
     assert.equal(await page.locator('[data-wbs="reset-bundle"].pmm-switch-snapshot-reset-all').count(),1,'Character default has preset reset button');
     assert.equal(await page.locator('[data-wbs="bind"].pmm-switch-snapshot-lock.is-chat').count(),1,'Chat binding reuses preset lock component');
     assert.equal(await page.locator('[data-wbs="bind"] .fa-lock-open').count(),1,'Chat binding does not use emoji');
-    assert.equal(await page.evaluate(() => fixture.data['角色世界'].entries[0].disable), false);
-    assert.equal(await page.locator('[data-wbs="apply"]').textContent(),'当前','Newly applied character snapshot reports its current state');
+    assert.equal(await page.evaluate(() => fixture.data['角色世界'].entries[0].disable), before,'Saving a character snapshot leaves the live worldbook unchanged');
+    assert.equal(await page.locator('[data-wbs="apply"]').textContent(),'应用','New character snapshot waits for an explicit apply');
+    assert.equal(await page.locator('[data-wbs="apply"]').isEnabled(),true);
+    await page.click('[data-wbs="apply"]');
+    assert.equal(await page.evaluate(() => fixture.data['角色世界'].entries[0].disable), false,'Manual apply writes the saved switches');
+    assert.equal(await page.locator('[data-wbs="apply"]').textContent(),'当前','Manual apply reports the current state');
     assert.equal(await page.locator('[data-wbs="apply"]').isDisabled(),true);
     await page.click('[data-wbs="restore-default"]');
     assert.equal(await page.locator('[data-wbs="apply"]').textContent(),'应用','Restoring default clears the current marker');
