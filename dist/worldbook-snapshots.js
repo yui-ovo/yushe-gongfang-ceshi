@@ -1,18 +1,18 @@
-import { createWorldbookSnapshots, copy } from './worldbook-snapshot-core.js?v=2.98.0-test.24';
+import { createWorldbookSnapshots, copy } from './worldbook-snapshot-core.js?v=2.98.0-test.25';
 
 const SELF = window, TOP = window.parent || window, DOC = TOP.document;
 const KEY = '__PMM_WORLDBOOK_SNAPSHOTS__';
 const STORAGE = 'pmm.test.worldbook-snapshots.v1';
 const PRESET = '__PMM_SWITCH_SNAPSHOTS_TEST52__';
-const LAST_TAB='pmm.snapshot.last-tab.v1';
+const LAST_WORLD_TAB='pmm.snapshot.last-tab.v1';
 const NEW_GROUP_SNAPSHOT='__new_snapshot__';
-function lastTab() { try { return JSON.parse(TOP.localStorage.getItem(LAST_TAB)||'null'); } catch(_) { return null; } }
-function rememberTab(value) { try { TOP.localStorage.setItem(LAST_TAB,JSON.stringify(value)); } catch(_) {} }
-function resumeLast() {
-  const last=lastTab();
-  if(!last || !['character','global'].includes(last.page) || TOP[PRESET]?.isCapturing?.())return false;
-  void open(last.page,'',true);return true;
+function lastWorldTab() {
+  try {
+    const value=JSON.parse(TOP.localStorage.getItem(LAST_WORLD_TAB)||'null');
+    return value && ['character','global'].includes(value.page) ? value : null;
+  } catch(_) { return null; }
 }
+function rememberWorldTab(value) { if(['character','global'].includes(value?.page))try { TOP.localStorage.setItem(LAST_WORLD_TAB,JSON.stringify(value)); } catch(_) {} }
 const STITCH = '__PMM_WORLDBOOK_STITCH_TEST3__';
 TOP[KEY]?.cleanup?.();
 const h = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
@@ -331,7 +331,7 @@ style.textContent = `
 @media(max-width:600px) { .pmm-wbs-head { padding:18px 16px 12px; } .pmm-wbs-body { padding:10px 14px 14px; } .pmm-snapshot-tabs { margin:0 14px 8px; } .pmm-wbs-foot { padding:10px 15px; } .pmm-wbs-dialog { border-radius:26px; } }
 `;
 DOC.head.append(style);
-const tabLabels = { preset: '预设', character: '角色世界书', global: '全局世界书' };
+const tabLabels = { character: '角色世界书', global: '全局世界书' };
 function icon(name) {
   const paths = {
     camera: '<path d="M8 5l1-2h6l1 2h4v14H4V5z"/><circle cx="12" cy="12" r="4"/>',
@@ -351,18 +351,10 @@ function tabs(active, locked = false) {
 }
 function decoratePreset(root) {
   const dialog = root?.querySelector('.pmm-switch-snapshot-dialog');
-  if (!dialog || dialog.querySelector('.pmm-snapshot-tabs')) return;
+  if (!dialog) return;
   root.classList.add('pmm-snapshot-hub-preset');
   theme(root);
-  const locked = !!TOP[PRESET]?.isCapturing?.();
-  dialog.querySelector('header')?.insertAdjacentHTML('afterend', tabs('preset', locked));
-  dialog.querySelector('.pmm-snapshot-tabs')?.addEventListener('click', event => {
-    const tab = event.target.closest('[data-hub-tab]')?.dataset.hubTab;
-    if (!tab || tab === 'preset' || locked) return;
-    TOP[PRESET]?.close?.();
-    void open(tab,'',false);
-  });
-  rememberTab({page:'preset'});
+  dialog.querySelector('.pmm-snapshot-tabs')?.remove();
 }
 function theme(target = overlay) {
   if (!target) return;
@@ -734,7 +726,7 @@ function sizeGroupPlanSelects() {
 function render() {
   if (!overlay) return;
   const editing = draft || editGroup || renameId;
-  if(!editing)rememberTab({page,section,book});
+  if(!editing)rememberWorldTab({page,section,book});
   const rename = renameId && engine.read().snapshots.find(item => item.id === renameId);
   const content = draft ? draftMarkup() : editGroup ? groupEditorMarkup() : rename
     ? `<label>快照名称<input type="text" data-rename value="${h(rename.name)}" maxlength="100"></label>`
@@ -776,10 +768,9 @@ async function open(scope = 'character', selected = '', restore = true) {
   if (disposed) return;
   if (TOP[PRESET]?.isCapturing?.()) { TOP.toastr?.info?.('请先保存或取消预设快照'); return; }
   if (overlay) return;
-  const last=restore?lastTab():null;
-  if(last?.page==='preset' && TOP[PRESET]?.open) { TOP[PRESET].open();return; }
+  const last=restore?lastWorldTab():null;
   TOP[PRESET]?.close?.();
-  page=last && ['character','global'].includes(last.page)?last.page:scope;
+  page=last?.page || (scope==='global'?'global':'character');
   section=last?.page===page && ['groups','snapshots'].includes(last.section)?last.section:page==='global'?'groups':'snapshots';
   book=page==='global' && last?.page===page?String(last.book||''):'';message='';picker=false;pickerReturnBook='';
   if(page==='global' && section==='snapshots' && !engine.read().groups.some(group=>group.id===book)) { section='groups'; book=''; }
@@ -907,9 +898,9 @@ function onClick(event) {
   void run(async () => {
     if (target.dataset.hubTab) {
       if (draft || editGroup || renameId) return;
+      if (!['character','global'].includes(target.dataset.hubTab)) return;
       say('');
       page = target.dataset.hubTab; book = ''; pickerReturnBook=''; menuId = ''; section = page === 'global' ? 'groups' : 'snapshots'; picker = false; items = [];
-      if (page === 'preset') { rememberTab({page:'preset'}); await close(true); TOP[PRESET]?.open?.(); return; }
       await refresh();
     } else if (action === 'choose') {
       book = target.dataset.book; pickerReturnBook=''; section = 'snapshots'; picker = false;
@@ -1031,7 +1022,7 @@ function cleanup() {
   closeBatch();void close(true); style.remove();
   if (TOP[KEY]?.engine === engine) delete TOP[KEY];
 }
-TOP[KEY] = { open, openBatch, decoratePreset, resumeLast, engine, cleanup };
+TOP[KEY] = { open, openBatch, decoratePreset, engine, cleanup };
 syncListener();
 installNativeWorldbookTools();
 // The persisted return journal also handles a browser refresh while inside a character.

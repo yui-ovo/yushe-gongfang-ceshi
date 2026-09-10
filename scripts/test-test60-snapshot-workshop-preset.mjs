@@ -29,9 +29,7 @@ assert.ok(prompts.includes('text(presetName) === currentPresetName()'), '快照�
 assert.ok(prompts.includes('draftPrompts()'), '快照没有读取工坊当前预设的实时开关草稿');
 
 const opener = section('function openOverlay()', 'function normalPresetContainer()');
-const worldbookResume = opener.indexOf('TOP.__PMM_WORLDBOOK_SNAPSHOTS__?.resumeLast?.()');
-assert.ok(worldbookResume >= 0, '预设快照入口丢失世界书快照页恢复');
-assert.ok(opener.slice(worldbookResume, worldbookResume + 180).includes('overlayContext = null;'),
-  '世界书接管入口时没有清理原生预设页上下文');
+assert.ok(!opener.includes('resumeLast'), '预设相机仍会被上次世界书分类接管');
+assert.ok(opener.includes('ensureOverlay();'), '预设相机没有直接打开自己的快照页面');
 
-console.log('test.60 回归通过：工坊入口优先跟随工坊预设，原生相机入口独立跟随酒馆当前预设，世界书恢复入口保留。');
+console.log('test.60 回归通过：预设相机始终打开预设快照，并继续正确区分工坊与酒馆当前预设。');

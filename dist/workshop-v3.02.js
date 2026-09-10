@@ -15123,10 +15123,6 @@ html.pmm-dnd-compat-active #preset-manager-main-panel{user-select:none!important
       overlayContext = null;
       return;
     }
-    if (TOP.__PMM_WORLDBOOK_SNAPSHOTS__?.resumeLast?.()) {
-      overlayContext = null;
-      return;
-    }
     if (!currentPresetName()) {
       overlayContext = null;
       notify('warning', '请先选择一个预设');
