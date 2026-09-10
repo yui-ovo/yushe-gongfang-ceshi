@@ -1,4 +1,4 @@
-import { createWorldbookSnapshots, copy } from './worldbook-snapshot-core.js?v=2.98.0-test.23';
+import { createWorldbookSnapshots, copy } from './worldbook-snapshot-core.js?v=2.98.0-test.24';
 
 const SELF = window, TOP = window.parent || window, DOC = TOP.document;
 const KEY = '__PMM_WORLDBOOK_SNAPSHOTS__';
@@ -143,12 +143,14 @@ style.textContent = `
 .pmm-wbs-entry input:checked { background:var(--pm-accent,#399e82); }
 .pmm-wbs-entry input:checked:before { left:16px; }
 .pmm-wbs-entry input:focus-visible { outline:2px solid var(--pm-accent,#399e82); outline-offset:3px; }
-.pmm-wbs-entry input[data-toggle] { appearance:none!important; -webkit-appearance:none!important; box-sizing:border-box!important; flex:0 0 44px; width:44px!important; min-width:44px!important; height:26px!important; min-height:26px!important; margin:0!important; padding:0!important; border:1px solid color-mix(in srgb,var(--wbs-ink) 18%,transparent)!important; border-radius:999px!important; background:color-mix(in srgb,var(--wbs-ink) 18%,transparent)!important; box-shadow:inset 0 1px 2px rgba(0,0,0,.18)!important; color:transparent!important; cursor:pointer; transition:background-color .16s ease,border-color .16s ease; }
-.pmm-wbs-entry input[data-toggle]:before { content:''!important; display:block!important; box-sizing:border-box!important; position:absolute!important; inset:auto!important; top:2px!important; left:2px!important; width:20px!important; height:20px!important; border:0!important; border-radius:50%!important; background:#f7f7f7!important; box-shadow:0 1px 3px rgba(0,0,0,.3)!important; transform:none!important; transition:left .16s ease!important; }
-.pmm-wbs-entry input[data-toggle]:after { content:none!important; display:none!important; }
-.pmm-wbs-entry input[data-toggle]:checked { border-color:color-mix(in srgb,var(--pm-accent,#399e82) 82%,transparent)!important; background:var(--pm-accent,#399e82)!important; }
-.pmm-wbs-entry input[data-toggle]:checked:before { left:20px!important; }
-.pmm-wbs-entry input[data-toggle]:disabled { opacity:.45; cursor:not-allowed; }
+.pmm-wbs-entry-switch { position:relative; flex:0 0 44px; width:44px; height:36px; margin:-8px 0; display:grid; place-items:center; cursor:pointer; }
+.pmm-wbs-entry-switch input.pmm-wbs-entry-switch-input { position:absolute!important; inset:0!important; z-index:2!important; box-sizing:border-box!important; width:100%!important; min-width:0!important; height:100%!important; min-height:0!important; margin:0!important; padding:0!important; opacity:0!important; cursor:pointer!important; }
+.pmm-wbs-entry-switch-track { pointer-events:none; box-sizing:border-box; position:relative; display:block; flex:none; width:32px; min-width:32px!important; height:19px; border:1px solid color-mix(in srgb,var(--wbs-ink) 18%,transparent); border-radius:999px; background:color-mix(in srgb,var(--wbs-ink) 18%,transparent); box-shadow:inset 0 1px 2px rgba(0,0,0,.18); transition:background-color .16s ease,border-color .16s ease; }
+.pmm-wbs-entry-switch-track:before { content:''; box-sizing:border-box; position:absolute; top:2px; left:2px; width:13px; height:13px; border-radius:50%; background:#f7f7f7; box-shadow:0 1px 3px rgba(0,0,0,.3); transition:left .16s ease; }
+.pmm-wbs-entry-switch-input:checked+.pmm-wbs-entry-switch-track { border-color:color-mix(in srgb,var(--pm-accent,#399e82) 82%,transparent); background:var(--pm-accent,#399e82); }
+.pmm-wbs-entry-switch-input:checked+.pmm-wbs-entry-switch-track:before { left:15px; }
+.pmm-wbs-entry-switch-input:focus-visible+.pmm-wbs-entry-switch-track { outline:2px solid var(--pm-accent,#399e82); outline-offset:3px; }
+.pmm-wbs-entry-switch:has(input:disabled) { opacity:.45; cursor:not-allowed; }
 .pmm-wbs-foot { display:flex; gap:10px; align-items:center; justify-content:flex-end; padding:12px 20px; border-top:1px solid var(--pm-border,#363636); flex-shrink:0; }
 .pmm-wbs-foot small { flex:1; margin:0; }
 .pmm-wbs-primary { background:var(--pm-hover-bg,#303030)!important; font-weight:600!important; }
@@ -696,7 +698,7 @@ function draftMarkup() {
     +'<small>共 '+Object.keys(draft.data).length+' 本世界书 · 点击书名展开或收起</small><div data-entries>'
     +Object.entries(draft.data).map(([name,data])=>'<details class="pmm-wbs-book" data-draft-book="'+h(name)+'" '+(draft.expanded[name]?'open':'')+'><summary>'+icon('arrow')+'<span class="pmm-wbs-book-title">'+h(name)+'</span><small>'+Object.keys(data.entries).length+' 条</small></summary><div class="pmm-wbs-book-entries"><input class="pmm-wbs-book-search" type="search" data-filter-book="'+h(name)+'" value="'+h(draft.queries?.[name]||'')+'" placeholder="搜索条目名称" aria-label="搜索 '+h(name)+' 的条目">'+Object.values(data.entries).sort((a,b)=>Number(a.displayIndex??a.uid)-Number(b.displayIndex??b.uid)).map(entry=>{
       const title=entry.comment||entry.key?.[0]||'条目 '+entry.uid,shown=!!draft.previews?.[name]?.[String(entry.uid)],content=String(entry.content??'');
-      return '<div class="pmm-wbs-entry-block" data-entry-title="'+h(String(title).toLocaleLowerCase())+'"><div class="pmm-wbs-entry">'+button('preview-entry',icon('arrow')+'<span>'+h(title)+'</span>','class="pmm-wbs-entry-title" data-preview-entry data-preview-book="'+h(name)+'" data-preview-uid="'+h(entry.uid)+'" aria-expanded="'+shown+'"')+'<input type="checkbox" data-toggle="'+h(entry.uid)+'" data-toggle-book="'+h(name)+'" aria-label="'+h(title)+'" '+(entry.disable?'':'checked')+'></div><div class="pmm-wbs-entry-preview" '+(shown?'':'hidden')+'><small>当前世界书正文（只读）</small><div class="pmm-wbs-entry-preview-content">'+h(content.trim()?content:'（正文为空）')+'</div></div></div>';
+      return '<div class="pmm-wbs-entry-block" data-entry-title="'+h(String(title).toLocaleLowerCase())+'"><div class="pmm-wbs-entry">'+button('preview-entry',icon('arrow')+'<span>'+h(title)+'</span>','class="pmm-wbs-entry-title" data-preview-entry data-preview-book="'+h(name)+'" data-preview-uid="'+h(entry.uid)+'" aria-expanded="'+shown+'"')+'<label class="pmm-wbs-entry-switch"><input class="pmm-wbs-entry-switch-input" type="checkbox" data-toggle="'+h(entry.uid)+'" data-toggle-book="'+h(name)+'" aria-label="'+h(title)+'" style="opacity:0!important" '+(entry.disable?'':'checked')+'><span class="pmm-wbs-entry-switch-track" aria-hidden="true"></span></label></div><div class="pmm-wbs-entry-preview" '+(shown?'':'hidden')+'><small>当前世界书正文（只读）</small><div class="pmm-wbs-entry-preview-content">'+h(content.trim()?content:'（正文为空）')+'</div></div></div>';
     }).join('')+(!Object.keys(data.entries).length?'<small>这本世界书暂无条目</small>':'')+'</div></details>').join('')+'</div>';
 }
 function groupEditorMarkup() {

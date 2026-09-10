@@ -72,9 +72,11 @@ try {
     const before = await page.evaluate(() => fixture.data['角色世界'].entries[0].disable);
     const previewSwitch=page.locator('[data-toggle-book="角色世界"][data-toggle="1"]');
     const previewSwitchBefore=await previewSwitch.isChecked();
-    const previewSwitchBounds=await previewSwitch.boundingBox();
-    assert.ok(previewSwitchBounds.width>=43 && previewSwitchBounds.height>=25,'Snapshot entries use a larger touch-friendly native-style switch');
-    assert.equal(await previewSwitch.evaluate(node=>getComputedStyle(node,'::after').display),'none','Snapshot switch does not inherit a checkbox tick');
+    const previewSwitchBounds=await previewSwitch.locator('xpath=..').boundingBox();
+    const previewTrackBounds=await previewSwitch.locator('xpath=following-sibling::*[1]').boundingBox();
+    assert.ok(previewSwitchBounds.width>=43 && previewSwitchBounds.height>=35,'Compact snapshot switch keeps a larger invisible touch target');
+    assert.ok(previewTrackBounds.width<=33 && previewTrackBounds.height<=20,'Visible snapshot switch returns to the previous compact size');
+    assert.equal(await previewSwitch.evaluate(node=>getComputedStyle(node).opacity),'0','Theme-styled checkbox must stay invisible behind the custom track');
     await page.click('[data-preview-book="角色世界"][data-preview-uid="1"]');
     assert.equal(await page.locator('[data-preview-book="角色世界"][data-preview-uid="1"]').getAttribute('aria-expanded'),'true','Entry title expands its read-only content');
     await page.locator('.pmm-wbs-entry-preview:visible').getByText('当前世界书正文（只读）',{exact:true}).waitFor();

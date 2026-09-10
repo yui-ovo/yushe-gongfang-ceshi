@@ -3,10 +3,11 @@ import fs from 'node:fs';
 
 const source=fs.readFileSync(new URL('../dist/worldbook-snapshots.js',import.meta.url),'utf8');
 
-assert.match(source,/\.pmm-wbs-entry input\[data-toggle\] \{/,'Snapshot entries do not have a dedicated switch style');
-assert.match(source,/width:44px!important;[^}]*height:26px!important;/,'Snapshot switch is not the agreed larger mobile-friendly size');
-assert.match(source,/input\[data-toggle\]:after \{ content:none!important; display:none!important; \}/,'Theme checkbox ticks can still appear over the snapshot switch');
-assert.match(source,/input\[data-toggle\]:checked:before \{ left:20px!important; \}/,'Enabled switch does not slide its thumb to the right');
-assert.match(source,/input\[data-toggle\]:checked \{[^}]*background:var\(--pm-accent/,'Enabled switch does not follow the active theme accent');
+assert.match(source,/class="pmm-wbs-entry-switch-input" type="checkbox"[^>]*style="opacity:0!important"[^>]*><span class="pmm-wbs-entry-switch-track"/,'Theme-styled checkbox is not isolated behind a custom track');
+assert.match(source,/\.pmm-wbs-entry-switch \{[^}]*width:44px;[^}]*height:36px;/,'Compact switch is missing its larger invisible touch target');
+assert.match(source,/\.pmm-wbs-entry-switch-track \{[^}]*width:32px;[^}]*height:19px;/,'Visible snapshot switch did not return to the previous compact size');
+assert.match(source,/\.pmm-wbs-entry-switch-input:checked\+\.pmm-wbs-entry-switch-track \{[^}]*background:var\(--pm-accent/,'Enabled switch does not follow the active theme accent');
+assert.match(source,/\.pmm-wbs-entry-switch-input:checked\+\.pmm-wbs-entry-switch-track:before \{ left:15px; \}/,'Enabled switch does not slide its thumb to the right');
+assert.doesNotMatch(source,/input\[data-toggle\]:(?:before|after)/,'Theme-prone checkbox pseudo-elements are still used to draw snapshot switches');
 
-console.log('test.90 回归通过：世界书快照条目使用更大、无勾号并跟随主题色的普通滑动开关。');
+console.log('test.90 回归通过：快照条目用独立滑轨隔离酒馆勾选框美化，并恢复紧凑外观与大点击区。');
