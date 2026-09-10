@@ -16837,3 +16837,342 @@ console.info('[预设工坊] V2.99 已加载：顶部通知遵循酒馆时长，
 console.info('[预设工坊] V2.97.19 已加载：预设多选拖动按当前列表顺序稳定落位。');
 console.info('[预设工坊] V2.97.20 已加载：比对独有条目会自动展开所属分组并准确定位。');
 console.info('[预设工坊] V2.97.21 已加载：快照模式仅保留条目与柏宝箱分组开关。');
+
+(() => {
+  const API_KEY = '__PMM_DESKTOP_FOUR_CORNER_RESIZE__';
+  const STORAGE_KEY = 'pmm.desktop-panel-size.v1';
+  const CONTAINER_SELECTOR = '#preset-manager-main-panel .pm-panel-container';
+  const CUSTOM_SIZED_CLASS = 'pmm-desktop-custom-sized';
+  const HANDLE_CLASS = 'pmm-desktop-resize-handle';
+  const CORNERS = ['nw', 'ne', 'sw', 'se'];
+  const STYLE_ID = 'pmm-desktop-corner-resize-style';
+
+  const TOP = (() => {
+    try { return window.parent?.document ? window.parent : window; }
+    catch (_) { return window; }
+  })();
+  const DOC = TOP.document || document;
+
+  try { TOP[API_KEY]?.cleanup?.(); } catch (_) {}
+
+  function isDesktop(doc) {
+    const view = doc?.defaultView || TOP || window;
+    try {
+      const isMobileWidth = Math.min(view.innerWidth || 9999, view.innerHeight || 9999) <= 768;
+      if (isMobileWidth) return false;
+      const mm = (typeof view.matchMedia === 'function')
+        ? q => view.matchMedia(q)
+        : (typeof globalThis.matchMedia === 'function')
+        ? q => globalThis.matchMedia(q)
+        : null;
+      if (mm) {
+        const finePointer = Boolean(mm('(pointer: fine)')?.matches);
+        const canHover = Boolean(mm('(hover: hover)')?.matches);
+        if (!finePointer && !canHover) return false;
+      }
+    } catch (_) {
+      return false;
+    }
+    return true;
+  }
+
+  function getStorage() {
+    try { return TOP.localStorage || globalThis.localStorage || null; }
+    catch (_) { return null; }
+  }
+
+  function loadSavedSize() {
+    try {
+      const raw = getStorage()?.getItem(STORAGE_KEY);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw);
+      if (Number.isFinite(parsed?.width) && Number.isFinite(parsed?.height)) {
+        return { width: parsed.width, height: parsed.height };
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  function saveSavedSize(width, height) {
+    try {
+      getStorage()?.setItem(STORAGE_KEY, JSON.stringify({
+        width: Math.round(width),
+        height: Math.round(height)
+      }));
+    } catch (_) {}
+  }
+
+  function clearSavedSize() {
+    try {
+      getStorage()?.removeItem(STORAGE_KEY);
+    } catch (_) {}
+  }
+
+  function isDualMode(container) {
+    return container.classList.contains('pm-panel-container--merge-mode') ||
+           container.classList.contains('pm-panel-container--branch-mode') ||
+           container.classList.contains('pm-panel-container--favorite-mode');
+  }
+
+  function getBounds(container, view) {
+    const vw = view.innerWidth || 1920;
+    const vh = view.innerHeight || 1080;
+    const isDual = isDualMode(container);
+    const minW = isDual ? Math.min(980, Math.max(300, vw - 32)) : Math.min(560, Math.max(300, vw - 32));
+    const minH = Math.min(420, Math.max(200, vh - 32));
+    const maxW = Math.max(minW, vw - 32);
+    const maxH = Math.max(minH, vh - 32);
+    return { minW, minH, maxW, maxH };
+  }
+
+  function applyDimensions(container, width, height) {
+    container.classList.add(CUSTOM_SIZED_CLASS);
+    container.style.setProperty('--pmm-custom-panel-width', `${Math.round(width)}px`);
+    container.style.setProperty('--pmm-custom-panel-height', `${Math.round(height)}px`);
+  }
+
+  function restoreDefaultSize(container) {
+    clearSavedSize();
+    container.classList.remove(CUSTOM_SIZED_CLASS);
+    container.style.removeProperty('--pmm-custom-panel-width');
+    container.style.removeProperty('--pmm-custom-panel-height');
+  }
+
+  function installStyle(doc) {
+    if (!doc?.head || doc.getElementById(STYLE_ID)) return;
+    const style = doc.createElement('style');
+    style.id = STYLE_ID;
+    style.textContent = `
+      .pmm-desktop-resize-handle {
+        position: absolute !important;
+        width: 16px !important;
+        height: 16px !important;
+        z-index: 99 !important;
+        user-select: none !important;
+        -webkit-user-select: none !important;
+        touch-action: none !important;
+        box-sizing: border-box !important;
+        background: transparent !important;
+      }
+      .pmm-desktop-resize-handle[data-pmm-corner="nw"] {
+        top: 0 !important;
+        left: 0 !important;
+        cursor: nwse-resize !important;
+        border-top-left-radius: 14px !important;
+      }
+      .pmm-desktop-resize-handle[data-pmm-corner="ne"] {
+        top: 0 !important;
+        right: 0 !important;
+        cursor: nesw-resize !important;
+        border-top-right-radius: 14px !important;
+      }
+      .pmm-desktop-resize-handle[data-pmm-corner="sw"] {
+        bottom: 0 !important;
+        left: 0 !important;
+        cursor: nesw-resize !important;
+        border-bottom-left-radius: 14px !important;
+      }
+      .pmm-desktop-resize-handle[data-pmm-corner="se"] {
+        bottom: 0 !important;
+        right: 0 !important;
+        cursor: nwse-resize !important;
+        border-bottom-right-radius: 14px !important;
+      }
+      #preset-manager-main-panel .pm-panel-container.pmm-desktop-custom-sized {
+        width: var(--pmm-custom-panel-width) !important;
+        max-width: calc(100vw - 32px) !important;
+      }
+      #preset-manager-main-panel .pm-panel-container.pmm-desktop-custom-sized:not(.pm-panel-container--merge-mode):not(.pm-panel-container--branch-mode):not(.pm-panel-container--favorite-mode) > .pm-main-wrapper {
+        flex: 1 1 auto !important;
+        width: 100% !important;
+        min-width: 0 !important;
+        max-width: 100% !important;
+      }
+      #preset-manager-main-panel .pm-panel-container.pmm-desktop-custom-sized .preset-panel {
+        height: var(--pmm-custom-panel-height) !important;
+        max-height: calc(100dvh - 32px) !important;
+      }
+    `;
+    doc.head.appendChild(style);
+  }
+
+  let activeSessionCleanup = null;
+
+  function onHandlePointerDown(event) {
+    if (event.button !== 0) return;
+    const handle = event.currentTarget;
+    const corner = handle?.dataset?.pmmCorner;
+    if (!corner) return;
+    const container = handle.closest('.pm-panel-container');
+    if (!container) return;
+    if (event.target !== handle && event.target.closest('button, input, select, textarea, .action-card, .title-card')) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+    activeSessionCleanup?.();
+
+    const doc = container.ownerDocument || DOC;
+    const view = doc.defaultView || TOP || window;
+    const startX = event.clientX;
+    const startY = event.clientY;
+    const rect = container.getBoundingClientRect();
+    const startW = rect.width;
+    const startH = rect.height;
+    const pointerId = event.pointerId;
+    let moved = false;
+
+    try { handle.setPointerCapture?.(pointerId); } catch (_) {}
+
+    function onPointerMove(e) {
+      if (e.pointerId !== pointerId) return;
+      const dx = e.clientX - startX;
+      const dy = e.clientY - startY;
+      if (!moved && Math.hypot(dx, dy) < 2) return;
+      moved = true;
+      const signX = (corner === 'ne' || corner === 'se') ? 1 : -1;
+      const signY = (corner === 'se' || corner === 'sw') ? 1 : -1;
+      const bounds = getBounds(container, view);
+      let targetW = Math.round(startW + 2 * signX * dx);
+      let targetH = Math.round(startH + 2 * signY * dy);
+      targetW = Math.min(bounds.maxW, Math.max(bounds.minW, targetW));
+      targetH = Math.min(bounds.maxH, Math.max(bounds.minH, targetH));
+      applyDimensions(container, targetW, targetH);
+    }
+
+    function onPointerEnd(e) {
+      if (e.pointerId !== pointerId) return;
+      end();
+      if (moved) {
+        const bounds = getBounds(container, view);
+        const curW = parseFloat(container.style.getPropertyValue('--pmm-custom-panel-width')) || startW;
+        const curH = parseFloat(container.style.getPropertyValue('--pmm-custom-panel-height')) || startH;
+        const clampedW = Math.min(bounds.maxW, Math.max(bounds.minW, curW));
+        const clampedH = Math.min(bounds.maxH, Math.max(bounds.minH, curH));
+        saveSavedSize(clampedW, clampedH);
+      }
+    }
+
+    function end() {
+      doc.removeEventListener('pointermove', onPointerMove, true);
+      doc.removeEventListener('pointerup', onPointerEnd, true);
+      doc.removeEventListener('pointercancel', onPointerEnd, true);
+      try { handle.releasePointerCapture?.(pointerId); } catch (_) {}
+      if (activeSessionCleanup === end) activeSessionCleanup = null;
+    }
+
+    activeSessionCleanup = end;
+    doc.addEventListener('pointermove', onPointerMove, true);
+    doc.addEventListener('pointerup', onPointerEnd, true);
+    doc.addEventListener('pointercancel', onPointerEnd, true);
+  }
+
+  function onHandleDblClick(event) {
+    event.preventDefault();
+    event.stopPropagation();
+    const handle = event.currentTarget;
+    const container = handle?.closest?.('.pm-panel-container');
+    if (container) {
+      restoreDefaultSize(container);
+    }
+  }
+
+  function ensureHandles(container) {
+    const doc = container.ownerDocument || DOC;
+    if (!isDesktop(doc)) {
+      container.querySelectorAll(`.${HANDLE_CLASS}`).forEach(h => h.remove());
+      return;
+    }
+    installStyle(doc);
+
+    // If not already sized, try to load saved size
+    if (!container.classList.contains(CUSTOM_SIZED_CLASS)) {
+      const saved = loadSavedSize();
+      if (saved) {
+        const view = doc.defaultView || TOP || window;
+        const bounds = getBounds(container, view);
+        const w = Math.min(bounds.maxW, Math.max(bounds.minW, saved.width));
+        const h = Math.min(bounds.maxH, Math.max(bounds.minH, saved.height));
+        applyDimensions(container, w, h);
+      }
+    } else {
+      // If already custom-sized, check if dual mode requires expanding width
+      const view = doc.defaultView || TOP || window;
+      const bounds = getBounds(container, view);
+      const curW = parseFloat(container.style.getPropertyValue('--pmm-custom-panel-width'));
+      if (curW && curW < bounds.minW) {
+        container.style.setProperty('--pmm-custom-panel-width', `${bounds.minW}px`);
+      }
+    }
+
+    for (const corner of CORNERS) {
+      let cornerHandle = container.querySelector(`.${HANDLE_CLASS}[data-pmm-corner="${corner}"]`);
+      if (!cornerHandle) {
+        cornerHandle = doc.createElement('div');
+        cornerHandle.className = HANDLE_CLASS;
+        cornerHandle.dataset.pmmCorner = corner;
+        cornerHandle.setAttribute('aria-hidden', 'true');
+        cornerHandle.addEventListener('pointerdown', onHandlePointerDown);
+        cornerHandle.addEventListener('dblclick', onHandleDblClick);
+        container.appendChild(cornerHandle);
+      }
+    }
+  }
+
+  function scanAndMount() {
+    for (const doc of [DOC, document]) {
+      if (!doc) continue;
+      const containers = doc.querySelectorAll?.(CONTAINER_SELECTOR) || [];
+      containers.forEach(ensureHandles);
+    }
+  }
+
+  let observer = null;
+  function startObserver() {
+    if (observer || typeof TOP.MutationObserver !== 'function') return;
+    try {
+      observer = new TOP.MutationObserver(() => {
+        scanAndMount();
+      });
+      observer.observe(DOC.body || DOC.documentElement, { childList: true, subtree: true });
+    } catch (_) {}
+  }
+
+  function cleanup() {
+    activeSessionCleanup?.();
+    activeSessionCleanup = null;
+    observer?.disconnect();
+    observer = null;
+    for (const doc of [DOC, document]) {
+      if (!doc) continue;
+      doc.querySelectorAll(`.${HANDLE_CLASS}`).forEach(h => h.remove());
+      doc.getElementById(STYLE_ID)?.remove();
+    }
+    try { if (TOP[API_KEY]?.cleanup === cleanup) delete TOP[API_KEY]; } catch (_) {}
+  }
+
+  scanAndMount();
+  startObserver();
+
+  TOP[API_KEY] = {
+    cleanup,
+    isDesktop,
+    loadSavedSize,
+    saveSavedSize,
+    clearSavedSize,
+    isDualMode,
+    getBounds,
+    applyDimensions,
+    restoreDefaultSize,
+    ensureHandles,
+    scanAndMount,
+    onHandlePointerDown,
+    onHandleDblClick,
+    STORAGE_KEY,
+    HANDLE_CLASS,
+    CUSTOM_SIZED_CLASS,
+  };
+  console.info('[预设工坊] test.94 已加载：桌面端四角均可拖动自由缩放，居中扩缩与双击恢复默认已就绪。');
+})();
+

@@ -1,4 +1,4 @@
-import { createWorldbookSnapshots, copy } from './worldbook-snapshot-core.js?v=2.98.0-test.27';
+import { createWorldbookSnapshots, copy } from './worldbook-snapshot-core.js?v=2.98.0-test.28';
 
 const SELF = window, TOP = window.parent || window, DOC = TOP.document;
 const KEY = '__PMM_WORLDBOOK_SNAPSHOTS__';
