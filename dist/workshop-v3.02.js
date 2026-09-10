@@ -11765,42 +11765,8 @@ html.pmm-dnd-compat-active #preset-manager-main-panel{user-select:none!important
   }
 
   function syncFloatingSnapshotState(root) {
-    const presetSelect = root?.querySelector?.('.panel-select--preset');
-    const presetSection = presetSelect?.closest?.('.panel-section');
-    if (!presetSection || !presetSelect) return;
-    let button = presetSection.querySelector('.pmm-floating-snapshot-trigger');
-    if (!button) {
-      button = presetSection.ownerDocument.createElement('button');
-      button.type = 'button';
-      button.className = 'pmm-floating-snapshot-trigger';
-      button.setAttribute('aria-label', '打开开关快照');
-      button.innerHTML = '<i class="fa-solid fa-camera"></i>';
-      button.addEventListener('click', event => {
-        event.preventDefault();
-        event.stopPropagation();
-        const presetName = selectedFloatingPresetName(root);
-        const branchName = readAppliedBranchName(presetName);
-        if (branchName) {
-          notify('warning', `请先切回默认分支后使用开关快照`);
-          return;
-        }
-        const api = TOP[SNAPSHOT_API_KEY] || SELF[SNAPSHOT_API_KEY];
-        if (typeof api?.open !== 'function') {
-          notify('warning', '开关快照尚未加载完成');
-          return;
-        }
-        root.classList.remove('pmm-floating-mobile-open');
-        api.open({ source:'floating' });
-      });
-      presetSection.insertBefore(button, presetSelect);
-    }
-    const branchName = readAppliedBranchName(selectedFloatingPresetName(root));
-    const blocked = Boolean(branchName);
-    button.classList.toggle('is-branch-blocked', blocked);
-    const ariaDisabled = blocked ? 'true' : 'false';
-    const title = blocked ? '请先切回默认分支' : '打开开关快照';
-    if (button.getAttribute('aria-disabled') !== ariaDisabled) button.setAttribute('aria-disabled', ariaDisabled);
-    if (button.title !== title) button.title = title;
+    // 快照入口只保留在酒馆原生预设页；升级时顺手清理旧工坊浮窗按钮。
+    root?.querySelectorAll?.('.pmm-floating-snapshot-trigger').forEach(button => button.remove());
   }
 
   function workshopHomeVisible() {
@@ -12453,10 +12419,6 @@ html.pmm-dnd-compat-active #preset-manager-main-panel{user-select:none!important
   cursor:pointer!important;color:var(--fp-text-color)!important;opacity:.8!important;font-size:11px!important;
 }
 #preset-manager-floating-panel .pmm-preset-batch-trigger:hover{background:rgba(127,127,127,.08)!important;opacity:.92!important}
-#preset-manager-floating-panel .pmm-floating-snapshot-trigger{box-sizing:border-box!important;flex:0 0 26px!important;width:26px!important;height:26px!important;display:inline-flex!important;align-items:center!important;justify-content:center!important;padding:0!important;border:0!important;border-radius:5px!important;background:transparent!important;color:var(--fp-text-color)!important;cursor:pointer!important;opacity:.82!important}
-#preset-manager-floating-panel .pmm-floating-snapshot-trigger:hover{background:rgba(127,127,127,.1)!important;opacity:1!important}
-#preset-manager-floating-panel .pmm-floating-snapshot-trigger i{font-size:11px!important;pointer-events:none!important}
-#preset-manager-floating-panel .pmm-floating-snapshot-trigger.is-branch-blocked{background:transparent!important;cursor:not-allowed!important;opacity:.25!important}
 #preset-manager-floating-panel .pmm-floating-branch-hidden{display:none!important}
 .pmm-preset-batch-overlay{position:fixed;inset:0;z-index:2147483646;display:flex;align-items:center;justify-content:center;padding:16px;background:rgba(0,0,0,.38);font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
 .pmm-preset-batch-dialog{box-sizing:border-box;width:min(420px,calc(100vw - 24px));max-height:min(620px,calc(100dvh - 32px));display:flex;flex-direction:column;gap:10px;padding:16px;border:1px solid var(--SmartThemeBorderColor,rgba(148,163,184,.34));border-radius:18px;background:var(--SmartThemeBlurTintColor,#f2f4f7);color:var(--SmartThemeBodyColor,#1f2937);box-shadow:0 18px 50px rgba(0,0,0,.3);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px)}
@@ -12480,9 +12442,9 @@ html.pmm-dnd-compat-active #preset-manager-main-panel{user-select:none!important
 .pmm-preset-batch-delete:not(:disabled){border-color:rgba(239,68,68,.38)!important;color:#dc4545!important}
 /* 桌面浮动栏右侧的收起箭头原本只有 16px，难以准确点按。 */
 @media screen and (min-width:769px){
-  /* 收起区与新增的相机共增加 40px，避免预设名称和右侧箭头被挤出。 */
+  /* 工坊相机移除后恢复紧凑宽度，同时保留足够大的收起热区。 */
   #preset-manager-floating-panel .floating-panel-root:not(.pmm-floating-mobile)>.panel-wrapper{
-    width:368px!important;
+    width:328px!important;
   }
   /* 预设名较长时优先让选择框弹性收窄，不能再把收起区挤出外框。 */
   #preset-manager-floating-panel .floating-panel-root:not(.pmm-floating-mobile) .panel-section:has(.panel-select--preset){
@@ -13092,14 +13054,7 @@ html.pmm-dnd-compat-active #preset-manager-main-panel{user-select:none!important
     return false
   }
 
-  function isSnapshotCaptureActive(){
-    try{return!!sharedRoot.document?.querySelector?.('.pmm-switch-snapshot-capture-mode')}
-    catch(_){return false}
-  }
-
   async function syncEnabledStates({presetName='',prompts=[]}={}){
-    /* 条目开关与分组开关一样，只能停留在快照隔离画布中。 */
-    if(isSnapshotCaptureActive())return true;
     if(!presetName||!Array.isArray(prompts)||hasAppliedBranch(presetName))return false;
     const setter=sharedRoot.setPreset||localRoot.setPreset;
     if(typeof setter!=='function')return false;
@@ -13123,9 +13078,6 @@ html.pmm-dnd-compat-active #preset-manager-main-panel{user-select:none!important
   }
 
   async function syncGroupEnabledState({presetName='',sectionId='',enabled=true}={}){
-    /* 快照录制是一块隔离画布：分组开关只改工坊临时状态，供快照读取，
-       绝不能提前写进柏宝箱原生分组，否则退出时会与异步刷新竞争并污染默认。 */
-    if(isSnapshotCaptureActive())return true;
     if(compat.__suspendGroupPowerSync===true)return true;
     const resolvedPreset=resolveNativePresetName(presetName);
     const rawSectionId=text(sectionId);
@@ -13233,13 +13185,9 @@ html.pmm-dnd-compat-active #preset-manager-main-panel{user-select:none!important
   const API_KEY = '__PMM_SWITCH_SNAPSHOTS_TEST52__';
   const STYLE_ID = 'pmm-switch-snapshots-test52-style';
   const OVERLAY_ID = 'pmm-switch-snapshots-test52-overlay';
+  const EDITOR_OVERLAY_ID = 'pmm-switch-snapshot-editor-overlay';
   const STORAGE_KEY = 'pmm.switch-snapshots.v1';
   const FLOATING_ENTRY_API_KEY = '__PMM_FLOATING_SNAPSHOT_ENTRY_TEST69__';
-  const TRIGGER_CLASS = 'pmm-switch-snapshot-trigger';
-  const HOME_TITLE_CLASS = 'pmm-switch-snapshot-home-title';
-  const CAPTURE_TITLE_CLASS = 'pmm-switch-snapshot-capture-title';
-  const DESKTOP_HOME_TITLE_HOST_CLASS = 'pmm-desktop-home-title-host';
-  const DESKTOP_HOME_PANEL_CLASS = 'pmm-desktop-home-panel-expanded';
 
   try { TOP[API_KEY]?.cleanup?.(); } catch (_) {}
   // test.160 的桌面宽度手柄已经撤回；升级时一并清掉它留下的节点、样式和记忆值。
@@ -13253,16 +13201,8 @@ html.pmm-dnd-compat-active #preset-manager-main-panel{user-select:none!important
   DOC?.querySelectorAll?.('.pmm-switch-snapshot-group-toggle').forEach(node => node.remove());
   try { TOP.localStorage?.removeItem('pmm.desktop-title-card-width.v1'); } catch (_) {}
 
-  let discoveryObserver = null;
-  let panelObserver = null;
-  let panelParentObserver = null;
-  let observedPanel = null;
-  let observedPanelParent = null;
-  let scheduled = 0;
-  let composer = null;
   let openMenuId = '';
   let characterPicker = null;
-  let captureMode = null;
   let chatEventSource = null;
   let chatEventType = '';
   let chatChangedHandler = null;
@@ -13270,6 +13210,8 @@ html.pmm-dnd-compat-active #preset-manager-main-panel{user-select:none!important
   let autoApplySerial = 0;
   let lastAutoContextKey = '';
   let snapshotViewportCleanup = null;
+  let snapshotEditorViewportCleanup = null;
+  let snapshotEditorSession = null;
   let overlayContext = null;
 
   const text = value => String(value ?? '').trim();
@@ -13314,26 +13256,6 @@ html.pmm-dnd-compat-active #preset-manager-main-panel{user-select:none!important
     const bridge = panel?.__pmmBatchVariableBridge;
     if (typeof bridge?.prompts !== 'function' || typeof bridge?.update !== 'function') return null;
     return bridge;
-  }
-
-  function currentPresetDraftStore() {
-    try {
-      const app = DOC?.getElementById?.('preset-manager-main-panel')?.__vue_app__;
-      const provides = app?._context?.provides;
-      const candidates = [app?.config?.globalProperties?.$pinia];
-      if (provides) {
-        for (const key of Reflect.ownKeys(provides)) candidates.push(provides[key]);
-      }
-      for (const pinia of candidates) {
-        if (!(pinia?._s instanceof Map)) continue;
-        for (const store of pinia._s.values()) {
-          if (typeof store?.refreshDisplayedPrompts !== 'function') continue;
-          if (!Array.isArray(store?.prompts)) continue;
-          return store;
-        }
-      }
-    } catch (_) {}
-    return null;
   }
 
   function draftPrompts() {
@@ -13928,25 +13850,48 @@ html.pmm-dnd-compat-active #preset-manager-main-panel{user-select:none!important
     return false;
   }
 
-  function saveNewSnapshot(inputName, afterSave = null, promptsOverride = null) {
-    if (blockWhileBranchActive('新建快照')) return false;
-    if (blockWhileSnapshotActive('新建快照')) return false;
-    const presetName = currentPresetName();
-    const prompts = Array.isArray(promptsOverride) ? clone(promptsOverride) : getPrompts(presetName);
-    if (!presetName || !prompts.length) {
-      notify('warning', '没有可保存的预设条目');
-      return;
+  function saveSnapshotDraft(draft) {
+    const presetName = text(draft?.presetName);
+    const branchName = activeBranchName(presetName);
+    if (branchName) {
+      notify('warning', `当前正在使用“${branchName}”分支，请先切回默认分支后再新建快照`);
+      return false;
     }
-    const name = text(inputName);
-    if (!name) return;
+    const active = activeSnapshotForPreset(presetName);
+    if (active) {
+      notify('warning', `当前正应用“${active.name}”快照，请先恢复预设默认后再新建快照`);
+      return false;
+    }
+    const states = Array.isArray(draft?.promptStates)
+      ? draft.promptStates.map(state => ({
+        id: text(state?.id),
+        name: text(state?.name || state?.id),
+        enabled: state?.enabled === true,
+      }))
+      : [];
+    const groupStates = Array.isArray(draft?.groupStates)
+      ? draft.groupStates.map(state => ({
+        id: text(state?.id),
+        name: text(state?.name || state?.id),
+        enabled: state?.enabled !== false,
+      })).filter(state => state.id)
+      : [];
+    if (!presetName || !states.length) {
+      notify('warning', '没有可保存的预设条目');
+      return false;
+    }
+    const name = text(draft?.name);
+    if (!name) {
+      notify('warning', '请填写快照名称');
+      return false;
+    }
     const now = Date.now();
-    const groupStates = makeGroupStates(presetName);
     const store = readStore();
     store.snapshots.unshift({
       id: makeId(),
       name,
       presetName,
-      states: makeStates(prompts),
+      states,
       groupStates,
       characters: [],
       chats: [],
@@ -13954,11 +13899,8 @@ html.pmm-dnd-compat-active #preset-manager-main-panel{user-select:none!important
       updatedAt: now,
     });
     if (writeStore(store)) {
-      composer = null;
       openMenuId = '';
       notify('success', `已保存快照“${name}”`);
-      if (typeof afterSave === 'function') afterSave();
-      else renderOverlay();
       return true;
     }
     return false;
@@ -14018,29 +13960,6 @@ html.pmm-dnd-compat-active #preset-manager-main-panel{user-select:none!important
     return true;
   }
 
-  // 录制快照只是一次临时预览。退出时应一次性恢复进入前的草稿及其基线，
-  // 不能再逐条走普通 update 通道，否则 Vue 的延迟更新可能把旧开关写回来，
-  // 并把右上角保存按钮错误地留在“有未保存修改”的高亮状态。
-  async function restoreCapturedDraft(nextPrompts, entryWasDirty = false) {
-    const bridge = currentDraftBridge();
-    if (!bridge) return false;
-    if (!entryWasDirty && typeof bridge.restoreClean === 'function') {
-      const restored = bridge.restoreClean(clone(nextPrompts));
-      if (restored === false) return false;
-      await settleDraft();
-      return true;
-    }
-    if (!entryWasDirty) {
-      const store = currentPresetDraftStore();
-      if (store && text(store.currentPresetName) === currentPresetName()) {
-        store.refreshDisplayedPrompts(clone(nextPrompts));
-        await settleDraft();
-        return true;
-      }
-    }
-    return writeSwitchesToDraft(nextPrompts, '', false);
-  }
-
   async function refreshNativePromptManager() {
     const context = getContext();
     const eventType = context?.eventTypes?.OAI_PRESET_CHANGED_AFTER
@@ -14069,18 +13988,6 @@ html.pmm-dnd-compat-active #preset-manager-main-panel{user-select:none!important
       console.warn('[预设工坊·开关快照] 原生 Prompt Manager 直接刷新失败，保留事件刷新兜底', error);
     }
     return refreshed;
-  }
-
-  // 快照录制期间只操作工坊草稿。退出时还须同步酒馆当前运行态，
-  // 否则工坊会显示已回滚、而主预设仍停在录制时的旧开关状态。
-  // 这里只写 in_use，绝不触发原生“保存预设”，也不会覆盖命名预设文件。
-  async function syncRuntimeSwitches(presetName, prompts) {
-    const loaded = text((TOP.getLoadedPresetName || SELF.getLoadedPresetName)?.());
-    const setPreset = TOP.setPreset || SELF.setPreset;
-    if (!presetName || loaded !== presetName || typeof setPreset !== 'function') return false;
-    await setPreset('in_use', { prompts: clone(prompts) });
-    await refreshNativePromptManager();
-    return true;
   }
 
   async function persistPromptsDirectly(presetName, prompts) {
@@ -14405,7 +14312,7 @@ html.pmm-dnd-compat-active #preset-manager-main-panel{user-select:none!important
 
   async function autoApplyBoundSnapshot(options = {}) {
     const serial = ++autoApplySerial;
-    if (isCaptureMode() || isBranchMode() || activeBranchName()) return false;
+    if (isBranchMode() || activeBranchName()) return false;
     const presetName = loadedPresetName();
     if (!presetName) return false;
     const store = readStore();
@@ -14546,7 +14453,6 @@ html.pmm-dnd-compat-active #preset-manager-main-panel{user-select:none!important
       return false;
     }
 
-    composer = null;
     openMenuId = '';
     renderFirstDefaultPrompt();
     notify('success', `已重置“${presetName}”的全部开关快照`);
@@ -14685,174 +14591,323 @@ html.pmm-dnd-compat-active #preset-manager-main-panel{user-select:none!important
 
   function closeOverlay() {
     unbindSnapshotViewport();
-    composer = null;
     openMenuId = '';
     characterPicker = null;
     overlayContext = null;
     DOC?.getElementById?.(OVERLAY_ID)?.remove();
   }
 
-  function openComposer() {
-    composer = { name: defaultSnapshotName() };
-    openMenuId = '';
-    renderOverlay();
-  }
-
-  function closeComposer() {
-    composer = null;
-    renderOverlay();
-  }
-
-  function isCaptureMode() {
-    if (!captureMode) return false;
-    const activePresetName = currentPresetName();
-    if (!activePresetName && !isBranchMode() && !activeBranchName(captureMode.presetName)) return true;
-    const samePreset = text(captureMode.presetName) === activePresetName;
-    if (samePreset && !isBranchMode() && !activeBranchName(activePresetName)) return true;
-    captureMode = null;
-    return false;
-  }
-
-  function syncCaptureModeUI() {
-    const active = isCaptureMode();
-    const container = normalPresetContainer();
-    for (const node of DOC?.querySelectorAll?.('.pmm-switch-snapshot-capture-mode') || []) {
-      if (node !== container) node.classList.remove('pmm-switch-snapshot-capture-mode');
-    }
-    if (container && container.classList.contains('pmm-switch-snapshot-capture-mode') !== active) {
-      container.classList.toggle('pmm-switch-snapshot-capture-mode', active);
-    }
-  }
-
-  async function exitCaptureMode(showNotice = false) {
-    const session = captureMode;
-    if (!session || session.restoring) return;
-    session.restoring = true;
-    closeOverlay();
+  function editorGroupState(presetName, prompts) {
+    const compat = baiBaiCompat();
+    let sectionState = null;
     try {
-      // 退出时直接恢复进入快照模式那一刻冻结的完整基线。不能再次以当前草稿
-      // 为底合并开关，否则上一轮 Vue 延迟草稿可能在第二次录制时混回主预设。
-      const nextPrompts = Array.isArray(session.entryPrompts) && session.entryPrompts.length
-        ? clone(session.entryPrompts)
-        : mergeSnapshotStates(getPrompts(session.presetName), session.entryStates || []).nextPrompts;
-      const restored = await restoreCapturedDraft(nextPrompts, !!session.entryWasDirty);
-      const runtimeSynced = await syncRuntimeSwitches(session.presetName, nextPrompts);
-      await applyGroupSnapshotStates(session.presetName, session.entryGroupStates);
-      if (!restored && !runtimeSynced) notify('warning', '没有找到当前工坊草稿，开关未能自动还原');
-    } finally {
-      captureMode = null;
-      syncCaptureModeUI();
-      scheduleMount();
+      sectionState = compat?.snapshotBranchState?.({ presetName, prompts: clone(prompts), sectionGroupState: null }) || null;
+    } catch (_) {}
+    let powers = [];
+    try {
+      const value = compat?.readGroupEnabledStates?.(presetName);
+      if (Array.isArray(value)) powers = value;
+    } catch (_) {}
+    const powerById = new Map(powers.filter(item => text(item?.id)).map(item => [text(item.id), item]));
+    const disabled = new Set(Array.isArray(sectionState?.disabledSections) ? sectionState.disabledSections.map(text) : []);
+    const sections = Array.isArray(sectionState?.sections) ? sectionState.sections : [];
+    const groups = [];
+    const seen = new Set();
+    for (const section of sections) {
+      const sectionId = text(section?.id);
+      if (!sectionId.startsWith('baibai_')) continue;
+      const id = sectionId.slice('baibai_'.length);
+      if (!id || seen.has(id)) continue;
+      seen.add(id);
+      const power = powerById.get(id);
+      groups.push({
+        id,
+        sectionId,
+        name: text(section?.displayName || power?.name || id),
+        enabled: power ? power.enabled !== false : !disabled.has(sectionId),
+        promptIds: new Set((Array.isArray(section?.itemIds) ? section.itemIds : []).map(text).filter(Boolean)),
+      });
     }
-    if (showNotice) notify('info', '已取消快照');
+    for (const power of powers) {
+      const id = text(power?.id);
+      if (!id || seen.has(id)) continue;
+      seen.add(id);
+      groups.push({
+        id,
+        sectionId: `baibai_${id}`,
+        name: text(power?.name || id),
+        enabled: power?.enabled !== false,
+        promptIds: new Set(),
+      });
+    }
+    return groups;
   }
 
-  function enterCaptureMode(entryContext = null) {
-    const captureSource = entryContext?.source === 'native-preset' || overlayContext?.source === 'native-preset'
-      ? 'native-preset'
-      : 'workshop';
-    const presetName = text(entryContext?.presetName) || currentPresetName();
-    if (blockWhileBranchActive('新建快照')) return;
-    if (blockWhileSnapshotActive('新建快照')) return;
-    const hasDefault = readStore().snapshots.some(snapshot => (
-      text(snapshot.presetName) === presetName && isDefaultSnapshot(snapshot)
-    ));
-    if (!presetName || !hasDefault) {
-      notify('warning', '请先保存预设默认');
-      return;
+  function createSnapshotEditorDraft(presetName, prompts, returnContext) {
+    const promptStates = makeStates(clone(prompts)).map((state, index) => ({ ...state, key: `prompt-${index}` }));
+    const groups = editorGroupState(presetName, prompts);
+    const assigned = new Set();
+    for (const group of groups) {
+      group.promptIndexes = [];
+      promptStates.forEach((prompt, index) => {
+        if (assigned.has(index) || !group.promptIds.has(text(prompt.id))) return;
+        group.promptIndexes.push(index);
+        assigned.add(index);
+      });
+      delete group.promptIds;
     }
-    const prompts = captureSource === 'native-preset' ? storedPrompts(presetName) : getPrompts(presetName);
-    if (!prompts.length) {
-      notify('warning', '当前工坊没有可记录的预设条目');
-      return;
+    const ungrouped = promptStates.map((_, index) => index).filter(index => !assigned.has(index));
+    if (ungrouped.length) {
+      groups.push({
+        id: '__ungrouped__',
+        sectionId: '',
+        name: '未分组条目',
+        enabled: true,
+        promptIndexes: ungrouped,
+        synthetic: true,
+      });
     }
-    captureMode = {
+    return {
       presetName,
-      source: captureSource,
-      entryPrompts: clone(prompts),
-      entryStates: makeStates(prompts),
-      // 原生相机以酒馆当前预设为基线，不继承隐藏工坊上一轮残留的脏标记。
-      entryWasDirty: captureSource === 'native-preset' ? false : !!currentPresetDraftStore()?.isDirty,
-      restoring: false,
+      source: 'native-preset',
+      returnContext: { source: 'native-preset', presetName: text(returnContext?.presetName) || presetName },
+      name: defaultSnapshotName(),
+      promptStates,
+      groups,
+      expandedGroups: new Set(),
+      saving: false,
     };
-    captureMode.entryGroupStates = makeGroupStates(presetName);
-    composer = null;
-    openMenuId = '';
-    closeOverlay();
-    syncCaptureModeUI();
-    scheduleMount();
-    notify('info', '已进入快照模式');
   }
 
-  async function enterCaptureModeFromOverlay() {
-    if (normalPresetContainer()) {
-      enterCaptureMode();
-      return;
-    }
-    if (blockWhileBranchActive('新建快照')) return;
-    const entryApi = TOP[FLOATING_ENTRY_API_KEY];
-    if (typeof entryApi?.openWorkshopHome !== 'function') {
-      notify('warning', '请先打开预设工坊后新建快照');
-      return;
-    }
-    // 打开工坊首页会令酒馆关闭原生抽屉，先保留原生入口上下文；否则随后
-    // closeOverlay() 清空上下文后，基线可能被误读成隐藏工坊的上一轮草稿。
-    const entryContext = overlayContext ? { ...overlayContext } : null;
-    if (!await entryApi.openWorkshopHome()) {
-      notify('warning', '无法返回主预设首页，请先关闭分屏后重试');
-      return;
-    }
-    const startedAt = Date.now();
-    while (!normalPresetContainer() && Date.now() - startedAt < 2400) {
-      await new Promise(resolve => TOP.setTimeout(resolve, 60));
-    }
-    if (!normalPresetContainer()) {
-      notify('warning', '工坊尚未准备好，请稍后再试');
-      return;
-    }
-    closeOverlay();
-    enterCaptureMode(entryContext);
+  function snapshotEditorGroupCount(group) {
+    if (!snapshotEditorSession) return { enabled: 0, total: 0 };
+    const states = group.promptIndexes.map(index => snapshotEditorSession.promptStates[index]).filter(Boolean);
+    return { enabled: states.filter(state => state.enabled === true).length, total: states.length };
   }
 
-  function renderCaptureSavePrompt() {
-    const existing = DOC?.getElementById?.(OVERLAY_ID);
-    if (!existing) return;
-    const presetName = currentPresetName();
-    existing.innerHTML = `<section class="pmm-switch-snapshot-dialog pmm-switch-snapshot-save-capture-dialog" role="dialog" aria-modal="true" aria-label="保存快照">
-      <header class="pmm-switch-snapshot-head">
-        <div><h2><i class="fa-solid fa-floppy-disk"></i>保存快照</h2><p>${escapeHtml(presetName || '未选择预设')}</p></div>
-        <button type="button" class="pmm-switch-snapshot-close" data-pmm-snapshot-action="return-capture" title="返回快照模式"><i class="fa-solid fa-xmark"></i></button>
-      </header>
-      <div class="pmm-switch-snapshot-save-capture">
-        <label for="pmm-switch-snapshot-name">保存为</label>
-        <input id="pmm-switch-snapshot-name" data-pmm-snapshot-name type="text" maxlength="80" autocomplete="off" value="${escapeHtml(composer?.name || defaultSnapshotName())}" placeholder="例如：悟·日常">
-        <p>会保存当前全部条目开关与柏宝箱分组开关；保存后退出快照模式。</p>
-        <div class="pmm-switch-snapshot-save-capture-actions"><button type="button" data-pmm-snapshot-action="return-capture">取消</button><button type="button" data-pmm-snapshot-action="save-capture"><i class="fa-solid fa-floppy-disk"></i>保存快照</button></div>
+  function snapshotEditorSwitchMarkup(enabled, action, attributes = '') {
+    return `<button type="button" class="pmm-switch-editor-switch${enabled ? ' is-on' : ''}" data-pmm-editor-action="${action}" ${attributes} role="switch" aria-checked="${enabled ? 'true' : 'false'}"><span></span></button>`;
+  }
+
+  function snapshotEditorGroupMarkup(group) {
+    const count = snapshotEditorGroupCount(group);
+    const id = escapeHtml(group.id);
+    return `<section class="pmm-switch-editor-group" data-pmm-editor-group="${id}">
+      <div class="pmm-switch-editor-group-head">
+        <button type="button" class="pmm-switch-editor-expand" data-pmm-editor-action="toggle-group" data-pmm-editor-group-id="${id}" aria-expanded="false"><i class="fa-solid fa-chevron-right"></i></button>
+        <i class="fa-solid ${group.synthetic ? 'fa-layer-group' : 'fa-cubes-stacked'} pmm-switch-editor-group-icon"></i>
+        <strong title="${escapeHtml(group.name)}">${escapeHtml(group.name)}</strong>
+        <small data-pmm-editor-count>${count.enabled}/${count.total}</small>
+        ${group.synthetic ? '' : snapshotEditorSwitchMarkup(group.enabled, 'toggle-group-power', `data-pmm-editor-group-id="${id}" aria-label="${escapeHtml(group.name)}分组供电"`)}
       </div>
+      <div class="pmm-switch-editor-entries" data-pmm-editor-entries hidden></div>
     </section>`;
-    const focus = TOP.requestAnimationFrame || SELF.requestAnimationFrame || (callback => TOP.setTimeout(callback, 0));
-    focus(() => existing.querySelector('[data-pmm-snapshot-name]')?.focus());
   }
 
-  function openCaptureSavePrompt() {
-    if (!isCaptureMode()) {
-      openOverlay();
-      return;
+  function snapshotEditorPromptMarkup(index) {
+    const prompt = snapshotEditorSession?.promptStates?.[index];
+    if (!prompt) return '';
+    return `<div class="pmm-switch-editor-prompt" data-pmm-editor-prompt-index="${index}">
+      <span title="${escapeHtml(prompt.name)}">${escapeHtml(prompt.name)}</span>
+      ${snapshotEditorSwitchMarkup(prompt.enabled, 'toggle-prompt', `data-pmm-editor-prompt-index="${index}" aria-label="${escapeHtml(prompt.name)}"`)}
+    </div>`;
+  }
+
+  function snapshotEditorGroupElement(groupId) {
+    const overlay = DOC?.getElementById?.(EDITOR_OVERLAY_ID);
+    return Array.from(overlay?.querySelectorAll?.('[data-pmm-editor-group]') || [])
+      .find(node => text(node.dataset.pmmEditorGroup) === text(groupId)) || null;
+  }
+
+  function renderSnapshotEditorGroupEntries(groupId) {
+    const group = snapshotEditorSession?.groups?.find(item => item.id === groupId);
+    const host = snapshotEditorGroupElement(groupId)?.querySelector?.('[data-pmm-editor-entries]');
+    if (!group || !host || host.dataset.rendered === '1') return;
+    host.innerHTML = group.promptIndexes.map(snapshotEditorPromptMarkup).join('')
+      || '<div class="pmm-switch-editor-group-empty">该分组没有可记录的条目</div>';
+    host.dataset.rendered = '1';
+  }
+
+  function updateSnapshotEditorGroup(groupId) {
+    const group = snapshotEditorSession?.groups?.find(item => item.id === groupId);
+    const root = snapshotEditorGroupElement(groupId);
+    if (!group || !root) return;
+    const count = snapshotEditorGroupCount(group);
+    const counter = root.querySelector('[data-pmm-editor-count]');
+    if (counter) counter.textContent = `${count.enabled}/${count.total}`;
+  }
+
+  function unbindSnapshotEditorViewport() {
+    try { snapshotEditorViewportCleanup?.(); } catch (_) {}
+    snapshotEditorViewportCleanup = null;
+  }
+
+  function bindSnapshotEditorToVisibleViewport(overlay) {
+    unbindSnapshotEditorViewport();
+    const ownerDocument = overlay?.ownerDocument || DOC;
+    const view = ownerDocument?.defaultView || TOP || SELF;
+    if (!overlay || !isSnapshotMobile(view)) return;
+    const viewport = view.visualViewport;
+    const request = view.requestAnimationFrame?.bind(view) || (callback => view.setTimeout(callback, 0));
+    const cancel = view.cancelAnimationFrame?.bind(view) || view.clearTimeout?.bind(view);
+    let frame = 0;
+    const update = () => {
+      frame = 0;
+      if (!overlay.isConnected) return;
+      const left = Number(viewport?.offsetLeft || 0);
+      const top = Number(viewport?.offsetTop || 0);
+      const width = Math.max(1, Number(viewport?.width || view.innerWidth || ownerDocument.documentElement?.clientWidth || 1));
+      const height = Math.max(1, Number(viewport?.height || view.innerHeight || ownerDocument.documentElement?.clientHeight || 1));
+      overlay.style.setProperty('position', 'fixed', 'important');
+      overlay.style.setProperty('inset', 'auto', 'important');
+      overlay.style.setProperty('left', `${left}px`, 'important');
+      overlay.style.setProperty('top', `${top}px`, 'important');
+      overlay.style.setProperty('width', `${width}px`, 'important');
+      overlay.style.setProperty('height', `${height}px`, 'important');
+      overlay.style.setProperty('--pmm-switch-editor-visible-height', `${height}px`, 'important');
+    };
+    const schedule = () => {
+      if (!frame) frame = request(update);
+    };
+    update();
+    viewport?.addEventListener?.('resize', schedule, { passive: true });
+    viewport?.addEventListener?.('scroll', schedule, { passive: true });
+    view.addEventListener?.('resize', schedule, { passive: true });
+    view.addEventListener?.('orientationchange', schedule, { passive: true });
+    ownerDocument.addEventListener?.('focusin', schedule, true);
+    ownerDocument.addEventListener?.('focusout', schedule, true);
+    snapshotEditorViewportCleanup = () => {
+      if (frame) cancel?.(frame);
+      viewport?.removeEventListener?.('resize', schedule);
+      viewport?.removeEventListener?.('scroll', schedule);
+      view.removeEventListener?.('resize', schedule);
+      view.removeEventListener?.('orientationchange', schedule);
+      ownerDocument.removeEventListener?.('focusin', schedule, true);
+      ownerDocument.removeEventListener?.('focusout', schedule, true);
+    };
+  }
+
+  function destroySnapshotEditor() {
+    unbindSnapshotEditorViewport();
+    DOC?.getElementById?.(EDITOR_OVERLAY_ID)?.remove();
+    snapshotEditorSession = null;
+  }
+
+  function returnFromSnapshotEditor() {
+    const returnContext = snapshotEditorSession?.returnContext ? { ...snapshotEditorSession.returnContext } : { source: 'native-preset' };
+    destroySnapshotEditor();
+    openOverlay(returnContext);
+  }
+
+  function saveSnapshotEditor() {
+    const session = snapshotEditorSession;
+    if (!session || session.saving) return false;
+    session.saving = true;
+    const saved = saveSnapshotDraft({
+      presetName: session.presetName,
+      name: session.name,
+      promptStates: session.promptStates,
+      groupStates: session.groups.filter(group => !group.synthetic).map(group => ({
+        id: group.id,
+        name: group.name,
+        enabled: group.enabled,
+      })),
+    });
+    session.saving = false;
+    if (saved) returnFromSnapshotEditor();
+    return saved;
+  }
+
+  function mountSnapshotEditor() {
+    const session = snapshotEditorSession;
+    if (!session || !DOC?.body) return false;
+    let overlay = DOC.getElementById(EDITOR_OVERLAY_ID);
+    if (overlay) overlay.remove();
+    overlay = DOC.createElement('div');
+    overlay.id = EDITOR_OVERLAY_ID;
+    overlay.className = 'pmm-switch-editor-overlay';
+    overlay.innerHTML = `<section class="pmm-switch-editor-dialog" role="dialog" aria-modal="true" aria-label="新建开关快照">
+      <header class="pmm-switch-editor-head">
+        <div><h2><i class="fa-solid fa-camera"></i>新建开关快照</h2><p>${escapeHtml(session.presetName)}</p></div>
+        <button type="button" data-pmm-editor-action="cancel" title="取消"><i class="fa-solid fa-xmark"></i></button>
+      </header>
+      <div class="pmm-switch-editor-name"><label for="pmm-switch-editor-name">快照名称</label><input id="pmm-switch-editor-name" type="text" maxlength="80" autocomplete="off" value="${escapeHtml(session.name)}" placeholder="例如：悟·日常"></div>
+      <div class="pmm-switch-editor-summary"><span>${session.promptStates.length} 个条目 · ${session.groups.filter(group => !group.synthetic).length} 个柏宝箱分组</span><small>这里只编辑要保存的方案，不会立即应用到当前预设。</small></div>
+      <div class="pmm-switch-editor-list">${session.groups.map(snapshotEditorGroupMarkup).join('')}</div>
+      <footer><button type="button" data-pmm-editor-action="cancel">取消</button><button type="button" data-pmm-editor-action="save"><i class="fa-solid fa-floppy-disk"></i>保存快照</button></footer>
+    </section>`;
+    for (const type of ['pointerdown', 'mousedown', 'touchstart', 'click']) {
+      overlay.addEventListener(type, event => event.stopPropagation(), { passive: true });
     }
-    composer = { name: defaultSnapshotName() };
-    openMenuId = '';
-    ensureOverlay();
-    renderCaptureSavePrompt();
+    overlay.addEventListener('click', event => {
+      if (event.target === overlay) returnFromSnapshotEditor();
+      const button = event.target?.closest?.('[data-pmm-editor-action]');
+      if (!button) return;
+      event.preventDefault();
+      const action = button.dataset.pmmEditorAction;
+      const groupId = text(button.dataset.pmmEditorGroupId);
+      if (action === 'cancel') returnFromSnapshotEditor();
+      else if (action === 'save') saveSnapshotEditor();
+      else if (action === 'toggle-group') {
+        const groupRoot = button.closest('.pmm-switch-editor-group');
+        const entries = groupRoot?.querySelector?.('[data-pmm-editor-entries]');
+        const expanded = !snapshotEditorSession.expandedGroups.has(groupId);
+        if (expanded) snapshotEditorSession.expandedGroups.add(groupId);
+        else snapshotEditorSession.expandedGroups.delete(groupId);
+        button.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+        button.querySelector('i')?.classList.toggle('fa-chevron-right', !expanded);
+        button.querySelector('i')?.classList.toggle('fa-chevron-down', expanded);
+        if (expanded) renderSnapshotEditorGroupEntries(groupId);
+        if (entries) entries.hidden = !expanded;
+      } else if (action === 'toggle-group-power') {
+        const group = snapshotEditorSession.groups.find(item => item.id === groupId && !item.synthetic);
+        if (!group) return;
+        group.enabled = !group.enabled;
+        button.classList.toggle('is-on', group.enabled);
+        button.setAttribute('aria-checked', group.enabled ? 'true' : 'false');
+      } else if (action === 'toggle-prompt') {
+        const index = Number(button.dataset.pmmEditorPromptIndex);
+        const prompt = snapshotEditorSession.promptStates[index];
+        if (!prompt) return;
+        prompt.enabled = !prompt.enabled;
+        button.classList.toggle('is-on', prompt.enabled);
+        button.setAttribute('aria-checked', prompt.enabled ? 'true' : 'false');
+        const group = snapshotEditorSession.groups.find(item => item.promptIndexes.includes(index));
+        if (group) updateSnapshotEditorGroup(group.id);
+      }
+    });
+    overlay.addEventListener('input', event => {
+      if (event.target?.id === 'pmm-switch-editor-name' && snapshotEditorSession) snapshotEditorSession.name = event.target.value;
+    });
+    overlay.addEventListener('keydown', event => {
+      if (event.key !== 'Escape') return;
+      event.preventDefault();
+      returnFromSnapshotEditor();
+    });
+    DOC.body.appendChild(overlay);
+    bindSnapshotEditorToVisibleViewport(overlay);
+    return true;
   }
 
-  async function finishCaptureSnapshot() {
-    if (!isCaptureMode()) return false;
-    const prompts = getPrompts(captureMode.presetName);
-    const saved = saveNewSnapshot(composer?.name, null, prompts);
-    if (!saved) return false;
-    await exitCaptureMode(false);
-    openOverlay();
-    return true;
+  function openSnapshotEditorFromOverlay() {
+    const presetName = currentPresetName();
+    const returnContext = overlayContext ? { ...overlayContext } : { source: 'native-preset', presetName };
+    if (!presetName) return notify('warning', '请先选择一个预设');
+    const branchName = activeBranchName(presetName);
+    if (branchName) return notify('warning', `当前正在使用“${branchName}”分支，请先切回默认分支后再新建快照`);
+    const active = activeSnapshotForPreset(presetName);
+    if (active) return notify('warning', `当前正应用“${active.name}”快照，请先恢复预设默认后再新建快照`);
+    const hasDefault = readStore().snapshots.some(snapshot => text(snapshot.presetName) === presetName && isDefaultSnapshot(snapshot));
+    if (!hasDefault) return notify('warning', '请先保存预设默认');
+    const prompts = storedPrompts(presetName);
+    if (!prompts.length) return notify('warning', '当前预设没有可记录的条目');
+    snapshotEditorSession = createSnapshotEditorDraft(presetName, prompts, returnContext);
+    closeOverlay();
+    if (!mountSnapshotEditor()) {
+      snapshotEditorSession = null;
+      openOverlay(returnContext);
+      notify('error', '快照编辑器打开失败');
+    }
   }
 
   function renderFirstDefaultPrompt() {
@@ -14937,7 +14992,6 @@ html.pmm-dnd-compat-active #preset-manager-main-panel{user-select:none!important
     const defaultSnapshot = defaultSnapshotForCurrentPreset();
     const snapshots = snapshotsForCurrentPreset();
     const activeSnapshot = activeSnapshotForCurrentPreset();
-    const composerGroupCount = composer ? makeGroupStates(presetName).length : 0;
     const rows = snapshots.length ? snapshots.map(snapshot => {
       const groupCount = Array.isArray(snapshot.groupStates) ? snapshot.groupStates.length : 0;
       const isActive = activeSnapshot?.id === snapshot.id;
@@ -14982,12 +15036,7 @@ html.pmm-dnd-compat-active #preset-manager-main-panel{user-select:none!important
       <div class="pmm-switch-snapshot-default-copy"><div><i class="fa-solid fa-house"></i>还没有预设默认</div><small>请先保存当前原始开关；以后可一键恢复。</small></div>
       <button type="button" data-pmm-snapshot-action="save-default"><i class="fa-solid fa-bookmark"></i>保存当前为默认</button>
     </section>`;
-    const composerMarkup = composer ? `<div class="pmm-switch-snapshot-composer">
-      <label for="pmm-switch-snapshot-name">快照名称</label>
-      <input id="pmm-switch-snapshot-name" data-pmm-snapshot-name type="text" maxlength="80" autocomplete="off" value="${escapeHtml(composer.name)}" placeholder="例如：悟·日常">
-      <p>会冻结当前 ${getPrompts(presetName).length} 个条目开关${composerGroupCount ? `及 ${composerGroupCount} 个柏宝箱分组开关` : ''}。</p>
-      <div class="pmm-switch-snapshot-composer-actions"><button type="button" data-pmm-snapshot-action="cancel-create">取消</button><button type="button" data-pmm-snapshot-action="create"><i class="fa-solid fa-camera"></i>保存快照</button></div>
-    </div>` : `<div class="pmm-switch-snapshot-create"><button type="button" data-pmm-snapshot-action="new"><i class="fa-solid fa-plus"></i>新建开关快照</button></div>`;
+    const createMarkup = `<div class="pmm-switch-snapshot-create"><button type="button" data-pmm-snapshot-action="new"><i class="fa-solid fa-plus"></i>新建开关快照</button></div>`;
     const pickerSnapshot = characterPicker
       ? snapshots.find(snapshot => snapshot.id === characterPicker.snapshotId)
       : null;
@@ -15007,17 +15056,14 @@ html.pmm-dnd-compat-active #preset-manager-main-panel{user-select:none!important
         <button type="button" class="pmm-switch-snapshot-close" data-pmm-snapshot-action="close" title="关闭"><i class="fa-solid fa-xmark"></i></button>
       </header>
       ${defaultMarkup}
-      ${composerMarkup}
+      ${createMarkup}
       <div class="pmm-switch-snapshot-list">${rows}</div>
       <footer class="pmm-switch-snapshot-footer"><span>快照保存条目开关与柏宝箱分组开关。</span><span>角色锁绑定当前角色，聊天锁绑定当前聊天；可通过「…」批量绑定多个角色；进入已绑定的角色或聊天时，会自动应用该快照。</span></footer>
       ${characterPickerMarkup}
     </section>`;
     TOP.__PMM_WORLDBOOK_SNAPSHOTS__?.decoratePreset(existing);
     if (openMenuId) positionOpenSnapshotMenu(existing);
-    if (composer) {
-      const focus = TOP.requestAnimationFrame || SELF.requestAnimationFrame || (callback => TOP.setTimeout(callback, 0));
-      focus(() => existing.querySelector('[data-pmm-snapshot-name]')?.focus());
-    } else if (characterPicker) {
+    if (characterPicker) {
       const focus = TOP.requestAnimationFrame || SELF.requestAnimationFrame || (callback => TOP.setTimeout(callback, 0));
       focus(() => existing.querySelector('[data-pmm-character-search]')?.focus());
     }
@@ -15050,14 +15096,10 @@ html.pmm-dnd-compat-active #preset-manager-main-panel{user-select:none!important
         const id = text(button.dataset.pmmSnapshotId);
         if (action !== 'menu') dismissOpenSnapshotMenu(overlay);
         if (action === 'close') closeOverlay();
-        else if (action === 'new') void enterCaptureModeFromOverlay();
-        else if (action === 'cancel-create') closeComposer();
-        else if (action === 'create') saveNewSnapshot(composer?.name);
-        else if (action === 'save-capture') void finishCaptureSnapshot();
-        else if (action === 'return-capture') closeOverlay();
+        else if (action === 'new') openSnapshotEditorFromOverlay();
         else if (action === 'save-default' || action === 'update-default') saveDefaultSnapshot();
         else if (action === 'save-default-and-enter') {
-          if (saveDefaultSnapshot({ silent: true })) void enterCaptureModeFromOverlay();
+          if (saveDefaultSnapshot({ silent: true })) openSnapshotEditorFromOverlay();
         }
         else if (action === 'cancel-default-onboarding') closeOverlay();
         else if (action === 'apply-default') void applySnapshot(id);
@@ -15079,8 +15121,7 @@ html.pmm-dnd-compat-active #preset-manager-main-panel{user-select:none!important
         else if (action === 'delete') deleteSnapshot(id);
       });
       overlay.addEventListener('input', event => {
-        if (event.target?.matches?.('[data-pmm-snapshot-name]') && composer) composer.name = event.target.value;
-        else if (event.target?.matches?.('[data-pmm-character-search]') && characterPicker) {
+        if (event.target?.matches?.('[data-pmm-character-search]') && characterPicker) {
           characterPicker.query = event.target.value;
           renderCharacterPickerOptions(overlay);
         }
@@ -15096,15 +15137,6 @@ html.pmm-dnd-compat-active #preset-manager-main-panel{user-select:none!important
           dismissOpenSnapshotMenu(overlay);
           return;
         }
-        if (!event.target?.matches?.('[data-pmm-snapshot-name]')) return;
-        if (event.key === 'Enter') {
-          event.preventDefault();
-          if (isCaptureMode() && overlay.querySelector('[data-pmm-snapshot-action="save-capture"]')) void finishCaptureSnapshot();
-          else saveNewSnapshot(composer?.name);
-        } else if (event.key === 'Escape') {
-          event.preventDefault();
-          closeComposer();
-        }
       });
       DOC.body.appendChild(overlay);
     }
@@ -15117,7 +15149,7 @@ html.pmm-dnd-compat-active #preset-manager-main-panel{user-select:none!important
     const source = text(options.source) === 'native-preset' ? 'native-preset' : 'workshop';
     overlayContext = {
       source,
-      presetName: source === 'native-preset' ? nativeSelectedPresetName() : '',
+      presetName: source === 'native-preset' ? (text(options.presetName) || nativeSelectedPresetName()) : '',
     };
     if (blockWhileBranchActive()) {
       overlayContext = null;
@@ -15153,11 +15185,6 @@ html.pmm-dnd-compat-active #preset-manager-main-panel{user-select:none!important
     return null;
   }
 
-  function normalTitleActions() {
-    const container = normalPresetContainer();
-    return container?.querySelector?.('.title-actions') || null;
-  }
-
   function nativeSaveButton() {
     const container = normalPresetContainer();
     if (!container) return null;
@@ -15167,318 +15194,41 @@ html.pmm-dnd-compat-active #preset-manager-main-panel{user-select:none!important
       .find(button => button.querySelector('.fa-save, .fa-floppy-disk')) || null;
   }
 
-  function restoreCaptureNativeSaveButton(button) {
-    if (!button?.dataset?.pmmSnapshotNativeSaveStashed) return;
-    button.classList.remove('pmm-switch-snapshot-native-save-disabled');
-    delete button.dataset.pmmSnapshotNativeSaveDisabled;
-    button.title = button.dataset.pmmSnapshotNativeSaveOriginalTitle || '保存';
-    button.setAttribute('aria-label', button.title);
-    if (button.dataset.pmmSnapshotNativeSaveOriginalHtml) {
-      button.innerHTML = button.dataset.pmmSnapshotNativeSaveOriginalHtml;
-    }
-    button.disabled = button.dataset.pmmSnapshotNativeSaveOriginalDisabled === 'true';
-    delete button.dataset.pmmSnapshotNativeSaveOriginalTitle;
-    delete button.dataset.pmmSnapshotNativeSaveOriginalHtml;
-    delete button.dataset.pmmSnapshotNativeSaveOriginalDisabled;
-    delete button.dataset.pmmSnapshotNativeSaveStashed;
-  }
-
-  function disableNativeSaveForCapture(button) {
-    if (!button) return;
-    if (!button.dataset.pmmSnapshotNativeSaveStashed) {
-      button.dataset.pmmSnapshotNativeSaveStashed = 'true';
-      button.dataset.pmmSnapshotNativeSaveOriginalTitle = button.title || '保存';
-      button.dataset.pmmSnapshotNativeSaveOriginalHtml = button.innerHTML;
-      button.dataset.pmmSnapshotNativeSaveOriginalDisabled = button.disabled ? 'true' : 'false';
-    }
-    button.classList.add('pmm-switch-snapshot-native-save-disabled');
-    button.dataset.pmmSnapshotNativeSaveDisabled = 'true';
-    button.title = '快照模式下不保存主预设';
-    button.setAttribute('aria-label', button.title);
-    button.disabled = true;
-    const markup = button.dataset.pmmSnapshotNativeSaveOriginalHtml || '<div class="card-icon"><i class="fa-solid fa-save"></i></div>';
-    if (button.innerHTML !== markup) button.innerHTML = markup;
-  }
-
-  function restoreCaptureEditButton(button) {
-    if (!button?.dataset?.pmmSnapshotEditStashed) return;
-    const titleContent = button.closest?.('.title-content') || null;
-    const titleRow = titleContent?.querySelector?.('.title-row') || null;
-    button.classList.remove('pmm-switch-snapshot-capture-save');
-    button.style.removeProperty('--pmm-switch-snapshot-capture-width');
-    delete button.dataset.pmmSnapshotCaptureSave;
-    button.title = button.dataset.pmmSnapshotOriginalTitle || '编辑预设名';
-    button.setAttribute('aria-label', button.title);
-    if (button.dataset.pmmSnapshotOriginalHtml) button.innerHTML = button.dataset.pmmSnapshotOriginalHtml;
-    delete button.dataset.pmmSnapshotOriginalTitle;
-    delete button.dataset.pmmSnapshotOriginalHtml;
-    delete button.dataset.pmmSnapshotEditStashed;
-    if (button.dataset.pmmSnapshotCaptureMoved) {
-      delete button.dataset.pmmSnapshotCaptureMoved;
-      if (titleRow && button.parentElement !== titleRow) titleRow.appendChild(button);
-    }
-  }
-
-  function turnEditIntoCaptureSave(button) {
-    if (!button || button.dataset.pmmSnapshotEditStashed) return;
-    button.dataset.pmmSnapshotEditStashed = 'true';
-    button.dataset.pmmSnapshotOriginalTitle = button.title || '编辑预设名';
-    button.dataset.pmmSnapshotOriginalHtml = button.innerHTML;
-    button.classList.add('pmm-switch-snapshot-capture-save');
-    button.dataset.pmmSnapshotCaptureSave = 'true';
-    button.title = '保存快照';
-    button.setAttribute('aria-label', button.title);
-    button.innerHTML = '<i class="fa-solid fa-floppy-disk"></i>';
-  }
-
-  function moveDesktopCaptureSaveToActions(button, triggerButton, actionsHost) {
-    if (!button || !triggerButton || !actionsHost) return;
-    const desktop = Boolean(TOP.matchMedia?.('(min-width:769px)')?.matches ?? ((TOP.innerWidth || 0) > 768));
-    if (!desktop) return;
-    button.dataset.pmmSnapshotCaptureMoved = 'true';
-    if (button.parentElement === actionsHost && triggerButton.nextElementSibling === button) return;
-    actionsHost.insertBefore(button, triggerButton.nextSibling);
-  }
-
-  function swapCaptureToolbarWidths(editButton, triggerButton) {
-    const session = captureMode;
-    if (!session || !editButton || !triggerButton) return;
-    const desktop = Boolean(TOP.matchMedia?.('(min-width:769px)')?.matches ?? ((TOP.innerWidth || 0) > 768));
-    /* 电脑端两个动作同处第二排，固定成同尺寸图标按钮；
-       不再沿用第一排铅笔／相机的测量宽度，避免取消按钮被压扁。 */
-    if (desktop) {
-      editButton.style.removeProperty('--pmm-switch-snapshot-capture-width');
-      triggerButton.style.removeProperty('--pmm-switch-snapshot-capture-width');
-      return;
-    }
-    session.toolbarButtonWidths ||= {};
-    const saveWidth = Number(session.toolbarButtonWidths.save) || Math.round(editButton.getBoundingClientRect().width);
-    const cancelWidth = Number(session.toolbarButtonWidths.cancel) || Math.round(triggerButton.getBoundingClientRect().width);
-    if (!saveWidth || !cancelWidth) return;
-    session.toolbarButtonWidths.save = saveWidth;
-    session.toolbarButtonWidths.cancel = cancelWidth;
-    // 两个按钮在不同 Flex 容器中，交换真实宽度后各再加一点触控余量。
-    // 保存按钮进入录制后的临时图标会量到偏小值，因此再设一个明确下限。
-    const captureExtraWidth = 6;
-    const captureMinimumWidth = 28;
-    editButton.style.setProperty('--pmm-switch-snapshot-capture-width', `${Math.max(cancelWidth + captureExtraWidth, captureMinimumWidth)}px`);
-    triggerButton.style.setProperty('--pmm-switch-snapshot-capture-width', `${Math.max(saveWidth + captureExtraWidth, captureMinimumWidth)}px`);
-  }
-
-  function mountTrigger() {
-    const actionsHost = normalTitleActions();
-    const host = actionsHost;
-    const titleContent = actionsHost?.closest?.('.title-content') || null;
-    const titleHost = titleContent?.closest?.('.header-left') || null;
-    const desktopHomeContainer = actionsHost?.closest?.('.pm-panel-container') || null;
-    for (const node of DOC?.querySelectorAll?.(`.${HOME_TITLE_CLASS}`) || []) {
-      if (node !== titleContent) node.classList.remove(HOME_TITLE_CLASS, CAPTURE_TITLE_CLASS);
-    }
-    for (const node of DOC?.querySelectorAll?.(`.${DESKTOP_HOME_TITLE_HOST_CLASS}`) || []) {
-      if (node !== titleHost) node.classList.remove(DESKTOP_HOME_TITLE_HOST_CLASS);
-    }
-    for (const node of DOC?.querySelectorAll?.(`.${DESKTOP_HOME_PANEL_CLASS}`) || []) {
-      if (node !== desktopHomeContainer) node.classList.remove(DESKTOP_HOME_PANEL_CLASS);
-    }
-    syncCaptureModeUI();
-    const existing = DOC?.querySelectorAll?.(`.${TRIGGER_CLASS}`) || [];
-    for (const button of existing) {
-      if (button.parentElement !== host) button.remove();
-    }
-    const captureActive = isCaptureMode();
-    const currentEditButton = titleContent?.querySelector?.('[data-pmm-snapshot-edit-stashed], .title-row .title-edit-btn[title="编辑预设名"]') || null;
-    const swappedEdits = DOC?.querySelectorAll?.('[data-pmm-snapshot-edit-stashed]') || [];
-    for (const button of swappedEdits) {
-      if (!captureActive || button !== currentEditButton) restoreCaptureEditButton(button);
-    }
-    const swappedNativeSaves = DOC?.querySelectorAll?.('[data-pmm-snapshot-native-save-stashed]') || [];
-    for (const button of swappedNativeSaves) {
-      if (!captureActive || button !== nativeSaveButton()) restoreCaptureNativeSaveButton(button);
-    }
-    if (!host) return;
-
-    titleContent?.classList.add(HOME_TITLE_CLASS);
-    titleHost?.classList.add(DESKTOP_HOME_TITLE_HOST_CLASS);
-    desktopHomeContainer?.classList.add(DESKTOP_HOME_PANEL_CLASS);
-    let button = host.querySelector(`.${TRIGGER_CLASS}`);
-    if (!button) {
-      button = DOC.createElement('button');
-      button.type = 'button';
-      button.className = `title-action-btn ${TRIGGER_CLASS}`;
-      button.dataset.pmmSnapshotTrigger = 'true';
-      const importButton = actionsHost?.querySelector?.('[title="导入"]');
-      if (host === actionsHost && importButton) host.insertBefore(button, importButton);
-      else host.appendChild(button);
-    }
-    if (button.classList.contains('is-capture-mode') !== captureActive) button.classList.toggle('is-capture-mode', captureActive);
-    if (!captureActive) button.style.removeProperty('--pmm-switch-snapshot-capture-width');
-    titleContent?.classList.toggle(CAPTURE_TITLE_CLASS, captureActive);
-    const nextTitle = captureActive ? '取消快照并恢复进入前开关' : '开关快照';
-    if (button.title !== nextTitle) button.title = nextTitle;
-    if (button.getAttribute('aria-label') !== nextTitle) button.setAttribute('aria-label', nextTitle);
-    const nextMarkup = captureActive
-      ? '<i class="fa-solid fa-xmark"></i>'
-      : '<i class="fa-solid fa-camera"></i><span>快照</span>';
-    if (button.innerHTML !== nextMarkup) button.innerHTML = nextMarkup;
-
-    if (captureActive) {
-      turnEditIntoCaptureSave(currentEditButton);
-      moveDesktopCaptureSaveToActions(currentEditButton, button, actionsHost);
-      swapCaptureToolbarWidths(currentEditButton, button);
-      disableNativeSaveForCapture(nativeSaveButton());
-    }
-  }
-
-  function handleDocumentClick(event) {
-    const disabledNativeSave = event.target?.closest?.('[data-pmm-snapshot-native-save-disabled]');
-    if (disabledNativeSave) {
-      event.preventDefault();
-      event.stopPropagation();
-      event.stopImmediatePropagation?.();
-      return;
-    }
-    const captureSave = event.target?.closest?.('[data-pmm-snapshot-capture-save]');
-    if (captureSave) {
-      event.preventDefault();
-      event.stopPropagation();
-      openCaptureSavePrompt();
-      return;
-    }
-    const trigger = event.target?.closest?.('[data-pmm-snapshot-trigger]');
-    if (!trigger) return;
-    event.preventDefault();
-    event.stopPropagation();
-    if (isCaptureMode()) void exitCaptureMode(true);
-    else openOverlay();
-  }
-
   function installStyle() {
     if (!DOC?.head || DOC.getElementById(STYLE_ID)) return;
     const style = DOC.createElement('style');
     style.id = STYLE_ID;
     style.textContent = `
-      .title-action-btn.${TRIGGER_CLASS}{display:flex!important}.title-edit-btn.pmm-switch-snapshot-capture-save,.title-action-btn.${TRIGGER_CLASS}.is-capture-mode{box-sizing:border-box!important;align-items:center!important;justify-content:center!important;padding:0!important;border:1px solid color-mix(in srgb,#10b981 55%,transparent)!important;border-radius:4px!important;background:color-mix(in srgb,#10b981 15%,transparent)!important;color:#10b981!important;opacity:1!important;box-shadow:none!important}.title-edit-btn.pmm-switch-snapshot-capture-save:hover,.title-action-btn.${TRIGGER_CLASS}.is-capture-mode:hover{background:color-mix(in srgb,#10b981 23%,transparent)!important;color:#10b981!important;opacity:1!important}.title-edit-btn.pmm-switch-snapshot-capture-save i,.title-action-btn.${TRIGGER_CLASS}.is-capture-mode i{color:#10b981!important}.header-right button.pmm-switch-snapshot-native-save-disabled,.header-right button.pmm-switch-snapshot-native-save-disabled:hover{pointer-events:auto!important;cursor:not-allowed!important;opacity:.48!important;filter:none!important;background:rgba(127,127,127,.07)!important;border-color:rgba(148,163,184,.18)!important;box-shadow:none!important;transform:none!important}.header-right button.pmm-switch-snapshot-native-save-disabled::before{display:none!important}.header-right button.pmm-switch-snapshot-native-save-disabled .card-icon{background:rgba(127,127,127,.13)!important;border-color:rgba(148,163,184,.18)!important}.header-right button.pmm-switch-snapshot-native-save-disabled .card-icon i{color:var(--pm-text-secondary,var(--SmartThemeBodyColor,#a1a1aa))!important;opacity:.72!important}#preset-manager-main-panel .pm-panel-container.pmm-switch-snapshot-capture-mode{outline:1px solid color-mix(in srgb,var(--pm-quote-color,var(--SmartThemeQuoteColor,#6b7db2)) 78%,transparent)!important;outline-offset:2px!important;box-shadow:0 0 0 4px color-mix(in srgb,var(--pm-quote-color,var(--SmartThemeQuoteColor,#6b7db2)) 13%,transparent)!important;border-radius:var(--pm-radius-lg,14px)!important}
-      @media (max-width:768px){#preset-manager-main-panel.pmm-mobile-layout-enabled:not(.pmm-layout-custom-preset-width) .pm-panel-container>.pm-main-wrapper .pm-header .title-content.${HOME_TITLE_CLASS} .title-row{flex:0 0 calc(100% - var(--pmm-title-overflow-actions-width) - 22px)!important;width:calc(100% - var(--pmm-title-overflow-actions-width) - 22px)!important;max-width:calc(100% - var(--pmm-title-overflow-actions-width) - 22px)!important}}
-      .header-right button.pmm-switch-snapshot-native-save-disabled,.header-right button.pmm-switch-snapshot-native-save-disabled:hover{position:relative!important;pointer-events:none!important;cursor:default!important;opacity:.3!important;filter:none!important;background:rgba(127,127,127,.04)!important;border-color:rgba(148,163,184,.12)!important;box-shadow:none!important;transform:none!important}.header-right button.pmm-switch-snapshot-native-save-disabled .card-icon{background:rgba(127,127,127,.08)!important;border-color:rgba(148,163,184,.12)!important}.header-right button.pmm-switch-snapshot-native-save-disabled .card-icon i{color:var(--pm-text-secondary,var(--SmartThemeBodyColor,#a1a1aa))!important;opacity:.46!important}
       .pmm-switch-snapshot-overlay{position:fixed!important;inset:0!important;z-index:2147483600!important;display:flex!important;align-items:center!important;justify-content:center!important;padding:18px!important;box-sizing:border-box!important;background:rgba(0,0,0,.48)!important;backdrop-filter:blur(4px)!important;-webkit-backdrop-filter:blur(4px)!important;color:var(--pm-text-primary,var(--SmartThemeBodyColor,#e5e7eb))!important;font-family:inherit!important}
       .pmm-switch-snapshot-dialog{position:relative!important;width:min(520px,100%)!important;max-height:min(680px,calc(100dvh - 36px))!important;display:flex!important;flex-direction:column!important;overflow:hidden!important;border:1px solid var(--pm-border,var(--SmartThemeBorderColor,rgba(148,163,184,.35)))!important;border-radius:16px!important;background:var(--pm-panel-bg,var(--SmartThemeBlurTintColor,#1b1d24))!important;box-shadow:0 20px 64px rgba(0,0,0,.38)!important}
       .pmm-switch-snapshot-head{display:flex!important;align-items:flex-start!important;justify-content:space-between!important;gap:14px!important;padding:16px 18px 13px!important;border-bottom:1px solid var(--pm-border,var(--SmartThemeBorderColor,rgba(148,163,184,.25)))!important}
       .pmm-switch-snapshot-head h2{display:flex!important;align-items:center!important;gap:8px!important;margin:0!important;font-size:15px!important;font-weight:650!important;color:inherit!important}.pmm-switch-snapshot-head h2 i{color:var(--pm-quote-color,var(--SmartThemeQuoteColor,#7c93ce))!important}.pmm-switch-snapshot-head p{margin:5px 0 0!important;font-size:11px!important;opacity:.62!important}
       .pmm-switch-snapshot-close,.pmm-switch-snapshot-more{display:flex!important;align-items:center!important;justify-content:center!important;border:1px solid transparent!important;background:transparent!important;color:inherit!important;cursor:pointer!important;border-radius:7px!important}.pmm-switch-snapshot-close{width:28px!important;height:28px!important;opacity:.65!important}.pmm-switch-snapshot-close:hover,.pmm-switch-snapshot-more:hover{background:rgba(127,127,127,.12)!important;opacity:1!important}
       .pmm-switch-snapshot-first-default{display:flex!important;flex-direction:column!important;align-items:center!important;padding:32px 25px 27px!important;text-align:center!important}.pmm-switch-snapshot-first-default-icon{display:flex!important;align-items:center!important;justify-content:center!important;width:43px!important;height:43px!important;margin-bottom:12px!important;border-radius:13px!important;background:color-mix(in srgb,var(--pm-quote-color,var(--SmartThemeQuoteColor,#6b7db2)) 16%,transparent)!important;color:var(--pm-quote-color,var(--SmartThemeQuoteColor,#6b7db2))!important;font-size:18px!important}.pmm-switch-snapshot-first-default h3{margin:0!important;font-size:15px!important;font-weight:650!important}.pmm-switch-snapshot-first-default>p{max-width:330px!important;margin:9px 0 18px!important;font-size:11px!important;line-height:1.55!important;opacity:.68!important}.pmm-switch-snapshot-first-default-actions{display:flex!important;justify-content:center!important;gap:8px!important;width:100%!important}.pmm-switch-snapshot-first-default-actions button{min-height:34px!important;padding:0 13px!important;border:1px solid var(--pm-border,var(--SmartThemeBorderColor,rgba(148,163,184,.32)))!important;border-radius:8px!important;background:rgba(127,127,127,.08)!important;color:inherit!important;font:inherit!important;font-size:12px!important;cursor:pointer!important}.pmm-switch-snapshot-first-default-actions button:last-child{border-color:color-mix(in srgb,var(--pm-quote-color,var(--SmartThemeQuoteColor,#6b7db2)) 60%,transparent)!important;background:color-mix(in srgb,var(--pm-quote-color,var(--SmartThemeQuoteColor,#6b7db2)) 18%,transparent)!important;font-weight:600!important}.pmm-switch-snapshot-first-default-actions button:last-child i{margin-right:6px!important}
-      .pmm-switch-snapshot-save-capture{padding:21px 18px 18px!important}.pmm-switch-snapshot-save-capture label{display:block!important;margin-bottom:7px!important;font-size:12px!important;font-weight:650!important}.pmm-switch-snapshot-save-capture input{box-sizing:border-box!important;width:100%!important;height:37px!important;padding:0 10px!important;border:1px solid var(--pm-border,var(--SmartThemeBorderColor,rgba(148,163,184,.38)))!important;border-radius:8px!important;background:rgba(127,127,127,.08)!important;color:inherit!important;font:inherit!important;font-size:13px!important;outline:none!important}.pmm-switch-snapshot-save-capture input:focus{border-color:var(--pm-quote-color,var(--SmartThemeQuoteColor,#6b7db2))!important}.pmm-switch-snapshot-save-capture>p{margin:8px 0 14px!important;font-size:10px!important;line-height:1.5!important;opacity:.62!important}.pmm-switch-snapshot-save-capture-actions{display:flex!important;justify-content:flex-end!important;gap:7px!important}.pmm-switch-snapshot-save-capture-actions button{min-height:31px!important;padding:0 11px!important;border:1px solid var(--pm-border,var(--SmartThemeBorderColor,rgba(148,163,184,.32)))!important;border-radius:7px!important;background:rgba(127,127,127,.08)!important;color:inherit!important;font:inherit!important;font-size:11px!important;cursor:pointer!important}.pmm-switch-snapshot-save-capture-actions button:last-child{border-color:color-mix(in srgb,var(--pm-quote-color,var(--SmartThemeQuoteColor,#6b7db2)) 60%,transparent)!important;background:color-mix(in srgb,var(--pm-quote-color,var(--SmartThemeQuoteColor,#6b7db2)) 18%,transparent)!important;font-weight:600!important}.pmm-switch-snapshot-save-capture-actions i{margin-right:5px!important}
       .pmm-switch-snapshot-default{display:flex!important;align-items:center!important;gap:12px!important;padding:12px 18px!important;border-bottom:1px solid var(--pm-border,var(--SmartThemeBorderColor,rgba(148,163,184,.20)))!important}.pmm-switch-snapshot-default.is-saved{background:color-mix(in srgb,var(--pm-quote-color,var(--SmartThemeQuoteColor,#6b7db2)) 7%,transparent)!important}.pmm-switch-snapshot-default.is-empty{background:rgba(127,127,127,.035)!important}.pmm-switch-snapshot-default-copy{min-width:0!important;flex:1 1 auto!important}.pmm-switch-snapshot-default-copy>div{display:flex!important;align-items:center!important;gap:7px!important;font-size:12px!important;font-weight:650!important}.pmm-switch-snapshot-default-copy>div i{color:var(--pm-quote-color,var(--SmartThemeQuoteColor,#6b7db2))!important}.pmm-switch-snapshot-default-copy small{display:block!important;margin-top:4px!important;font-size:10px!important;line-height:1.35!important;opacity:.62!important}.pmm-switch-snapshot-default>button,.pmm-switch-snapshot-default-actions>button:first-child{display:inline-flex!important;align-items:center!important;justify-content:center!important;gap:5px!important;min-height:30px!important;padding:0 9px!important;border:1px solid color-mix(in srgb,var(--pm-quote-color,var(--SmartThemeQuoteColor,#6b7db2)) 60%,transparent)!important;border-radius:7px!important;background:color-mix(in srgb,var(--pm-quote-color,var(--SmartThemeQuoteColor,#6b7db2)) 18%,transparent)!important;color:inherit!important;font:inherit!important;font-size:11px!important;font-weight:600!important;cursor:pointer!important;white-space:nowrap!important}.pmm-switch-snapshot-default>button i,.pmm-switch-snapshot-default-actions>button:first-child i{font-size:10px!important}.pmm-switch-snapshot-default-actions{display:flex!important;align-items:center!important;gap:4px!important;flex:0 0 auto!important}.pmm-switch-snapshot-default-actions>button:not(:first-child){display:inline-flex!important;align-items:center!important;justify-content:center!important;gap:5px!important;min-height:30px!important;padding:0 9px!important;border:1px solid rgba(148,163,184,.28)!important;border-radius:7px!important;background:rgba(127,127,127,.08)!important;color:inherit!important;font:inherit!important;font-size:11px!important;font-weight:600!important;cursor:pointer!important;white-space:nowrap!important;opacity:.78!important}.pmm-switch-snapshot-default-actions>button:not(:first-child) i{font-size:10px!important}.pmm-switch-snapshot-default-actions>button:not(:first-child):hover{background:rgba(127,127,127,.14)!important;opacity:1!important}.pmm-switch-snapshot-default-actions>.pmm-switch-snapshot-reset-all{width:30px!important;padding:0!important;border-color:rgba(239,68,68,.35)!important;color:#ef6b6b!important}.pmm-switch-snapshot-default-actions>.pmm-switch-snapshot-reset-all:hover{background:rgba(239,68,68,.13)!important;border-color:rgba(239,68,68,.55)!important}
       .pmm-switch-snapshot-create{padding:12px 18px!important;border-bottom:1px solid var(--pm-border,var(--SmartThemeBorderColor,rgba(148,163,184,.20)))!important}.pmm-switch-snapshot-create button,.pmm-switch-snapshot-actions>button:first-child{border:1px solid color-mix(in srgb,var(--pm-quote-color,var(--SmartThemeQuoteColor,#6b7db2)) 60%,transparent)!important;background:color-mix(in srgb,var(--pm-quote-color,var(--SmartThemeQuoteColor,#6b7db2)) 18%,transparent)!important;color:inherit!important;cursor:pointer!important;font:inherit!important;border-radius:8px!important}.pmm-switch-snapshot-create button{width:100%!important;min-height:36px!important;font-size:12px!important;font-weight:600!important}.pmm-switch-snapshot-create button i{margin-right:7px!important}
       .pmm-switch-snapshot-list{min-height:80px!important;max-height:420px!important;overflow:auto!important;padding:8px!important}.pmm-switch-snapshot-row{display:flex!important;flex-wrap:wrap!important;align-items:center!important;column-gap:12px!important;row-gap:6px!important;padding:10px!important;border-radius:10px!important}.pmm-switch-snapshot-row:hover{background:rgba(127,127,127,.08)!important}.pmm-switch-snapshot-copy{min-width:0!important;flex:1 1 auto!important}.pmm-switch-snapshot-name{display:flex!important;align-items:center!important;gap:7px!important;min-width:0!important;overflow:hidden!important;text-overflow:ellipsis!important;white-space:nowrap!important;font-size:13px!important;font-weight:600!important}.pmm-switch-snapshot-meta{margin-top:4px!important;font-size:10px!important;opacity:.58!important}.pmm-switch-snapshot-role{display:inline-flex!important;align-items:center!important;gap:4px!important;flex:0 0 auto!important;padding:2px 6px!important;border-radius:999px!important;background:rgba(127,127,127,.11)!important;font-size:9px!important;font-weight:500!important;opacity:.78!important}.pmm-switch-snapshot-role.is-current{color:var(--pm-quote-color,var(--SmartThemeQuoteColor,#7c93ce))!important;opacity:1!important}
       .pmm-switch-snapshot-bindings{display:flex!important;flex:0 0 auto!important;min-width:109px!important;align-items:center!important}.pmm-switch-snapshot-locks{display:flex!important;align-items:center!important;gap:5px!important}.pmm-switch-snapshot-lock{display:inline-flex!important;align-items:center!important;justify-content:center!important;gap:4px!important;min-width:52px!important;height:27px!important;padding:0 7px!important;border:1px solid currentColor!important;border-radius:7px!important;background:rgba(127,127,127,.04)!important;color:var(--pm-text-primary,var(--SmartThemeBodyColor,#e5e7eb))!important;font:inherit!important;font-size:10px!important;font-weight:600!important;cursor:pointer!important;opacity:.76!important}.pmm-switch-snapshot-lock:hover{background:rgba(127,127,127,.1)!important;opacity:1!important}.pmm-switch-snapshot-lock.is-character.is-bound{border-color:#22c55e!important;background:rgba(34,197,94,.22)!important;color:#22c55e!important;box-shadow:inset 0 0 0 1px rgba(34,197,94,.18)!important;opacity:1!important}.pmm-switch-snapshot-lock.is-chat.is-bound{border-color:#eab308!important;background:rgba(234,179,8,.22)!important;color:#eab308!important;box-shadow:inset 0 0 0 1px rgba(234,179,8,.18)!important;opacity:1!important}.pmm-switch-snapshot-lock:disabled{pointer-events:none!important;cursor:default!important;border-color:rgba(148,163,184,.18)!important;background:rgba(127,127,127,.04)!important;color:inherit!important;opacity:.25!important}.pmm-switch-snapshot-character-names{box-sizing:border-box!important;display:flex!important;flex:0 0 100%!important;align-items:flex-start!important;gap:5px!important;min-width:0!important;padding:0 2px!important;color:#22c55e!important;font-size:9px!important;line-height:1.4!important;opacity:.78!important}.pmm-switch-snapshot-character-names i{flex:0 0 auto!important;margin-top:2px!important;font-size:8px!important}.pmm-switch-snapshot-character-names span{min-width:0!important;white-space:normal!important;overflow-wrap:anywhere!important}
-      .pmm-switch-snapshot-actions{display:flex!important;align-items:center!important;gap:3px!important;flex:0 0 auto!important}.pmm-switch-snapshot-actions>button:first-child{min-width:42px!important;height:28px!important;padding:0 8px!important;font-size:11px!important}.pmm-switch-snapshot-more{width:25px!important;height:28px!important;font-size:10px!important;opacity:.58!important}.pmm-switch-snapshot-menu-wrap{position:relative!important}.pmm-switch-snapshot-menu{position:absolute!important;z-index:2!important;top:calc(100% + 4px)!important;right:0!important;display:flex!important;flex-direction:column!important;min-width:156px!important;padding:5px!important;border:1px solid var(--pm-border,var(--SmartThemeBorderColor,rgba(148,163,184,.32)))!important;border-radius:9px!important;background:var(--pm-card-bg,var(--SmartThemeBlurTintColor,#232630))!important;box-shadow:0 10px 24px rgba(0,0,0,.28)!important}.pmm-switch-snapshot-menu--pending{visibility:hidden!important}.pmm-switch-snapshot-menu button{display:flex!important;align-items:center!important;gap:7px!important;min-height:29px!important;padding:0 8px!important;border:0!important;border-radius:6px!important;background:transparent!important;color:inherit!important;text-align:left!important;font:inherit!important;font-size:11px!important;cursor:pointer!important}.pmm-switch-snapshot-menu button:hover{background:rgba(127,127,127,.12)!important}.pmm-switch-snapshot-menu button i{width:11px!important;opacity:.65!important}.pmm-switch-character-picker-layer{position:absolute!important;inset:0!important;z-index:6!important;box-sizing:border-box!important;display:flex!important;align-items:center!important;justify-content:center!important;padding:14px!important}.pmm-switch-character-picker-backdrop{position:absolute!important;inset:0!important;width:100%!important;height:100%!important;border:0!important;background:rgba(0,0,0,.48)!important;backdrop-filter:blur(2px)!important;-webkit-backdrop-filter:blur(2px)!important;cursor:pointer!important}.pmm-switch-character-picker{position:relative!important;z-index:1!important;box-sizing:border-box!important;width:min(390px,100%)!important;max-height:calc(100% - 10px)!important;display:flex!important;flex-direction:column!important;overflow:hidden!important;border:1px solid var(--pm-border,var(--SmartThemeBorderColor,rgba(148,163,184,.38)))!important;border-radius:13px!important;background:var(--pm-card-bg,var(--SmartThemeBlurTintColor,#232630))!important;box-shadow:0 16px 42px rgba(0,0,0,.38)!important}.pmm-switch-character-picker>header{display:flex!important;align-items:flex-start!important;justify-content:space-between!important;gap:12px!important;padding:13px 14px 11px!important;border-bottom:1px solid rgba(148,163,184,.18)!important}.pmm-switch-character-picker>header h3{display:flex!important;align-items:center!important;gap:7px!important;margin:0!important;font-size:13px!important}.pmm-switch-character-picker>header h3 i{color:#22c55e!important}.pmm-switch-character-picker>header small{display:block!important;margin-top:4px!important;font-size:9px!important;opacity:.58!important}.pmm-switch-character-picker>header button{display:flex!important;align-items:center!important;justify-content:center!important;width:25px!important;height:25px!important;border:0!important;border-radius:6px!important;background:transparent!important;color:inherit!important;cursor:pointer!important;opacity:.65!important}.pmm-switch-character-picker-search{box-sizing:border-box!important;display:flex!important;align-items:center!important;gap:7px!important;margin:11px 12px 8px!important;padding:0 9px!important;height:34px!important;border:1px solid rgba(148,163,184,.28)!important;border-radius:8px!important;background:rgba(127,127,127,.07)!important}.pmm-switch-character-picker-search:focus-within{border-color:#22c55e!important}.pmm-switch-character-picker-search i{font-size:10px!important;opacity:.55!important}.pmm-switch-character-picker-search input{min-width:0!important;flex:1 1 auto!important;border:0!important;outline:0!important;background:transparent!important;color:inherit!important;font:inherit!important;font-size:11px!important}.pmm-switch-character-picker-list{min-height:90px!important;overflow:auto!important;padding:0 8px 8px!important}.pmm-switch-character-picker-option{box-sizing:border-box!important;display:flex!important;align-items:center!important;gap:9px!important;width:100%!important;min-height:39px!important;margin:2px 0!important;padding:6px 8px!important;border:1px solid transparent!important;border-radius:8px!important;background:transparent!important;color:inherit!important;text-align:left!important;font:inherit!important;cursor:pointer!important}.pmm-switch-character-picker-option:hover{background:rgba(127,127,127,.09)!important}.pmm-switch-character-picker-option>i{width:14px!important;color:inherit!important;font-size:13px!important;opacity:.5!important}.pmm-switch-character-picker-option>span{display:flex!important;min-width:0!important;flex-direction:column!important;gap:2px!important}.pmm-switch-character-picker-option strong{overflow:hidden!important;text-overflow:ellipsis!important;white-space:nowrap!important;font-size:11px!important;font-weight:600!important}.pmm-switch-character-picker-option small{overflow:hidden!important;text-overflow:ellipsis!important;white-space:nowrap!important;font-size:9px!important;opacity:.5!important}.pmm-switch-character-picker-option.is-selected{border-color:rgba(34,197,94,.3)!important;background:rgba(34,197,94,.09)!important}.pmm-switch-character-picker-option.is-selected>i{color:#22c55e!important;opacity:1!important}.pmm-switch-character-picker-empty{display:flex!important;align-items:center!important;justify-content:center!important;min-height:90px!important;font-size:10px!important;opacity:.58!important}.pmm-switch-character-picker-actions{display:flex!important;align-items:center!important;justify-content:flex-end!important;gap:7px!important;padding:10px 12px!important;border-top:1px solid rgba(148,163,184,.18)!important}.pmm-switch-character-picker-actions>span{margin-right:auto!important;font-size:9px!important;opacity:.58!important}.pmm-switch-character-picker-actions button{height:29px!important;padding:0 10px!important;border:1px solid rgba(148,163,184,.28)!important;border-radius:7px!important;background:rgba(127,127,127,.07)!important;color:inherit!important;font:inherit!important;font-size:10px!important;cursor:pointer!important}.pmm-switch-character-picker-actions button:last-child{border-color:rgba(34,197,94,.45)!important;background:rgba(34,197,94,.15)!important;font-weight:600!important}.pmm-switch-character-picker-actions button i{margin-right:4px!important}.pmm-switch-snapshot-composer{padding:13px 18px!important;border-bottom:1px solid var(--pm-border,var(--SmartThemeBorderColor,rgba(148,163,184,.20)))!important}.pmm-switch-snapshot-composer label{display:block!important;margin-bottom:7px!important;font-size:11px!important;font-weight:600!important}.pmm-switch-snapshot-composer input{box-sizing:border-box!important;width:100%!important;height:35px!important;padding:0 10px!important;border:1px solid var(--pm-border,var(--SmartThemeBorderColor,rgba(148,163,184,.38)))!important;border-radius:8px!important;background:rgba(127,127,127,.08)!important;color:inherit!important;font:inherit!important;font-size:12px!important;outline:none!important}.pmm-switch-snapshot-composer input:focus{border-color:var(--pm-quote-color,var(--SmartThemeQuoteColor,#6b7db2))!important}.pmm-switch-snapshot-composer p{margin:7px 0 10px!important;font-size:10px!important;opacity:.6!important}.pmm-switch-snapshot-composer-actions{display:flex!important;justify-content:flex-end!important;gap:7px!important}.pmm-switch-snapshot-composer-actions button{min-height:30px!important;padding:0 11px!important;border:1px solid var(--pm-border,var(--SmartThemeBorderColor,rgba(148,163,184,.32)))!important;border-radius:7px!important;background:rgba(127,127,127,.08)!important;color:inherit!important;font:inherit!important;font-size:11px!important;cursor:pointer!important}.pmm-switch-snapshot-composer-actions button:last-child{border-color:color-mix(in srgb,var(--pm-quote-color,var(--SmartThemeQuoteColor,#6b7db2)) 60%,transparent)!important;background:color-mix(in srgb,var(--pm-quote-color,var(--SmartThemeQuoteColor,#6b7db2)) 18%,transparent)!important}.pmm-switch-snapshot-composer-actions i{margin-right:5px!important}.pmm-switch-snapshot-empty{min-height:150px!important;display:flex!important;flex-direction:column!important;align-items:center!important;justify-content:center!important;gap:8px!important;text-align:center!important;font-size:12px!important;opacity:.72!important}.pmm-switch-snapshot-empty i{font-size:22px!important;opacity:.55!important}.pmm-switch-snapshot-empty small{max-width:250px!important;font-size:10px!important;line-height:1.5!important;opacity:.72!important}.pmm-switch-snapshot-dialog footer{padding:11px 18px!important;border-top:1px solid var(--pm-border,var(--SmartThemeBorderColor,rgba(148,163,184,.20)))!important;font-size:10px!important;line-height:1.45!important;opacity:.55!important}
+      .pmm-switch-snapshot-actions{display:flex!important;align-items:center!important;gap:3px!important;flex:0 0 auto!important}.pmm-switch-snapshot-actions>button:first-child{min-width:42px!important;height:28px!important;padding:0 8px!important;font-size:11px!important}.pmm-switch-snapshot-more{width:25px!important;height:28px!important;font-size:10px!important;opacity:.58!important}.pmm-switch-snapshot-menu-wrap{position:relative!important}.pmm-switch-snapshot-menu{position:absolute!important;z-index:2!important;top:calc(100% + 4px)!important;right:0!important;display:flex!important;flex-direction:column!important;min-width:156px!important;padding:5px!important;border:1px solid var(--pm-border,var(--SmartThemeBorderColor,rgba(148,163,184,.32)))!important;border-radius:9px!important;background:var(--pm-card-bg,var(--SmartThemeBlurTintColor,#232630))!important;box-shadow:0 10px 24px rgba(0,0,0,.28)!important}.pmm-switch-snapshot-menu--pending{visibility:hidden!important}.pmm-switch-snapshot-menu button{display:flex!important;align-items:center!important;gap:7px!important;min-height:29px!important;padding:0 8px!important;border:0!important;border-radius:6px!important;background:transparent!important;color:inherit!important;text-align:left!important;font:inherit!important;font-size:11px!important;cursor:pointer!important}.pmm-switch-snapshot-menu button:hover{background:rgba(127,127,127,.12)!important}.pmm-switch-snapshot-menu button i{width:11px!important;opacity:.65!important}.pmm-switch-character-picker-layer{position:absolute!important;inset:0!important;z-index:6!important;box-sizing:border-box!important;display:flex!important;align-items:center!important;justify-content:center!important;padding:14px!important}.pmm-switch-character-picker-backdrop{position:absolute!important;inset:0!important;width:100%!important;height:100%!important;border:0!important;background:rgba(0,0,0,.48)!important;backdrop-filter:blur(2px)!important;-webkit-backdrop-filter:blur(2px)!important;cursor:pointer!important}.pmm-switch-character-picker{position:relative!important;z-index:1!important;box-sizing:border-box!important;width:min(390px,100%)!important;max-height:calc(100% - 10px)!important;display:flex!important;flex-direction:column!important;overflow:hidden!important;border:1px solid var(--pm-border,var(--SmartThemeBorderColor,rgba(148,163,184,.38)))!important;border-radius:13px!important;background:var(--pm-card-bg,var(--SmartThemeBlurTintColor,#232630))!important;box-shadow:0 16px 42px rgba(0,0,0,.38)!important}.pmm-switch-character-picker>header{display:flex!important;align-items:flex-start!important;justify-content:space-between!important;gap:12px!important;padding:13px 14px 11px!important;border-bottom:1px solid rgba(148,163,184,.18)!important}.pmm-switch-character-picker>header h3{display:flex!important;align-items:center!important;gap:7px!important;margin:0!important;font-size:13px!important}.pmm-switch-character-picker>header h3 i{color:#22c55e!important}.pmm-switch-character-picker>header small{display:block!important;margin-top:4px!important;font-size:9px!important;opacity:.58!important}.pmm-switch-character-picker>header button{display:flex!important;align-items:center!important;justify-content:center!important;width:25px!important;height:25px!important;border:0!important;border-radius:6px!important;background:transparent!important;color:inherit!important;cursor:pointer!important;opacity:.65!important}.pmm-switch-character-picker-search{box-sizing:border-box!important;display:flex!important;align-items:center!important;gap:7px!important;margin:11px 12px 8px!important;padding:0 9px!important;height:34px!important;border:1px solid rgba(148,163,184,.28)!important;border-radius:8px!important;background:rgba(127,127,127,.07)!important}.pmm-switch-character-picker-search:focus-within{border-color:#22c55e!important}.pmm-switch-character-picker-search i{font-size:10px!important;opacity:.55!important}.pmm-switch-character-picker-search input{min-width:0!important;flex:1 1 auto!important;border:0!important;outline:0!important;background:transparent!important;color:inherit!important;font:inherit!important;font-size:11px!important}.pmm-switch-character-picker-list{min-height:90px!important;overflow:auto!important;padding:0 8px 8px!important}.pmm-switch-character-picker-option{box-sizing:border-box!important;display:flex!important;align-items:center!important;gap:9px!important;width:100%!important;min-height:39px!important;margin:2px 0!important;padding:6px 8px!important;border:1px solid transparent!important;border-radius:8px!important;background:transparent!important;color:inherit!important;text-align:left!important;font:inherit!important;cursor:pointer!important}.pmm-switch-character-picker-option:hover{background:rgba(127,127,127,.09)!important}.pmm-switch-character-picker-option>i{width:14px!important;color:inherit!important;font-size:13px!important;opacity:.5!important}.pmm-switch-character-picker-option>span{display:flex!important;min-width:0!important;flex-direction:column!important;gap:2px!important}.pmm-switch-character-picker-option strong{overflow:hidden!important;text-overflow:ellipsis!important;white-space:nowrap!important;font-size:11px!important;font-weight:600!important}.pmm-switch-character-picker-option small{overflow:hidden!important;text-overflow:ellipsis!important;white-space:nowrap!important;font-size:9px!important;opacity:.5!important}.pmm-switch-character-picker-option.is-selected{border-color:rgba(34,197,94,.3)!important;background:rgba(34,197,94,.09)!important}.pmm-switch-character-picker-option.is-selected>i{color:#22c55e!important;opacity:1!important}.pmm-switch-character-picker-empty{display:flex!important;align-items:center!important;justify-content:center!important;min-height:90px!important;font-size:10px!important;opacity:.58!important}.pmm-switch-character-picker-actions{display:flex!important;align-items:center!important;justify-content:flex-end!important;gap:7px!important;padding:10px 12px!important;border-top:1px solid rgba(148,163,184,.18)!important}.pmm-switch-character-picker-actions>span{margin-right:auto!important;font-size:9px!important;opacity:.58!important}.pmm-switch-character-picker-actions button{height:29px!important;padding:0 10px!important;border:1px solid rgba(148,163,184,.28)!important;border-radius:7px!important;background:rgba(127,127,127,.07)!important;color:inherit!important;font:inherit!important;font-size:10px!important;cursor:pointer!important}.pmm-switch-character-picker-actions button:last-child{border-color:rgba(34,197,94,.45)!important;background:rgba(34,197,94,.15)!important;font-weight:600!important}.pmm-switch-character-picker-actions button i{margin-right:4px!important}.pmm-switch-snapshot-empty{min-height:150px!important;display:flex!important;flex-direction:column!important;align-items:center!important;justify-content:center!important;gap:8px!important;text-align:center!important;font-size:12px!important;opacity:.72!important}.pmm-switch-snapshot-empty i{font-size:22px!important;opacity:.55!important}.pmm-switch-snapshot-empty small{max-width:250px!important;font-size:10px!important;line-height:1.5!important;opacity:.72!important}.pmm-switch-snapshot-dialog footer{padding:11px 18px!important;border-top:1px solid var(--pm-border,var(--SmartThemeBorderColor,rgba(148,163,184,.20)))!important;font-size:10px!important;line-height:1.45!important;opacity:.55!important}
       .pmm-switch-character-picker-actions{flex-wrap:wrap!important}.pmm-switch-snapshot-menu .pmm-switch-snapshot-clear-characters:not(:disabled){color:#ef6b6b!important}.pmm-switch-snapshot-menu .pmm-switch-snapshot-clear-characters:disabled{pointer-events:none!important;background:transparent!important;color:inherit!important;opacity:.25!important}
       .pmm-switch-snapshot-row.is-active{background:color-mix(in srgb,var(--pm-quote-color,var(--SmartThemeQuoteColor,#6b7db2)) 7%,transparent)!important}.pmm-switch-snapshot-actions>button.is-current:disabled,.pmm-switch-snapshot-default-actions>button:disabled{cursor:default!important;pointer-events:none!important;border-color:rgba(148,163,184,.20)!important;background:rgba(127,127,127,.07)!important;color:inherit!important;opacity:.48!important}
-      @media (max-width:768px){.pmm-switch-snapshot-overlay{align-items:flex-end!important;padding:8px!important}.pmm-switch-snapshot-dialog{max-height:min(650px,calc(100dvh - 16px))!important;border-radius:17px!important}.pmm-switch-snapshot-head{padding:15px 15px 12px!important}#preset-manager-main-panel .pm-panel-container.pmm-switch-snapshot-capture-mode{outline-offset:1px!important}.pmm-switch-snapshot-first-default{padding:29px 20px 24px!important}.pmm-switch-snapshot-save-capture{padding:19px 15px 15px!important}.pmm-switch-snapshot-overlay.pmm-switch-snapshot-ios .pmm-switch-snapshot-save-capture input{font-size:16px!important}.pmm-switch-snapshot-default{padding:10px 15px!important;gap:8px!important}.pmm-switch-snapshot-default>button,.pmm-switch-snapshot-default-actions>button:first-child{padding:0 8px!important}.pmm-switch-snapshot-create{padding:10px 15px!important}.pmm-switch-snapshot-list{max-height:390px!important;padding:6px!important}.pmm-switch-snapshot-row{padding:10px 8px!important;column-gap:7px!important;row-gap:5px!important}.pmm-switch-snapshot-copy{flex-basis:115px!important}.pmm-switch-snapshot-bindings{min-width:103px!important}.pmm-switch-snapshot-lock{min-width:49px!important;padding:0 5px!important}.pmm-switch-snapshot-actions{gap:1px!important}.pmm-switch-snapshot-more{width:23px!important}.pmm-switch-character-picker-layer{padding:10px!important}.pmm-switch-character-picker{max-height:calc(100% - 4px)!important}.pmm-switch-snapshot-dialog footer{padding:10px 15px!important}}
     `;
     style.textContent += `@media (max-width:768px){.pmm-switch-snapshot-overlay{--pmm-switch-snapshot-safe-top:max(8px,env(safe-area-inset-top,0px));--pmm-switch-snapshot-safe-right:max(8px,env(safe-area-inset-right,0px));--pmm-switch-snapshot-safe-bottom:max(8px,env(safe-area-inset-bottom,0px));--pmm-switch-snapshot-safe-left:max(8px,env(safe-area-inset-left,0px));padding:var(--pmm-switch-snapshot-safe-top) var(--pmm-switch-snapshot-safe-right) var(--pmm-switch-snapshot-safe-bottom) var(--pmm-switch-snapshot-safe-left)!important}.pmm-switch-snapshot-dialog{max-height:min(650px,calc(var(--pmm-switch-snapshot-visible-height,100dvh) - var(--pmm-switch-snapshot-safe-top) - var(--pmm-switch-snapshot-safe-bottom)))!important}}`;
-    // 快照录制的整框沿用保存与取消按钮的绿色，避免和普通边框混在一起。
-    style.textContent += `.title-edit-btn.pmm-switch-snapshot-capture-save,.title-action-btn.${TRIGGER_CLASS}.is-capture-mode{width:var(--pmm-switch-snapshot-capture-width,auto)!important;min-width:var(--pmm-switch-snapshot-capture-width,auto)!important;max-width:var(--pmm-switch-snapshot-capture-width,none)!important;flex:0 0 var(--pmm-switch-snapshot-capture-width,auto)!important}#preset-manager-main-panel .pm-header .title-row>.title-edit-btn.pmm-switch-snapshot-capture-save{width:var(--pmm-switch-snapshot-capture-width,auto)!important;min-width:var(--pmm-switch-snapshot-capture-width,auto)!important;max-width:var(--pmm-switch-snapshot-capture-width,none)!important;flex:0 0 var(--pmm-switch-snapshot-capture-width,auto)!important}.title-content.${CAPTURE_TITLE_CLASS}{gap:7px!important}.title-content.${CAPTURE_TITLE_CLASS} [title="导入"],.title-content.${CAPTURE_TITLE_CLASS} [title="导出"]{display:none!important}#preset-manager-main-panel .pm-panel-container.pmm-switch-snapshot-capture-mode .pmm-preset-search-btn,#preset-manager-main-panel .pm-panel-container.pmm-switch-snapshot-capture-mode .side-panel-root{display:none!important}#preset-manager-main-panel .pm-panel-container.pmm-switch-snapshot-capture-mode{outline:1px solid color-mix(in srgb,#10b981 78%,transparent)!important;outline-offset:2px!important;box-shadow:0 0 0 4px color-mix(in srgb,#10b981 13%,transparent)!important,0 0 18px color-mix(in srgb,#10b981 12%,transparent)!important;border-radius:var(--pm-radius-lg,14px)!important}@media (max-width:768px){#preset-manager-main-panel .pm-panel-container.pmm-switch-snapshot-capture-mode{outline-offset:1px!important}#preset-manager-main-panel.pmm-mobile-layout-enabled:not(.pmm-layout-custom-preset-width) .pm-panel-container>.pm-main-wrapper .pm-header .title-content.${CAPTURE_TITLE_CLASS} .title-row{flex:0 0 calc(100% - var(--pmm-title-overflow-actions-width) - 36px)!important;width:calc(100% - var(--pmm-title-overflow-actions-width) - 36px)!important;max-width:calc(100% - var(--pmm-title-overflow-actions-width) - 36px)!important}}`;
-    style.textContent += `@media (min-width:769px){#preset-manager-main-panel .pm-panel-container.${DESKTOP_HOME_PANEL_CLASS}>.pm-main-wrapper{flex:0 0 620px!important;width:620px!important;min-width:620px!important;max-width:620px!important}#preset-manager-main-panel .pm-panel-container.${DESKTOP_HOME_PANEL_CLASS}>.pm-main-wrapper>.preset-panel{width:100%!important;min-width:0!important;max-width:100%!important}#preset-manager-main-panel .pm-panel-container>.pm-main-wrapper .pm-header .header-left.${DESKTOP_HOME_TITLE_HOST_CLASS}{flex:0 0 208px!important;width:208px!important;min-width:208px!important;max-width:208px!important}#preset-manager-main-panel .pm-panel-container>.pm-main-wrapper .pm-header .header-left.${DESKTOP_HOME_TITLE_HOST_CLASS} .title-card{width:100%!important;min-width:0!important;max-width:100%!important}#preset-manager-main-panel .pm-panel-container>.pm-main-wrapper .pm-header .title-content.${HOME_TITLE_CLASS}{min-width:0!important;width:100%!important;max-width:100%!important}#preset-manager-main-panel .pm-panel-container>.pm-main-wrapper .pm-header .title-content.${HOME_TITLE_CLASS}>.title-actions{margin-left:-30px!important;gap:6px!important}#preset-manager-main-panel .pm-panel-container>.pm-main-wrapper .pm-header .title-content.${HOME_TITLE_CLASS}>.title-actions>.title-action-btn{flex:0 0 auto!important;white-space:nowrap!important}#preset-manager-main-panel .pm-panel-container>.pm-main-wrapper .pm-header .title-content.${HOME_TITLE_CLASS}>.title-row>.title-edit-btn{display:flex!important;visibility:visible!important;flex:0 0 20px!important;width:20px!important;min-width:20px!important}.title-content.${CAPTURE_TITLE_CLASS} .title-actions>[title="保存开关"],.title-content.${CAPTURE_TITLE_CLASS} .title-actions>[title^="同步开关"]{display:none!important}.title-content.${CAPTURE_TITLE_CLASS} .title-actions>.title-edit-btn.pmm-switch-snapshot-capture-save{display:flex!important}}`;
-    style.textContent += `@media (min-width:769px){/* 快照录制的取消与保存均放在标题卡片第二排中央，避免 Tauri 将取消按钮压成细条。 */#preset-manager-main-panel .pm-header .title-content.${CAPTURE_TITLE_CLASS}>.title-actions{display:flex!important;align-items:center!important;justify-content:center!important;width:100%!important;margin-left:0!important;gap:7px!important}#preset-manager-main-panel .pm-header .title-content.${CAPTURE_TITLE_CLASS}>.title-actions>.title-action-btn.${TRIGGER_CLASS}.is-capture-mode,#preset-manager-main-panel .pm-header .title-content.${CAPTURE_TITLE_CLASS}>.title-actions>.title-edit-btn.pmm-switch-snapshot-capture-save{display:flex!important;align-items:center!important;justify-content:center!important;box-sizing:border-box!important;flex:0 0 28px!important;width:28px!important;min-width:28px!important;max-width:28px!important;height:24px!important;min-height:24px!important;margin:0!important;padding:0!important;line-height:1!important}}`;
     style.textContent += `.pmm-switch-snapshot-dialog footer.pmm-switch-snapshot-footer{display:grid!important;gap:5px!important}.pmm-switch-snapshot-dialog footer.pmm-switch-snapshot-footer>span{display:block!important}.pmm-switch-snapshot-dialog footer.pmm-switch-snapshot-footer>span:first-child{font-weight:500!important;opacity:.82!important}.pmm-switch-snapshot-dialog footer.pmm-switch-snapshot-footer>span:last-child{font-size:9px!important;line-height:1.55!important;opacity:.78!important}`;
-    // 快照录制不再复制开关：仅让柏宝箱原生的“分组供电”按钮常驻，铅笔等编辑动作仍按原行为在点选后显示。
-    style.textContent += `.pmm-switch-snapshot-capture-mode .prompt-card__actions,.pmm-switch-snapshot-capture-mode .prompt-card__favorite-icon,.pmm-switch-snapshot-capture-mode .prompt-item__actions,.pmm-switch-snapshot-capture-mode .category-header__actions{display:none!important}.pmm-switch-snapshot-capture-mode .prompt-card{pointer-events:none!important;cursor:default!important}.pmm-switch-snapshot-capture-mode .prompt-card .prompt-card__toggle{pointer-events:auto!important}.pmm-switch-snapshot-capture-mode .inline-editor-container{display:none!important}.pmm-switch-snapshot-capture-mode .section-header__actions{display:none!important}.pmm-switch-snapshot-capture-mode .section-group[data-section-id^="baibai_"]>.section-header .section-header__actions{display:flex!important;align-items:center!important;margin-left:auto!important;opacity:1!important;visibility:visible!important;pointer-events:auto!important}.pmm-switch-snapshot-capture-mode .section-group[data-section-id^="baibai_"]>.section-header .section-header__actions>button.section-action{display:none!important}.pmm-switch-snapshot-capture-mode .section-group[data-section-id^="baibai_"]>.section-header .section-header__actions>button.section-action[title^="关闭分组供电"],.pmm-switch-snapshot-capture-mode .section-group[data-section-id^="baibai_"]>.section-header .section-header__actions>button.section-action[title^="恢复分组供电"]{display:flex!important;align-items:center!important;justify-content:center!important;opacity:1!important;visibility:visible!important;pointer-events:auto!important}`;
-    // Vue 在条目变脏时会重写保存按钮的 class；用不会被它覆盖的 data 标记锁定暗色，避免原生保存瞬间重新变绿。
-    style.textContent += `.header-right button[data-pmm-snapshot-native-save-disabled],.header-right button[data-pmm-snapshot-native-save-disabled]:hover{position:relative!important;pointer-events:none!important;cursor:default!important;opacity:.3!important;filter:none!important;background:rgba(127,127,127,.04)!important;border-color:rgba(148,163,184,.12)!important;box-shadow:none!important;transform:none!important}.header-right button[data-pmm-snapshot-native-save-disabled]::before{display:none!important}.header-right button[data-pmm-snapshot-native-save-disabled] .card-icon{background:rgba(127,127,127,.08)!important;border-color:rgba(148,163,184,.12)!important}.header-right button[data-pmm-snapshot-native-save-disabled] .card-icon i{color:var(--pm-text-secondary,var(--SmartThemeBodyColor,#a1a1aa))!important;opacity:.46!important}`;
+    style.textContent += `
+      .pmm-switch-editor-overlay{position:fixed!important;inset:0!important;z-index:2147483640!important;box-sizing:border-box!important;display:flex!important;align-items:center!important;justify-content:center!important;padding:max(12px,env(safe-area-inset-top,0px)) max(12px,env(safe-area-inset-right,0px)) max(12px,env(safe-area-inset-bottom,0px)) max(12px,env(safe-area-inset-left,0px))!important;background:rgba(0,0,0,.5)!important;backdrop-filter:blur(5px)!important;-webkit-backdrop-filter:blur(5px)!important;color:var(--pm-text-primary,var(--SmartThemeBodyColor,#e5e7eb))!important;font-family:inherit!important;pointer-events:auto!important}
+      .pmm-switch-editor-dialog{position:relative!important;box-sizing:border-box!important;width:min(680px,100%)!important;height:min(760px,calc(100dvh - 24px))!important;max-height:calc(var(--pmm-switch-editor-visible-height,100dvh) - 24px)!important;display:flex!important;flex-direction:column!important;overflow:hidden!important;border:1px solid var(--pm-border,var(--SmartThemeBorderColor,rgba(148,163,184,.35)))!important;border-radius:17px!important;background:var(--pm-panel-bg,var(--SmartThemeBlurTintColor,#1b1d24))!important;box-shadow:0 22px 70px rgba(0,0,0,.42)!important}
+      .pmm-switch-editor-head{display:flex!important;align-items:flex-start!important;justify-content:space-between!important;gap:14px!important;flex:0 0 auto!important;padding:15px 17px 12px!important;border-bottom:1px solid var(--pm-border,var(--SmartThemeBorderColor,rgba(148,163,184,.23)))!important}.pmm-switch-editor-head h2{display:flex!important;align-items:center!important;gap:8px!important;margin:0!important;font-size:16px!important;font-weight:650!important}.pmm-switch-editor-head h2 i{color:var(--pm-quote-color,var(--SmartThemeQuoteColor,#7c93ce))!important}.pmm-switch-editor-head p{max-width:520px!important;margin:5px 0 0!important;overflow:hidden!important;text-overflow:ellipsis!important;white-space:nowrap!important;font-size:11px!important;opacity:.62!important}.pmm-switch-editor-head>button{display:flex!important;align-items:center!important;justify-content:center!important;width:31px!important;height:31px!important;flex:0 0 auto!important;border:0!important;border-radius:8px!important;background:transparent!important;color:inherit!important;font:inherit!important;cursor:pointer!important;opacity:.68!important}.pmm-switch-editor-head>button:hover{background:rgba(127,127,127,.12)!important;opacity:1!important}
+      .pmm-switch-editor-name{box-sizing:border-box!important;display:grid!important;grid-template-columns:auto minmax(0,1fr)!important;align-items:center!important;gap:10px!important;flex:0 0 auto!important;padding:11px 17px 8px!important}.pmm-switch-editor-name label{font-size:12px!important;font-weight:600!important}.pmm-switch-editor-name input{box-sizing:border-box!important;width:100%!important;height:34px!important;min-width:0!important;padding:0 10px!important;border:1px solid var(--pm-border,var(--SmartThemeBorderColor,rgba(148,163,184,.36)))!important;border-radius:8px!important;outline:0!important;background:rgba(127,127,127,.07)!important;color:inherit!important;font:inherit!important;font-size:16px!important}.pmm-switch-editor-name input:focus{border-color:var(--pm-quote-color,var(--SmartThemeQuoteColor,#7c93ce))!important}
+      .pmm-switch-editor-summary{display:flex!important;align-items:center!important;justify-content:space-between!important;gap:12px!important;flex:0 0 auto!important;padding:0 17px 9px!important;font-size:10px!important;line-height:1.45!important;opacity:.65!important}.pmm-switch-editor-summary small{min-width:0!important;text-align:right!important;font:inherit!important}
+      .pmm-switch-editor-list{min-height:0!important;flex:1 1 auto!important;overflow:auto!important;overscroll-behavior:contain!important;padding:4px 12px 10px!important;-webkit-overflow-scrolling:touch!important}
+      .pmm-switch-editor-group{margin:7px 0!important;overflow:hidden!important;border:1px solid var(--pm-border,var(--SmartThemeBorderColor,rgba(148,163,184,.27)))!important;border-radius:11px!important;background:rgba(127,127,127,.035)!important}.pmm-switch-editor-group-head{display:flex!important;align-items:center!important;gap:7px!important;min-height:47px!important;padding:0 9px 0 5px!important}.pmm-switch-editor-expand{display:flex!important;align-items:center!important;justify-content:center!important;width:34px!important;height:40px!important;flex:0 0 auto!important;border:0!important;background:transparent!important;color:inherit!important;cursor:pointer!important;opacity:.68!important}.pmm-switch-editor-expand i{font-size:10px!important}.pmm-switch-editor-group-icon{width:15px!important;flex:0 0 auto!important;color:var(--pm-quote-color,var(--SmartThemeQuoteColor,#7c93ce))!important;font-size:12px!important;opacity:.8!important}.pmm-switch-editor-group-head strong{min-width:0!important;flex:1 1 auto!important;overflow:hidden!important;text-overflow:ellipsis!important;white-space:nowrap!important;font-size:12px!important;font-weight:650!important}.pmm-switch-editor-group-head small{flex:0 0 auto!important;font-size:10px!important;opacity:.58!important}
+      .pmm-switch-editor-switch{position:relative!important;width:44px!important;height:36px!important;flex:0 0 auto!important;border:0!important;border-radius:999px!important;background:transparent!important;color:inherit!important;cursor:pointer!important}.pmm-switch-editor-switch::before{content:''!important;position:absolute!important;left:5px!important;top:8px!important;width:34px!important;height:20px!important;border:1px solid var(--pm-border,var(--SmartThemeBorderColor,rgba(148,163,184,.42)))!important;border-radius:999px!important;background:rgba(127,127,127,.16)!important;box-sizing:border-box!important;transition:background .16s ease,border-color .16s ease!important}.pmm-switch-editor-switch>span{position:absolute!important;left:8px!important;top:11px!important;width:14px!important;height:14px!important;border-radius:50%!important;background:currentColor!important;opacity:.72!important;transition:transform .16s ease,opacity .16s ease!important}.pmm-switch-editor-switch.is-on::before{border-color:color-mix(in srgb,var(--pm-quote-color,var(--SmartThemeQuoteColor,#7c93ce)) 75%,transparent)!important;background:color-mix(in srgb,var(--pm-quote-color,var(--SmartThemeQuoteColor,#7c93ce)) 55%,transparent)!important}.pmm-switch-editor-switch.is-on>span{transform:translateX(14px)!important;opacity:1!important}
+      .pmm-switch-editor-entries{border-top:1px solid rgba(148,163,184,.16)!important;background:rgba(0,0,0,.035)!important}.pmm-switch-editor-prompt{display:flex!important;align-items:center!important;gap:10px!important;min-height:43px!important;padding:0 8px 0 16px!important;border-bottom:1px solid rgba(148,163,184,.13)!important;content-visibility:auto!important;contain-intrinsic-size:auto 43px!important}.pmm-switch-editor-prompt:last-child{border-bottom:0!important}.pmm-switch-editor-prompt>span{min-width:0!important;flex:1 1 auto!important;overflow:hidden!important;text-overflow:ellipsis!important;white-space:nowrap!important;font-size:12px!important}.pmm-switch-editor-group-empty{padding:18px!important;text-align:center!important;font-size:11px!important;opacity:.55!important}
+      .pmm-switch-editor-dialog>footer{display:flex!important;align-items:center!important;justify-content:flex-end!important;gap:8px!important;flex:0 0 auto!important;padding:10px 14px max(10px,env(safe-area-inset-bottom,0px))!important;border-top:1px solid var(--pm-border,var(--SmartThemeBorderColor,rgba(148,163,184,.23)))!important}.pmm-switch-editor-dialog>footer button{min-height:34px!important;padding:0 13px!important;border:1px solid var(--pm-border,var(--SmartThemeBorderColor,rgba(148,163,184,.32)))!important;border-radius:8px!important;background:rgba(127,127,127,.07)!important;color:inherit!important;font:inherit!important;font-size:12px!important;cursor:pointer!important}.pmm-switch-editor-dialog>footer button:last-child{border-color:color-mix(in srgb,var(--pm-quote-color,var(--SmartThemeQuoteColor,#7c93ce)) 60%,transparent)!important;background:color-mix(in srgb,var(--pm-quote-color,var(--SmartThemeQuoteColor,#7c93ce)) 18%,transparent)!important;font-weight:650!important}.pmm-switch-editor-dialog>footer button i{margin-right:6px!important}
+      @media(max-width:768px){.pmm-switch-editor-overlay{align-items:flex-end!important;padding:max(8px,env(safe-area-inset-top,0px)) max(8px,env(safe-area-inset-right,0px)) 0 max(8px,env(safe-area-inset-left,0px))!important}.pmm-switch-editor-dialog{width:100%!important;height:min(760px,calc(var(--pmm-switch-editor-visible-height,100dvh) - max(8px,env(safe-area-inset-top,0px))))!important;max-height:calc(var(--pmm-switch-editor-visible-height,100dvh) - max(8px,env(safe-area-inset-top,0px)))!important;border-radius:17px 17px 0 0!important}.pmm-switch-editor-name{grid-template-columns:1fr!important;gap:6px!important;padding-top:9px!important}.pmm-switch-editor-summary{align-items:flex-start!important;flex-direction:column!important;gap:2px!important}.pmm-switch-editor-summary small{text-align:left!important}}
+    `;
     DOC.head.appendChild(style);
-  }
-
-  function scheduleMount() {
-    if (scheduled) return;
-    const request = TOP.requestAnimationFrame || SELF.requestAnimationFrame || (fn => TOP.setTimeout(fn, 16));
-    scheduled = request(() => { scheduled = 0; mountTrigger(); });
-  }
-
-  function workshopPanel() {
-    for (const currentDocument of workshopDocuments()) {
-      const panel = currentDocument?.querySelector?.('#preset-manager-main-panel');
-      if (panel) return panel;
-    }
-    return null;
-  }
-
-  function panelInsideNode(node) {
-    if (!node || (node.nodeType !== 1 && node.nodeType !== 11)) return null;
-    if (node.nodeType === 1 && node.matches?.('#preset-manager-main-panel')) return node;
-    return node.querySelector?.('#preset-manager-main-panel') || null;
-  }
-
-  function disconnectWorkshopObservers() {
-    discoveryObserver?.disconnect();
-    panelObserver?.disconnect();
-    panelParentObserver?.disconnect();
-    discoveryObserver = null;
-    panelObserver = null;
-    panelParentObserver = null;
-    observedPanel = null;
-    observedPanelParent = null;
-  }
-
-  function startWorkshopDiscovery() {
-    if (discoveryObserver || observedPanel?.isConnected) return;
-    const roots = workshopDocuments()
-      .map(currentDocument => currentDocument?.documentElement)
-      .filter(Boolean);
-    if (!roots.length || typeof TOP.MutationObserver !== 'function') return;
-    discoveryObserver = new TOP.MutationObserver(records => {
-      let panel = null;
-      for (const record of records) {
-        for (const node of record.addedNodes || []) {
-          panel = panelInsideNode(node);
-          if (panel) break;
-        }
-        if (panel) break;
-      }
-      if (panel) observeWorkshopPanel(panel);
-    });
-    // 工坊尚未出现时只做节点命中过滤，不再因聊天区的每次变化重扫整页。
-    let observing = false;
-    for (const root of roots) {
-      try {
-        discoveryObserver.observe(root, { childList: true, subtree: true });
-        observing = true;
-      } catch (_) {}
-    }
-    if (!observing) discoveryObserver = null;
-  }
-
-  function observeWorkshopPanel(panel) {
-    if (!panel) {
-      panelObserver?.disconnect();
-      panelParentObserver?.disconnect();
-      panelObserver = null;
-      panelParentObserver = null;
-      observedPanel = null;
-      observedPanelParent = null;
-      startWorkshopDiscovery();
-      return;
-    }
-    if (panel === observedPanel && panel.isConnected && panel.parentNode === observedPanelParent) return;
-    discoveryObserver?.disconnect();
-    panelObserver?.disconnect();
-    panelParentObserver?.disconnect();
-    discoveryObserver = null;
-    observedPanel = panel;
-    observedPanelParent = panel.parentNode || null;
-    panelObserver = new TOP.MutationObserver(scheduleMount);
-    // 原生 Vue 会在开关变化后重新启用保存按钮；监听 disabled 变化后立刻把快照模式约束补回。
-    panelObserver.observe(panel, { childList: true, subtree: true, attributes: true, attributeFilter: ['disabled'] });
-    if (observedPanelParent) {
-      panelParentObserver = new TOP.MutationObserver(() => {
-        if (observedPanel?.isConnected && observedPanel.parentNode === observedPanelParent) return;
-        const nextPanel = workshopPanel();
-        observeWorkshopPanel(nextPanel);
-        scheduleMount();
-      });
-      panelParentObserver.observe(observedPanelParent, { childList: true });
-    }
-    scheduleMount();
   }
 
   function install() {
@@ -15487,45 +15237,27 @@ html.pmm-dnd-compat-active #preset-manager-main-panel{user-select:none!important
     const migratedHomeSnapshot = migrateCurrentHomeSnapshot(store);
     if (normalizedBindings || migratedHomeSnapshot) writeStore(store);
     installStyle();
-    DOC.addEventListener('click', handleDocumentClick, true);
-    const panel = workshopPanel();
-    if (panel) observeWorkshopPanel(panel);
-    else startWorkshopDiscovery();
     syncChatBindingListener(store, true);
   }
 
   TOP[API_KEY] = {
     open: openOverlay,
     close: closeOverlay,
-    isCapturing: () => !!captureMode,
     list: () => clone(readStore().snapshots),
     activeForPreset: presetName => {
       const snapshot = activeSnapshotForPreset(presetName);
       return snapshot ? { id:snapshot.id, name:snapshot.name, presetName:snapshot.presetName } : null;
     },
     cleanup() {
-      disconnectWorkshopObservers();
-      DOC.removeEventListener('click', handleDocumentClick, true);
       uninstallChatBindingListener();
-      if (scheduled) {
-        try { (TOP.cancelAnimationFrame || SELF.cancelAnimationFrame || TOP.clearTimeout)(scheduled); } catch (_) {}
-        scheduled = 0;
-      }
       closeOverlay();
-      captureMode = null;
-      DOC?.querySelectorAll?.(`.${TRIGGER_CLASS}`).forEach(button => button.remove());
-      DOC?.querySelectorAll?.(`.${HOME_TITLE_CLASS}`).forEach(node => node.classList.remove(HOME_TITLE_CLASS, CAPTURE_TITLE_CLASS));
-      DOC?.querySelectorAll?.(`.${DESKTOP_HOME_TITLE_HOST_CLASS}`).forEach(node => node.classList.remove(DESKTOP_HOME_TITLE_HOST_CLASS));
-      DOC?.querySelectorAll?.(`.${DESKTOP_HOME_PANEL_CLASS}`).forEach(node => node.classList.remove(DESKTOP_HOME_PANEL_CLASS));
-      DOC?.querySelectorAll?.('[data-pmm-snapshot-edit-stashed]').forEach(restoreCaptureEditButton);
-      DOC?.querySelectorAll?.('[data-pmm-snapshot-native-save-stashed]').forEach(restoreCaptureNativeSaveButton);
-      DOC?.querySelectorAll?.('.pmm-switch-snapshot-capture-mode').forEach(node => node.classList.remove('pmm-switch-snapshot-capture-mode'));
+      destroySnapshotEditor();
       DOC?.getElementById?.(STYLE_ID)?.remove();
       try { delete TOP[API_KEY]; } catch (_) {}
     },
   };
   install();
-  console.info('[预设工坊] test.167 已加载：电脑主页外层标题卡片收至右侧工具栏之前。');
+  console.info('[预设工坊] 独立轻量开关快照编辑器已加载。');
 })();
 
 /* ===== PMM_THEMED_COMPARE_DRAG_LINE_V289：差异边框与原版主题落点线叠加 ===== */
@@ -17226,4 +16958,3 @@ console.info('[预设工坊] V2.97.21 已加载：快照模式仅保留条目与
   };
   console.info('[预设工坊] test.94 已加载：桌面端四角均可拖动自由缩放，居中扩缩与双击恢复默认已就绪。');
 })();
-
