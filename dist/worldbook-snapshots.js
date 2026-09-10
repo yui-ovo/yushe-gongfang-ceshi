@@ -1,4 +1,4 @@
-import { createWorldbookSnapshots, copy } from './worldbook-snapshot-core.js?v=2.98.0-test.25';
+import { createWorldbookSnapshots, copy } from './worldbook-snapshot-core.js?v=2.98.0-test.26';
 
 const SELF = window, TOP = window.parent || window, DOC = TOP.document;
 const KEY = '__PMM_WORLDBOOK_SNAPSHOTS__';
@@ -246,6 +246,9 @@ style.textContent = `
 .pmm-wbs-book-title { flex:1; min-width:0; overflow-wrap:anywhere; }
 .pmm-wbs-book>summary small { margin:0; white-space:nowrap; }
 .pmm-wbs-book:not([open])>.pmm-wbs-book-entries { display:none!important; }
+.pmm-wbs-entry-block { content-visibility:auto; contain-intrinsic-size:auto 50px; }
+.pmm-wbs-batch-row { content-visibility:auto; contain-intrinsic-size:auto 44px; }
+.pmm-wbs-row { content-visibility:auto; contain-intrinsic-size:auto 70px; }
 .pmm-wbs-name-field { position:relative; margin:3px 0 5px; }
 .pmm-wbs-dialog .pmm-wbs-name-field input { height:38px!important; min-height:38px!important; margin:0!important; padding:6px 38px 6px 10px!important; border-radius:11px!important; font-size:16px!important; }
 .pmm-wbs-name-edit { position:absolute; right:7px; top:50%; transform:translateY(-50%); width:26px; height:26px; min-height:26px!important; padding:5px!important; border:0!important; opacity:.52; }
@@ -491,6 +494,25 @@ function renderBatch(preserveScroll=false) {
   filterBatchRows();
   if(previousScroll!==null)batchOverlay.querySelector('.pmm-wbs-body').scrollTop=previousScroll;
 }
+function updateBatchRow(name) {
+  if(!batchOverlay)return;
+  const selected=batchSelected.has(name);
+  const row=batchOverlay.querySelector(`.pmm-wbs-batch-row[data-book="${CSS.escape(name)}"]`);
+  if(!row)return;
+  row.setAttribute('aria-checked',String(selected));
+  const icon=row.querySelector('.pmm-wbs-batch-check');
+  if(icon){icon.className='pmm-wbs-batch-check fa-'+(selected?'solid fa-square-check':'regular fa-square');}
+}
+function updateBatchFooter() {
+  if(!batchOverlay)return;
+  const foot=batchOverlay.querySelector('.pmm-wbs-foot small');
+  if(foot)foot.textContent='已选择 '+batchSelected.size+' 本；删除不可撤销';
+  const del=batchOverlay.querySelector('[data-batch-action="delete"]');
+  if(del)del.disabled=!batchSelected.size||batchBusy;
+  const names=batchVisibleNames(),all=names.length>0&&names.every(n=>batchSelected.has(n));
+  const selectAll=batchOverlay.querySelector('[data-batch-action="select-all"]');
+  if(selectAll){selectAll.disabled=!names.length;selectAll.textContent=all?'取消全选':'全选';}
+}
 function revealBatchBoundStart() {
   TOP.requestAnimationFrame(()=>{
     const body=batchOverlay?.querySelector('.pmm-wbs-body'),toggle=batchOverlay?.querySelector('[data-batch-action="toggle-bound"]');
@@ -548,13 +570,13 @@ async function openBatch() {
     event.preventDefault();event.stopPropagation();
     const action=target.dataset.batchAction;
     if(action==='close')closeBatch();
-    else if(action==='toggle') { const name=target.dataset.book;batchSelected.has(name)?batchSelected.delete(name):batchSelected.add(name);renderBatch(true); }
+    else if(action==='toggle') { const name=target.dataset.book;batchSelected.has(name)?batchSelected.delete(name):batchSelected.add(name);updateBatchRow(name);updateBatchFooter(); }
     else if(action==='toggle-bound') {
       const expanding=!batchBoundExpanded;batchBoundExpanded=expanding;
       if(!batchBoundExpanded)for(const row of batchBooks.filter(row=>row.characters.length))batchSelected.delete(row.name);
       renderBatch(!expanding);if(expanding)revealBatchBoundStart();
     }
-    else if(action==='select-all') { const visible=batchVisibleNames(),all=visible.length&&visible.every(name=>batchSelected.has(name));for(const name of visible)all?batchSelected.delete(name):batchSelected.add(name);renderBatch(true); }
+    else if(action==='select-all') { const visible=batchVisibleNames(),all=visible.length&&visible.every(name=>batchSelected.has(name));for(const name of visible){all?batchSelected.delete(name):batchSelected.add(name);updateBatchRow(name);}updateBatchFooter(); }
     else if(action==='delete')void deleteBatchSelection();
   });
   batchOverlay.addEventListener('keydown',event=>{if(event.key==='Escape'){event.stopPropagation();closeBatch();}});
@@ -685,13 +707,30 @@ function groupMarkup() {
       +(menuId===group.id?'<div class="pmm-wbs-menu">'+button('edit-group','编辑分组',attrs)+button('manage-snapshots','管理分组快照',attrs)+button('delete-group','删除分组',attrs)+'</div>':'')+'</article>';
   }).join('');
 }
+function bookEntriesMarkup(name, data) {
+  return Object.values(data.entries).sort((a,b)=>Number(a.displayIndex??a.uid)-Number(b.displayIndex??b.uid)).map(entry=>{
+    const title=entry.comment||entry.key?.[0]||'条目 '+entry.uid,shown=!!draft.previews?.[name]?.[String(entry.uid)];
+    return '<div class="pmm-wbs-entry-block" data-entry-title="'+h(String(title).toLocaleLowerCase())+'"><div class="pmm-wbs-entry">'+button('preview-entry',icon('arrow')+'<span>'+h(title)+'</span>','class="pmm-wbs-entry-title" data-preview-entry data-preview-book="'+h(name)+'" data-preview-uid="'+h(entry.uid)+'" aria-expanded="'+shown+'"')+'<label class="pmm-wbs-entry-switch"><input class="pmm-wbs-entry-switch-input" type="checkbox" data-toggle="'+h(entry.uid)+'" data-toggle-book="'+h(name)+'" aria-label="'+h(title)+'" style="opacity:0!important" '+(entry.disable?'':'checked')+'><span class="pmm-wbs-entry-switch-track" aria-hidden="true"></span></label></div><div class="pmm-wbs-entry-preview" hidden></div></div>';
+  }).join('')+(!Object.keys(data.entries).length?'<small>这本世界书暂无条目</small>':'');
+}
+function ensureBookEntries(details) {
+  if(!draft || !details)return;
+  const name=details.dataset.draftBook;
+  const container=details.querySelector('.pmm-wbs-book-entries');
+  if(!container || container.dataset.rendered)return;
+  container.insertAdjacentHTML('beforeend',bookEntriesMarkup(name,draft.data[name]));
+  container.dataset.rendered='1';
+  filterDraft(name);
+}
 function draftMarkup() {
   return '<label>快照名称<div class="pmm-wbs-name-field"><input type="text" data-name value="'+h(draft.name)+'" maxlength="100" autocomplete="off">'+button('focus-name',icon('edit'),'class="pmm-wbs-name-edit" aria-label="编辑快照名称"')+'</div></label>'
     +'<small>共 '+Object.keys(draft.data).length+' 本世界书 · 点击书名展开或收起</small><div data-entries>'
-    +Object.entries(draft.data).map(([name,data])=>'<details class="pmm-wbs-book" data-draft-book="'+h(name)+'" '+(draft.expanded[name]?'open':'')+'><summary>'+icon('arrow')+'<span class="pmm-wbs-book-title">'+h(name)+'</span><small>'+Object.keys(data.entries).length+' 条</small></summary><div class="pmm-wbs-book-entries"><input class="pmm-wbs-book-search" type="search" data-filter-book="'+h(name)+'" value="'+h(draft.queries?.[name]||'')+'" placeholder="搜索条目名称" aria-label="搜索 '+h(name)+' 的条目">'+Object.values(data.entries).sort((a,b)=>Number(a.displayIndex??a.uid)-Number(b.displayIndex??b.uid)).map(entry=>{
-      const title=entry.comment||entry.key?.[0]||'条目 '+entry.uid,shown=!!draft.previews?.[name]?.[String(entry.uid)],content=String(entry.content??'');
-      return '<div class="pmm-wbs-entry-block" data-entry-title="'+h(String(title).toLocaleLowerCase())+'"><div class="pmm-wbs-entry">'+button('preview-entry',icon('arrow')+'<span>'+h(title)+'</span>','class="pmm-wbs-entry-title" data-preview-entry data-preview-book="'+h(name)+'" data-preview-uid="'+h(entry.uid)+'" aria-expanded="'+shown+'"')+'<label class="pmm-wbs-entry-switch"><input class="pmm-wbs-entry-switch-input" type="checkbox" data-toggle="'+h(entry.uid)+'" data-toggle-book="'+h(name)+'" aria-label="'+h(title)+'" style="opacity:0!important" '+(entry.disable?'':'checked')+'><span class="pmm-wbs-entry-switch-track" aria-hidden="true"></span></label></div><div class="pmm-wbs-entry-preview" '+(shown?'':'hidden')+'><small>当前世界书正文（只读）</small><div class="pmm-wbs-entry-preview-content">'+h(content.trim()?content:'（正文为空）')+'</div></div></div>';
-    }).join('')+(!Object.keys(data.entries).length?'<small>这本世界书暂无条目</small>':'')+'</div></details>').join('')+'</div>';
+    +Object.entries(draft.data).map(([name,data])=>{
+      const isOpen=!!draft.expanded[name];
+      const entriesContent=isOpen?bookEntriesMarkup(name,data):'';
+      const rendered=isOpen?' data-rendered="1"':'';
+      return '<details class="pmm-wbs-book" data-draft-book="'+h(name)+'" '+(isOpen?'open':'')+'><summary>'+icon('arrow')+'<span class="pmm-wbs-book-title">'+h(name)+'</span><small>'+Object.keys(data.entries).length+' 条</small></summary><div class="pmm-wbs-book-entries"'+rendered+'><input class="pmm-wbs-book-search" type="search" data-filter-book="'+h(name)+'" value="'+h(draft.queries?.[name]||'')+'" placeholder="搜索条目名称" aria-label="搜索 '+h(name)+' 的条目">'+entriesContent+'</div></details>';
+    }).join('')+'</div>';
 }
 function groupEditorMarkup() {
   const rows = books.filter(row => !row.characters.length);
@@ -785,7 +824,10 @@ async function open(scope = 'character', selected = '', restore = true) {
     }
   },true);
   overlay.addEventListener('toggle', event=>{
-    if(draft && event.target.matches('[data-draft-book]')) draft.expanded[event.target.dataset.draftBook]=event.target.open;
+    if(draft && event.target.matches('[data-draft-book]')) {
+      draft.expanded[event.target.dataset.draftBook]=event.target.open;
+      if(event.target.open) ensureBookEntries(event.target);
+    }
   },true);
   overlay.addEventListener('keydown', onKey);
   DOC.body.append(overlay); theme(); watchTheme(); bindViewport(); render();
@@ -887,7 +929,15 @@ function onClick(event) {
     const shown=!draft.previews[name][uid]; draft.previews[name][uid]=shown;
     target.setAttribute('aria-expanded',String(shown));
     const preview=target.closest('.pmm-wbs-entry-block')?.querySelector('.pmm-wbs-entry-preview');
-    if(preview)preview.hidden=!shown;
+    if(preview) {
+      if(shown && !preview.dataset.loaded) {
+        const entry=Object.values(draft.data[name]?.entries||{}).find(e=>String(e.uid)===uid);
+        const content=String(entry?.content??'');
+        preview.innerHTML='<small>当前世界书正文（只读）</small><div class="pmm-wbs-entry-preview-content">'+h(content.trim()?content:'（正文为空）')+'</div>';
+        preview.dataset.loaded='1';
+      }
+      preview.hidden=!shown;
+    }
     return;
   }
   if (action === 'close') { void close(); return; }
