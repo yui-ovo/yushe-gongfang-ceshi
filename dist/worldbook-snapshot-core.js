@@ -108,8 +108,8 @@ export function createWorldbookSnapshots(host) {
     if (bound) {
       if (store.session?.bundle && store.session.key === bundleKey && store.session.chosen) return {};
       await validateBundle(bound);
-      await applyCharacter(store, bound);
-      return {};
+      const applied = await applyCharacter(store, bound);
+      return { autoBound: bound, changed: applied?.changed ?? 0 };
     }
     if (store.session?.bundle) return {};
     if (store.session && store.session.key !== character?.key) await restore(store);
@@ -182,6 +182,13 @@ export function createWorldbookSnapshots(host) {
     for (const [name, states] of Object.entries(before)) if (!Object.hasOwn(store.session.before,name)) {
       Object.defineProperty(store.session.before,name,{ value:states, enumerable:true, configurable:true, writable:true });
     }
+    let changed = 0;
+    for (const [name, targetStates] of Object.entries(item.books)) {
+      const current = before[name] || {};
+      for (const [uid, val] of Object.entries(targetStates || {})) {
+        if (Object.hasOwn(current, uid) && !!current[uid] !== !!val) changed++;
+      }
+    }
     try {
       persist(store);
       if (contextKey() !== key) throw new Error('聊天已切换，请重试');
@@ -192,6 +199,7 @@ export function createWorldbookSnapshots(host) {
       throw error;
     }
     if (contextKey() !== key) await restore(store);
+    return { changed };
   }
   const groupPlan = (store, group) => group.snapshot
     ? store.snapshots.find(s => s.bundle && s.scope === 'group' && s.owner === group.id && s.id === group.snapshot)
@@ -274,9 +282,10 @@ export function createWorldbookSnapshots(host) {
       const store=read(),item=find(store,id);
       item.name=name.trim();item.books=statesOf(data);
       await validateBundle(item);
-      const active=store.groups.find(g=>g.enabled && g.snapshot===id);
-      if(sync && active) {
-        checkConflict(store,active,item,force);
+      const activeGroup=store.groups.find(g=>g.enabled && g.snapshot===id);
+      const activeCharacter=item.scope==='character' && store.session?.bundle && store.session.key===contextKey() && store.session.chosen===id;
+      if((sync && activeGroup) || activeCharacter) {
+        if(activeGroup) checkConflict(store,activeGroup,item,force);
         await batch(item.books,()=>persist(store));
       } else persist(store);
     }),

@@ -1,4 +1,4 @@
-import { createWorldbookSnapshots, copy } from './worldbook-snapshot-core.js?v=2.98.0-test.26';
+import { createWorldbookSnapshots, copy } from './worldbook-snapshot-core.js?v=2.98.0-test.27';
 
 const SELF = window, TOP = window.parent || window, DOC = TOP.document;
 const KEY = '__PMM_WORLDBOOK_SNAPSHOTS__';
@@ -102,6 +102,23 @@ let page = 'character', section = 'snapshots', book = '', books = [], items = []
 let picker = false, pickerReturnBook = '', editGroup = null, groupQuery = '', renameId = '', menuId = '', message = '', lastFocus = null;
 let eventSource = null, eventType = '', eventTimer = 0;
 let messageTimer=0;
+let currentChatKey='', chatInitialized=false, lastNotifiedChatKey='';
+const activeChatKey = () => { const c = character(), ch = chat(); return c && ch ? `${c.key}\0${ch}` : ''; };
+const TOP_NOTIFICATION_STORAGE_KEY = 'pmm_top_notifications_enabled_v1';
+function topNotificationsEnabled() {
+  try { return (TOP.localStorage || SELF.localStorage)?.getItem(TOP_NOTIFICATION_STORAGE_KEY) !== '0'; }
+  catch (_) { return true; }
+}
+function notifyBoundChatRestored(name) {
+  const text = `已切回绑定聊天快照：${name}`;
+  if (!topNotificationsEnabled()) {
+    const logger = console.debug || console.info;
+    logger?.call(console, '[世界书快照][顶部通知已关闭]', text);
+    return;
+  }
+  if (typeof TOP.toastr?.info === 'function') TOP.toastr.info(text);
+  else if (typeof TOP.toastr?.success === 'function') TOP.toastr.success(text);
+}
 let nativeObserver = null, nativeDiscoveryObserver = null, nativeRoot = null, nativeFrame = 0, nativeCatalogSignature = '', nativeCatalogNames = [];
 const NATIVE_ACTION_CLASS = 'pmm-native-worldbook-action';
 const style = DOC.createElement('style');
@@ -1038,17 +1055,32 @@ async function conflictAction(action) {
     await action(true);
   }
 }
-function onChatChanged() {
+function onChatChanged(immediate = false) {
   TOP.clearTimeout(eventTimer);
-  eventTimer = TOP.setTimeout(async () => {
+  const run = async () => {
     eventTimer = 0;
     if (disposed) return;
     if (draft) { say('角色已切换，当前草稿已保留。请取消草稿后继续。'); return; }
+    const prevKey = currentChatKey;
+    const nextKey = activeChatKey();
+    currentChatKey = nextKey;
     try {
-      await engine.transition();
+      const result = await engine.transition();
+      if (!chatInitialized) {
+        chatInitialized = true;
+      } else if (prevKey && nextKey && prevKey !== nextKey && result?.autoBound && (result?.changed ?? 0) > 0) {
+        if (lastNotifiedChatKey !== nextKey) {
+          lastNotifiedChatKey = nextKey;
+          notifyBoundChatRestored(result.autoBound.name);
+        }
+      } else if (prevKey !== nextKey) {
+        lastNotifiedChatKey = '';
+      }
       if (overlay && !busy && !editGroup && !renameId) { await refresh(); await loadItems(); render(); }
     } catch (error) { report(error); TOP.toastr?.warning?.(`世界书快照：${error.message}`); }
-  }, 180);
+  };
+  if (immediate === true) return run();
+  eventTimer = TOP.setTimeout(run, 180);
 }
 function syncListener() {
   // No polling: only subscribe to context changes. Also observe during a draft to prevent stale saves.
@@ -1061,6 +1093,7 @@ function syncListener() {
 }
 function cleanup() {
   disposed = true; TOP.clearTimeout(eventTimer);
+  currentChatKey = ''; chatInitialized = false; lastNotifiedChatKey = '';
   if (eventSource && eventType) {
     if (eventSource.off) eventSource.off(eventType, onChatChanged);
     else eventSource.removeListener?.(eventType, onChatChanged);
@@ -1072,7 +1105,7 @@ function cleanup() {
   closeBatch();void close(true); style.remove();
   if (TOP[KEY]?.engine === engine) delete TOP[KEY];
 }
-TOP[KEY] = { open, openBatch, decoratePreset, engine, cleanup };
+TOP[KEY] = { open, openBatch, decoratePreset, engine, cleanup, onChatChanged };
 syncListener();
 installNativeWorldbookTools();
 // The persisted return journal also handles a browser refresh while inside a character.
