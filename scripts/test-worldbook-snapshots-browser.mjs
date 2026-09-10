@@ -72,6 +72,9 @@ try {
     const before = await page.evaluate(() => fixture.data['角色世界'].entries[0].disable);
     const previewSwitch=page.locator('[data-toggle-book="角色世界"][data-toggle="1"]');
     const previewSwitchBefore=await previewSwitch.isChecked();
+    const previewSwitchBounds=await previewSwitch.boundingBox();
+    assert.ok(previewSwitchBounds.width>=43 && previewSwitchBounds.height>=25,'Snapshot entries use a larger touch-friendly native-style switch');
+    assert.equal(await previewSwitch.evaluate(node=>getComputedStyle(node,'::after').display),'none','Snapshot switch does not inherit a checkbox tick');
     await page.click('[data-preview-book="角色世界"][data-preview-uid="1"]');
     assert.equal(await page.locator('[data-preview-book="角色世界"][data-preview-uid="1"]').getAttribute('aria-expanded'),'true','Entry title expands its read-only content');
     await page.locator('.pmm-wbs-entry-preview:visible').getByText('当前世界书正文（只读）',{exact:true}).waitFor();

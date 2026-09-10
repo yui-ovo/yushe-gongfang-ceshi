@@ -1,4 +1,4 @@
-import { createWorldbookSnapshots, copy } from './worldbook-snapshot-core.js?v=2.98.0-test.22';
+import { createWorldbookSnapshots, copy } from './worldbook-snapshot-core.js?v=2.98.0-test.23';
 
 const SELF = window, TOP = window.parent || window, DOC = TOP.document;
 const KEY = '__PMM_WORLDBOOK_SNAPSHOTS__';
@@ -143,6 +143,12 @@ style.textContent = `
 .pmm-wbs-entry input:checked { background:var(--pm-accent,#399e82); }
 .pmm-wbs-entry input:checked:before { left:16px; }
 .pmm-wbs-entry input:focus-visible { outline:2px solid var(--pm-accent,#399e82); outline-offset:3px; }
+.pmm-wbs-entry input[data-toggle] { appearance:none!important; -webkit-appearance:none!important; box-sizing:border-box!important; flex:0 0 44px; width:44px!important; min-width:44px!important; height:26px!important; min-height:26px!important; margin:0!important; padding:0!important; border:1px solid color-mix(in srgb,var(--wbs-ink) 18%,transparent)!important; border-radius:999px!important; background:color-mix(in srgb,var(--wbs-ink) 18%,transparent)!important; box-shadow:inset 0 1px 2px rgba(0,0,0,.18)!important; color:transparent!important; cursor:pointer; transition:background-color .16s ease,border-color .16s ease; }
+.pmm-wbs-entry input[data-toggle]:before { content:''!important; display:block!important; box-sizing:border-box!important; position:absolute!important; inset:auto!important; top:2px!important; left:2px!important; width:20px!important; height:20px!important; border:0!important; border-radius:50%!important; background:#f7f7f7!important; box-shadow:0 1px 3px rgba(0,0,0,.3)!important; transform:none!important; transition:left .16s ease!important; }
+.pmm-wbs-entry input[data-toggle]:after { content:none!important; display:none!important; }
+.pmm-wbs-entry input[data-toggle]:checked { border-color:color-mix(in srgb,var(--pm-accent,#399e82) 82%,transparent)!important; background:var(--pm-accent,#399e82)!important; }
+.pmm-wbs-entry input[data-toggle]:checked:before { left:20px!important; }
+.pmm-wbs-entry input[data-toggle]:disabled { opacity:.45; cursor:not-allowed; }
 .pmm-wbs-foot { display:flex; gap:10px; align-items:center; justify-content:flex-end; padding:12px 20px; border-top:1px solid var(--pm-border,#363636); flex-shrink:0; }
 .pmm-wbs-foot small { flex:1; margin:0; }
 .pmm-wbs-primary { background:var(--pm-hover-bg,#303030)!important; font-weight:600!important; }
