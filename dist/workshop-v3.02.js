@@ -16992,6 +16992,54 @@ console.info('[预设工坊] V2.97.21 已加载：快照模式仅保留条目与
         height: var(--pmm-custom-panel-height) !important;
         max-height: calc(100dvh - 32px) !important;
       }
+
+      /* 桌面端顶部工具栏容器响应式（基于工坊面板自身宽度） */
+      @media (min-width: 769px) {
+        #preset-manager-main-panel:not(.pmm-mobile-layout-enabled) .pm-panel-container {
+          container-type: inline-size;
+        }
+        #preset-manager-main-panel:not(.pmm-mobile-layout-enabled) .preset-panel {
+          container-type: inline-size;
+        }
+      }
+
+      @container (max-width: 600px) {
+        #preset-manager-main-panel:not(.pmm-mobile-layout-enabled) .pm-header {
+          flex-wrap: wrap !important;
+          height: auto !important;
+          min-height: auto !important;
+          align-content: flex-start !important;
+          row-gap: 8px !important;
+          padding-top: 10px !important;
+          padding-bottom: 10px !important;
+        }
+        #preset-manager-main-panel:not(.pmm-mobile-layout-enabled) .pm-header > .header-right,
+        #preset-manager-main-panel:not(.pmm-mobile-layout-enabled) .pm-panel-container--merge-mode .pm-header > .header-right,
+        #preset-manager-main-panel:not(.pmm-mobile-layout-enabled) .pm-panel-container--branch-mode .pm-header > .header-right,
+        #preset-manager-main-panel:not(.pmm-mobile-layout-enabled) .pm-panel-container--favorite-mode .pm-header > .header-right {
+          width: 100% !important;
+          min-width: 0 !important;
+          max-width: 100% !important;
+          flex: 0 0 100% !important;
+          margin-left: 0 !important;
+          justify-content: flex-start !important;
+          flex-wrap: nowrap !important;
+          overflow-x: auto !important;
+          overflow-y: hidden !important;
+          padding-bottom: 2px !important;
+          scrollbar-width: thin !important;
+        }
+        #preset-manager-main-panel:not(.pmm-mobile-layout-enabled) .pm-header > .header-right > * {
+          flex-shrink: 0 !important;
+        }
+        #preset-manager-main-panel:not(.pmm-mobile-layout-enabled) .pm-header > .header-right::-webkit-scrollbar {
+          height: 3px !important;
+        }
+        #preset-manager-main-panel:not(.pmm-mobile-layout-enabled) .pm-header > .header-right::-webkit-scrollbar-thumb {
+          background: var(--pm-border, rgba(127, 127, 127, 0.3)) !important;
+          border-radius: 3px !important;
+        }
+      }
     `;
     doc.head.appendChild(style);
   }
@@ -17152,6 +17200,9 @@ console.info('[预设工坊] V2.97.21 已加载：快照模式仅保留条目与
     try { if (TOP[API_KEY]?.cleanup === cleanup) delete TOP[API_KEY]; } catch (_) {}
   }
 
+  for (const doc of [DOC, document]) {
+    if (doc && isDesktop(doc)) installStyle(doc);
+  }
   scanAndMount();
   startObserver();
 
