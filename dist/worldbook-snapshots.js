@@ -190,6 +190,30 @@ style.textContent = `
   --wbs-shadow:rgba(0,0,0,.23); --wbs-shine:rgba(255,255,255,.045);
 }
 [data-wbs-tone="light"] { --wbs-base:#f5f5f5; --wbs-shadow:rgba(35,39,48,.085); --wbs-shine:rgba(255,255,255,.85); }
+/* Snapshot-only backing: an opaque theme base behind the translucent tint.
+   Android needs this even when feature detection reports working blur. */
+.pmm-wbs-overlay.pmm-snapshot-opaque,.pmm-snapshot-hub-preset.pmm-snapshot-opaque {
+  --wbs-safe-surface:linear-gradient(var(--pm-panel-bg,transparent),var(--pm-panel-bg,transparent)),var(--wbs-base);
+  --wbs-safe-card:linear-gradient(var(--pm-card-bg,transparent),var(--pm-card-bg,transparent)),var(--wbs-base);
+}
+@supports not ((backdrop-filter:blur(1px)) or (-webkit-backdrop-filter:blur(1px))) {
+  .pmm-wbs-overlay,.pmm-snapshot-hub-preset {
+    --wbs-safe-surface:linear-gradient(var(--pm-panel-bg,transparent),var(--pm-panel-bg,transparent)),var(--wbs-base);
+    --wbs-safe-card:linear-gradient(var(--pm-card-bg,transparent),var(--pm-card-bg,transparent)),var(--wbs-base);
+  }
+  .pmm-wbs-overlay.pmm-wbs-overlay .pmm-wbs-dialog,.pmm-snapshot-hub-preset.pmm-snapshot-hub-preset .pmm-switch-snapshot-dialog {
+    background:var(--wbs-safe-surface)!important;
+  }
+  .pmm-wbs-overlay.pmm-wbs-overlay .pmm-wbs-row,.pmm-snapshot-hub-preset.pmm-snapshot-hub-preset .pmm-switch-snapshot-row {
+    background:var(--wbs-safe-card)!important;
+  }
+}
+.pmm-wbs-overlay.pmm-snapshot-opaque .pmm-wbs-dialog,.pmm-snapshot-hub-preset.pmm-snapshot-opaque .pmm-switch-snapshot-dialog {
+  background:var(--wbs-safe-surface)!important;
+}
+.pmm-wbs-overlay.pmm-snapshot-opaque .pmm-wbs-row,.pmm-snapshot-hub-preset.pmm-snapshot-opaque .pmm-switch-snapshot-row {
+  background:var(--wbs-safe-card)!important;
+}
 .pmm-wbs-overlay { background:rgba(0,0,0,.27); }
 .pmm-wbs-dialog,.pmm-snapshot-hub-preset .pmm-switch-snapshot-dialog {
   background:linear-gradient(145deg,var(--wbs-shine),transparent 46%),var(--wbs-surface);
@@ -384,6 +408,7 @@ function decoratePreset(root) {
 }
 function theme(target = overlay) {
   if (!target) return;
+  target.classList.toggle('pmm-snapshot-opaque', /Android/i.test(TOP.navigator?.userAgent || SELF.navigator?.userAgent || ''));
   const main = DOC.querySelector('#preset-manager-main-panel .pmm-wb-inline-panel') || DOC.querySelector('#preset-manager-main-panel .preset-panel');
   const floating = DOC.querySelector('#preset-manager-floating-panel .floating-panel-root') || DOC.querySelector('#preset-manager-floating-panel .panel-wrapper')
     || SELF.document.querySelector('.floating-panel-root');
