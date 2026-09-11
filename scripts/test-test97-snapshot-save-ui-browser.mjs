@@ -13,7 +13,7 @@ button[role=switch]{background:#75636d!important;box-shadow:0 0 0 5px #75636d!im
 </style><script>
 const presetName='【日月西】Gemini & Claude v0.4 @电波系';
 const prompts=Array.from({length:120},(_,i)=>({id:'p'+i,name:'条目 '+i,enabled:i%3!==0,content:'正文保持'}));
-window.fixture={prompts};window.getPreset=()=>({prompts:structuredClone(prompts)});
+window.fixture={prompts};window.getPreset=()=>({prompts:structuredClone(fixture.prompts)});
 window.SillyTavern={getContext:()=>({getPresetManager:()=>({getSelectedPresetName:()=>presetName}),characters:[],eventSource:{on(){},off(){}}})};
 window.__PMM_BAIBAI_COMPAT__={snapshotBranchState:()=>({sections:Array.from({length:12},(_,i)=>({id:'baibai_g'+i,displayName:['🔒预设头部','🌎世界引擎','🐚人物活化','🎵文风指导'][i%4],itemIds:prompts.slice(i*10,i*10+10).map(p=>p.id)}))}),readGroupEnabledStates:()=>Array.from({length:12},(_,i)=>({id:'g'+i,name:'分组'+i,enabled:true}))};
 </script><script type="module" src="/preset.js"></script>`;
@@ -51,13 +51,13 @@ try {
     assert.equal(await page.locator('.pmm-switch-editor-list').innerHTML(),draftBefore);
     assert.equal(await page.evaluate(()=>localStorage.getItem('pmm.switch-snapshots.v1')),storeBefore);
     await page.locator('[data-pmm-editor-action="save"]').click();
-    await page.locator('input#name').fill('新的开关方案');
+    await page.locator('input#name').fill('新的开关方案 · 这是一个很长很长的名称用于验证按钮始终同一行');
     await page.setViewportSize({width,height:480});
     const box=await page.locator('form').boundingBox();assert.ok(box.y>=0 && box.y+box.height<=480);
     await page.screenshot({path:fileURLToPath(new URL('name-'+width+'-'+tone+'.png',output))});
     await page.locator('button[type="submit"]').click();
     await page.locator('.pmm-switch-snapshot-dialog').waitFor();
-    const saved=await page.evaluate(()=>__PMM_SWITCH_SNAPSHOTS_TEST52__.list().find(s=>s.name==='新的开关方案'));
+    const saved=await page.evaluate(()=>__PMM_SWITCH_SNAPSHOTS_TEST52__.list().find(s=>s.name.startsWith('新的开关方案')));
     assert.ok(saved);assert.equal(saved.groupStates[0].enabled,false);assert.equal(saved.states[0].enabled,true);
     assert.equal(await page.evaluate(()=>fixture.prompts[0].enabled),false,'Saving must not apply the draft');
     await page.setViewportSize({width,height:844});
@@ -66,6 +66,38 @@ try {
     if(width<769) assert.ok(Math.abs(manager.y+manager.height-836)<2,'Manager remains at the mobile safe bottom');
     else assert.ok(Math.abs(manager.y+manager.height/2-422)<2,'Desktop stays centered');
     await page.screenshot({path:fileURLToPath(new URL('manager-'+width+'-'+tone+'.png',output))});
+    const card = page.locator('.pmm-switch-snapshot-row').first();
+    const cardLayout = await card.evaluate(row => {
+      const copy=row.querySelector('.pmm-switch-snapshot-copy').getBoundingClientRect();
+      const buttons=[...row.querySelectorAll('.pmm-switch-snapshot-lock,.pmm-switch-snapshot-actions>button,.pmm-switch-snapshot-more')].map(el=>el.getBoundingClientRect());
+      const title=row.querySelector('.pmm-switch-snapshot-name');
+      return {centers:[copy.y+copy.height/2,...buttons.map(b=>b.y+b.height/2)],truncated:title.scrollWidth>title.clientWidth,overflow:row.scrollWidth>row.clientWidth};
+    });
+    assert.ok(Math.max(...cardLayout.centers)-Math.min(...cardLayout.centers)<2,'Name and all buttons must share one row');
+    assert.equal(cardLayout.truncated,true,'Long name must ellipsize');
+    assert.equal(cardLayout.overflow,false,'Card must not overflow horizontally');
+    await card.locator('[data-pmm-snapshot-action="menu"]').click();
+    await page.locator('[data-pmm-snapshot-action="rename"]').waitFor();
+    await page.locator('[data-pmm-snapshot-action="menu"]').click();
+    // Mixed standalone/group order, including before the first group and between groups.
+    await page.evaluate(()=>{
+      fixture.prompts=[{id:'before',name:'作者声明',enabled:false},...fixture.prompts.slice(0,10),{id:'between',name:'预设简介',enabled:false},...fixture.prompts.slice(10),{id:'after',name:'常见问题',enabled:false}];
+    });
+    await page.locator('[data-pmm-snapshot-action="new"]').click();
+    assert.equal(await page.locator('.pmm-switch-editor-standalone').count(),3);
+    assert.equal(await page.locator('.pmm-switch-editor-group .pmm-switch-editor-prompt').count(),0,'Grouped entries stay lazy');
+    const rowOrder=await page.locator('.pmm-switch-editor-list').evaluate(list=>[...list.children].map(row=>row.dataset.pmmEditorGroup || row.querySelector('.pmm-switch-editor-prompt>span')?.textContent));
+    assert.deepEqual(rowOrder,['作者声明','g0','预设简介',...Array.from({length:11},(_,i)=>'g'+(i+1)),'常见问题']);
+    await page.locator('.pmm-switch-editor-standalone [role="switch"]').first().click();
+    await page.screenshot({path:fileURLToPath(new URL('mixed-'+width+'-'+tone+'.png',output))});
+    await page.locator('[data-pmm-editor-action="save"]').click();
+    await page.locator('input#name').fill('原位独立条目');
+    await page.locator('button[type="submit"]').click();
+    const mixed=await page.evaluate(()=>__PMM_SWITCH_SNAPSHOTS_TEST52__.list().find(s=>s.name==='原位独立条目'));
+    assert.equal(mixed.states[0].id,'before');assert.equal(mixed.states[0].enabled,true);
+    assert.equal(mixed.states[11].id,'between');assert.equal(mixed.states.at(-1).id,'after');
+    assert.equal(mixed.groupStates.length,12);assert.ok(!mixed.groupStates.some(g=>g.id==='__ungrouped__'));
+    assert.equal(await page.evaluate(()=>fixture.prompts[0].enabled),false);
     assert.deepEqual(errors,[]);
     console.log('Preset snapshot UI passed:',width,tone);
     await page.close();

@@ -14657,17 +14657,21 @@ import { requestSnapshotName } from './snapshot-name-dialog.js?v=2.98.0-test.30'
       });
       delete group.promptIds;
     }
-    const ungrouped = promptStates.map((_, index) => index).filter(index => !assigned.has(index));
-    if (ungrouped.length) {
-      groups.push({
-        id: '__ungrouped__',
-        sectionId: '',
-        name: '未分组条目',
-        enabled: true,
-        promptIndexes: ungrouped,
-        synthetic: true,
-      });
-    }
+    // A group occupies its first member's position; standalone prompts keep their order.
+    const groupByPrompt = new Map();
+    groups.forEach(group => group.promptIndexes.forEach(index => groupByPrompt.set(index, group)));
+    const rows = [];
+    const placedGroups = new Set();
+    promptStates.forEach((_, index) => {
+      const group = groupByPrompt.get(index);
+      if (!group) rows.push({ promptIndex: index });
+      else if (!placedGroups.has(group.id)) {
+        rows.push({ group });
+        placedGroups.add(group.id);
+      }
+    });
+    // Empty groups have no prompt position, but their power switch must remain available.
+    groups.filter(group => !placedGroups.has(group.id)).forEach(group => rows.push({ group }));
     return {
       presetName,
       source: 'native-preset',
@@ -14675,6 +14679,7 @@ import { requestSnapshotName } from './snapshot-name-dialog.js?v=2.98.0-test.30'
       name: defaultSnapshotName(),
       promptStates,
       groups,
+      rows,
       expandedGroups: new Set(),
       saving: false,
     };
@@ -14696,10 +14701,10 @@ import { requestSnapshotName } from './snapshot-name-dialog.js?v=2.98.0-test.30'
     return `<section class="pmm-switch-editor-group" data-pmm-editor-group="${id}">
       <div class="pmm-switch-editor-group-head">
         <button type="button" class="pmm-switch-editor-expand" data-pmm-editor-action="toggle-group" data-pmm-editor-group-id="${id}" aria-expanded="false"><i class="fa-solid fa-chevron-right"></i></button>
-        <i class="fa-solid ${group.synthetic ? 'fa-layer-group' : 'fa-cubes-stacked'} pmm-switch-editor-group-icon"></i>
+        <i class="fa-solid fa-cubes-stacked pmm-switch-editor-group-icon"></i>
         <strong title="${escapeHtml(group.name)}">${escapeHtml(group.name)}</strong>
         <small data-pmm-editor-count>${count.enabled}/${count.total}</small>
-        ${group.synthetic ? '' : snapshotEditorSwitchMarkup(group.enabled, 'toggle-group-power', `data-pmm-editor-group-id="${id}" aria-label="${escapeHtml(group.name)}分组供电"`)}
+        ${snapshotEditorSwitchMarkup(group.enabled, 'toggle-group-power', `data-pmm-editor-group-id="${id}" aria-label="${escapeHtml(group.name)}分组供电"`)}
       </div>
       <div class="pmm-switch-editor-entries" data-pmm-editor-entries hidden></div>
     </section>`;
@@ -14811,7 +14816,7 @@ import { requestSnapshotName } from './snapshot-name-dialog.js?v=2.98.0-test.30'
         presetName: session.presetName,
         name: session.name,
         promptStates: session.promptStates,
-        groupStates: session.groups.filter(group => !group.synthetic).map(group => ({
+        groupStates: session.groups.map(group => ({
           id: group.id,
           name: group.name,
           enabled: group.enabled,
@@ -14835,8 +14840,8 @@ import { requestSnapshotName } from './snapshot-name-dialog.js?v=2.98.0-test.30'
         <div><h2><i class="fa-solid fa-camera"></i>新建开关快照</h2><p>${escapeHtml(session.presetName)}</p></div>
         <button type="button" data-pmm-editor-action="cancel" title="取消"><i class="fa-solid fa-xmark"></i></button>
       </header>
-      <div class="pmm-switch-editor-summary"><span>${session.promptStates.length} 个条目 · ${session.groups.filter(group => !group.synthetic).length} 个柏宝箱分组</span><small>这里只编辑要保存的方案，不会立即应用到当前预设。</small></div>
-      <div class="pmm-switch-editor-list">${session.groups.map(snapshotEditorGroupMarkup).join('')}</div>
+      <div class="pmm-switch-editor-summary"><span>${session.promptStates.length} 个条目 · ${session.groups.length} 个柏宝箱分组</span><small>这里只编辑要保存的方案，不会立即应用到当前预设。</small></div>
+      <div class="pmm-switch-editor-list">${session.rows.map(row => row.group ? snapshotEditorGroupMarkup(row.group) : `<div class="pmm-switch-editor-standalone">${snapshotEditorPromptMarkup(row.promptIndex)}</div>`).join('')}</div>
       <footer><button type="button" data-pmm-editor-action="cancel">取消</button><button type="button" data-pmm-editor-action="save"><i class="fa-solid fa-floppy-disk"></i>保存快照</button></footer>
     </section>`;
     for (const type of ['pointerdown', 'mousedown', 'touchstart', 'click']) {
@@ -14863,7 +14868,7 @@ import { requestSnapshotName } from './snapshot-name-dialog.js?v=2.98.0-test.30'
         if (expanded) renderSnapshotEditorGroupEntries(groupId);
         if (entries) entries.hidden = !expanded;
       } else if (action === 'toggle-group-power') {
-        const group = snapshotEditorSession.groups.find(item => item.id === groupId && !item.synthetic);
+        const group = snapshotEditorSession.groups.find(item => item.id === groupId);
         if (!group) return;
         group.enabled = !group.enabled;
         button.classList.toggle('is-on', group.enabled);
@@ -15010,7 +15015,7 @@ import { requestSnapshotName } from './snapshot-name-dialog.js?v=2.98.0-test.30'
       </div>` : '';
       return `<article class="pmm-switch-snapshot-row${isActive ? ' is-active' : ''}" data-pmm-snapshot-id="${escapeHtml(snapshot.id)}">
         <div class="pmm-switch-snapshot-copy">
-          <div class="pmm-switch-snapshot-name">${escapeHtml(snapshot.name)}</div>
+          <div class="pmm-switch-snapshot-name" title="${escapeHtml(snapshot.name)}">${escapeHtml(snapshot.name)}</div>
           <div class="pmm-switch-snapshot-meta">${snapshot.states.length} 条${groupCount ? ` · ${groupCount} 分组` : ''} · ${escapeHtml(formatSavedAt(snapshot.updatedAt || snapshot.createdAt))}</div>
         </div>
         <div class="pmm-switch-snapshot-bindings">
@@ -15020,7 +15025,7 @@ import { requestSnapshotName } from './snapshot-name-dialog.js?v=2.98.0-test.30'
           </div>
         </div>
         <div class="pmm-switch-snapshot-actions">
-          <button type="button" data-pmm-snapshot-action="apply" data-pmm-snapshot-id="${escapeHtml(snapshot.id)}"${isActive ? ' class="is-current" disabled title="当前正在应用"' : ''}>${isActive ? '当前' : '全局应用'}</button>
+          <button type="button" data-pmm-snapshot-action="apply" data-pmm-snapshot-id="${escapeHtml(snapshot.id)}"${isActive ? ' class="is-current" disabled title="当前正在应用"' : ''}>${isActive ? '当前' : '应用'}</button>
           <div class="pmm-switch-snapshot-menu-wrap">
             <button type="button" class="pmm-switch-snapshot-more" data-pmm-snapshot-action="menu" data-pmm-snapshot-id="${escapeHtml(snapshot.id)}" title="更多操作"><i class="fa-solid fa-ellipsis"></i></button>
             ${menu}
@@ -15214,6 +15219,18 @@ import { requestSnapshotName } from './snapshot-name-dialog.js?v=2.98.0-test.30'
       .pmm-switch-snapshot-row.is-active{background:color-mix(in srgb,var(--pm-quote-color,var(--SmartThemeQuoteColor,#6b7db2)) 7%,transparent)!important}.pmm-switch-snapshot-actions>button.is-current:disabled,.pmm-switch-snapshot-default-actions>button:disabled{cursor:default!important;pointer-events:none!important;border-color:rgba(148,163,184,.20)!important;background:rgba(127,127,127,.07)!important;color:inherit!important;opacity:.48!important}
     `;
     style.textContent += `@media (max-width:768px){#pmm-switch-snapshots-test52-overlay{align-items:flex-end!important}.pmm-switch-snapshot-overlay{--pmm-switch-snapshot-safe-top:max(8px,env(safe-area-inset-top,0px));--pmm-switch-snapshot-safe-right:max(8px,env(safe-area-inset-right,0px));--pmm-switch-snapshot-safe-bottom:max(8px,env(safe-area-inset-bottom,0px));--pmm-switch-snapshot-safe-left:max(8px,env(safe-area-inset-left,0px));padding:var(--pmm-switch-snapshot-safe-top) var(--pmm-switch-snapshot-safe-right) var(--pmm-switch-snapshot-safe-bottom) var(--pmm-switch-snapshot-safe-left)!important}.pmm-switch-snapshot-dialog{max-height:min(650px,calc(var(--pmm-switch-snapshot-visible-height,100dvh) - var(--pmm-switch-snapshot-safe-top) - var(--pmm-switch-snapshot-safe-bottom)))!important}}`;
+    style.textContent += `
+      #pmm-switch-snapshots-test52-overlay .pmm-switch-snapshot-row{display:grid!important;grid-template-columns:minmax(0,1fr) auto auto!important;column-gap:6px!important;align-items:center!important}
+      #pmm-switch-snapshots-test52-overlay .pmm-switch-snapshot-copy{min-width:0!important;overflow:hidden!important}
+      #pmm-switch-snapshots-test52-overlay .pmm-switch-snapshot-name{display:block!important;overflow:hidden!important;text-overflow:ellipsis!important;white-space:nowrap!important}
+      #pmm-switch-snapshots-test52-overlay .pmm-switch-snapshot-meta{overflow:hidden!important;text-overflow:ellipsis!important;white-space:nowrap!important}
+      #pmm-switch-snapshots-test52-overlay .pmm-switch-snapshot-bindings{min-width:0!important}
+      #pmm-switch-snapshots-test52-overlay .pmm-switch-snapshot-locks{gap:4px!important}
+      #pmm-switch-snapshots-test52-overlay .pmm-switch-snapshot-lock{box-sizing:border-box!important;min-width:46px!important;padding:0 5px!important;white-space:nowrap!important}
+      #pmm-switch-snapshots-test52-overlay .pmm-switch-snapshot-actions{white-space:nowrap!important}
+      #pmm-switch-snapshots-test52-overlay .pmm-switch-snapshot-character-names{grid-column:1 / -1!important}
+      .pmm-switch-editor-standalone{margin:7px 0!important;overflow:hidden!important;border:1px solid var(--pm-border,var(--SmartThemeBorderColor,rgba(148,163,184,.27)))!important;border-radius:11px!important;background:rgba(127,127,127,.035)!important}
+    `;
     style.textContent += `.pmm-switch-snapshot-dialog footer.pmm-switch-snapshot-footer{display:grid!important;gap:5px!important}.pmm-switch-snapshot-dialog footer.pmm-switch-snapshot-footer>span{display:block!important}.pmm-switch-snapshot-dialog footer.pmm-switch-snapshot-footer>span:first-child{font-weight:500!important;opacity:.82!important}.pmm-switch-snapshot-dialog footer.pmm-switch-snapshot-footer>span:last-child{font-size:9px!important;line-height:1.55!important;opacity:.78!important}`;
     style.textContent += `
       .pmm-switch-editor-overlay{position:fixed!important;inset:0!important;z-index:2147483640!important;box-sizing:border-box!important;display:flex!important;align-items:center!important;justify-content:center!important;padding:max(12px,env(safe-area-inset-top,0px)) max(12px,env(safe-area-inset-right,0px)) max(12px,env(safe-area-inset-bottom,0px)) max(12px,env(safe-area-inset-left,0px))!important;background:rgba(0,0,0,.5)!important;backdrop-filter:blur(5px)!important;-webkit-backdrop-filter:blur(5px)!important;color:var(--pm-text-primary,var(--SmartThemeBodyColor,#e5e7eb))!important;font-family:inherit!important;pointer-events:auto!important}

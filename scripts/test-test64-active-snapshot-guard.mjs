@@ -41,7 +41,7 @@ const editorEntry = section('function openSnapshotEditorFromOverlay()', 'functio
 assert.ok(editorEntry.includes('activeSnapshotForPreset(presetName)'), '轻量编辑器入口没有阻止快照套快照');
 
 const overlay = section('function renderOverlay()', 'function ensureOverlay()');
-assert.ok(overlay.includes("${isActive ? '当前' : '全局应用'}"), '预设快照按钮没有区分“全局应用”与“当前”');
+assert.ok(overlay.includes("${isActive ? '当前' : '应用'}"), '预设快照按钮没有区分“应用”与“当前”');
 assert.ok(overlay.includes("disabled title=\"当前正在应用\""), '当前快照按钮仍可重复点击');
 assert.ok(overlay.includes("activeSnapshot ? ' disabled' : ''"), '应用角色快照时更新默认按钮没有禁用');
 

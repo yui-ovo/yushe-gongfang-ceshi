@@ -40,7 +40,7 @@ for (const key of ['version: 1', 'activeSnapshots:', 'homeSnapshots:', 'snapshot
 
 const draftFactory = section('function createSnapshotEditorDraft', 'function snapshotEditorGroupCount');
 assert.ok(draftFactory.includes('makeStates(clone(prompts))'), '编辑器没有从当前 prompts 建立隔离 draft');
-assert.ok(draftFactory.includes("id: '__ungrouped__'"), '未分组条目没有独立归档');
+assert.ok(!draftFactory.includes("id: '__ungrouped__'"), '不应创建合成未分组');
 assert.ok(draftFactory.includes('expandedGroups: new Set()'), '编辑器没有自己的展开状态');
 
 const groupReader = section('function editorGroupState', 'function createSnapshotEditorDraft');
@@ -53,7 +53,7 @@ assert.ok(lazyRenderer.includes("host.dataset.rendered === '1'"), '展开后没�
 assert.ok(lazyRenderer.includes('group.promptIndexes.map(snapshotEditorPromptMarkup)'), '展开分组时没有按需渲染条目');
 
 const mount = section('function mountSnapshotEditor()', 'function openSnapshotEditorFromOverlay');
-assert.ok(mount.includes("session.groups.map(snapshotEditorGroupMarkup).join('')"), '初始窗口没有只渲染分组卡片');
+assert.ok(mount.includes('session.rows.map(row => row.group ? snapshotEditorGroupMarkup(row.group)'), '初始窗口没有按原顺序显示分组与独立条目');
 assert.ok(mount.includes('if (expanded) renderSnapshotEditorGroupEntries(groupId)'), '条目没有延迟到展开操作再渲染');
 assert.ok(!mount.includes('.focus(') && !mount.includes('autofocus'), '编辑器打开时会错误自动唤起手机键盘');
 
@@ -79,7 +79,7 @@ for (const mutation of ['applySnapshot(', 'persistPromptsDirectly(', 'setPreset(
 
 const editorSave = section('function saveSnapshotEditor()', 'function mountSnapshotEditor');
 assert.ok(editorSave.includes('saveSnapshotDraft({'), '保存按钮没有统一走 draft 保存入口');
-assert.ok(editorSave.includes("session.groups.filter(group => !group.synthetic)"), '保存时没有排除合成的未分组卡片');
+assert.ok(editorSave.includes('session.groups.map(group =>'), '保存时应记录真实分组');
 assert.ok(editorSave.includes('if (saved) returnFromSnapshotEditor()'), '保存成功后没有返回管理弹窗');
 
 const returnFlow = section('function returnFromSnapshotEditor()', 'function saveSnapshotEditor');
