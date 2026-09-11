@@ -23,6 +23,10 @@ for (const marker of [
   "clearSavedSize",
   "pmm-desktop-custom-sized",
   "pmm-desktop-resize-handle",
+  "PMM_DESKTOP_RESIZE_REAL_PANEL_TEST35",
+  "#preset-manager-main-panel .pm-panel-container.pmm-desktop-custom-sized:not(.pm-panel-container--merge-mode):not(.pm-panel-container--branch-mode):not(.pm-panel-container--favorite-mode) > .pm-main-wrapper > .preset-panel",
+  "max-width: none !important",
+  "@media screen and (min-width: 769px)",
   "container-type: inline-size",
   "@container (max-width: 600px)",
   "flex-wrap: wrap !important",
@@ -397,5 +401,13 @@ assert.ok(css.includes('.pm-panel-container--branch-mode'), '覆盖分支模式'
 assert.ok(css.includes('.pm-panel-container--merge-mode'), '覆盖缝合模式');
 assert.ok(css.includes('.pm-panel-container--favorite-mode'), '覆盖收藏模式');
 
-console.log('test.94 回归通过：桌面端面板四角拖动居中缩放、双栏防挤压边界、双击重置、触屏隔离以及窄宽度工具栏容器查询自适应全部正常。');
+const realPanelSelector = '#preset-manager-main-panel .pm-panel-container.pmm-desktop-custom-sized:not(.pm-panel-container--merge-mode):not(.pm-panel-container--branch-mode):not(.pm-panel-container--favorite-mode) > .pm-main-wrapper > .preset-panel';
+const realPanelRuleStart = css.indexOf(realPanelSelector);
+const realPanelRuleEnd = css.indexOf('}', realPanelRuleStart);
+const realPanelRule = css.slice(realPanelRuleStart, realPanelRuleEnd + 1);
+assert.ok(realPanelRuleStart > css.indexOf('@media screen and (min-width: 769px)'), '实际面板同步尺寸规则必须只在桌面端生效');
+assert.ok(realPanelRule.includes('flex: 1 1 auto !important'), '实际面板必须随缩放容器伸展');
+assert.ok(realPanelRule.includes('width: 100% !important'), '实际面板必须占满缩放后的主包装器');
+assert.ok(realPanelRule.includes('max-width: none !important'), '实际面板不能继续被默认固定宽度限制');
 
+console.log('test.94 回归通过：桌面端面板四角拖动居中缩放、实际面板与侧栏锚点同步、双栏防挤压边界、双击重置、触屏隔离以及窄宽度工具栏容器查询自适应全部正常。');

@@ -16773,19 +16773,28 @@ console.info('[预设工坊] V2.97.21 已加载：快照模式仅保留条目与
         cursor: nwse-resize !important;
         border-bottom-right-radius: 14px !important;
       }
-      #preset-manager-main-panel .pm-panel-container.pmm-desktop-custom-sized {
-        width: var(--pmm-custom-panel-width) !important;
-        max-width: calc(100vw - 32px) !important;
-      }
-      #preset-manager-main-panel .pm-panel-container.pmm-desktop-custom-sized:not(.pm-panel-container--merge-mode):not(.pm-panel-container--branch-mode):not(.pm-panel-container--favorite-mode) > .pm-main-wrapper {
-        flex: 1 1 auto !important;
-        width: 100% !important;
-        min-width: 0 !important;
-        max-width: 100% !important;
-      }
-      #preset-manager-main-panel .pm-panel-container.pmm-desktop-custom-sized .preset-panel {
-        height: var(--pmm-custom-panel-height) !important;
-        max-height: calc(100dvh - 32px) !important;
+      @media screen and (min-width: 769px) {
+        #preset-manager-main-panel .pm-panel-container.pmm-desktop-custom-sized {
+          width: var(--pmm-custom-panel-width) !important;
+          max-width: calc(100vw - 32px) !important;
+        }
+        #preset-manager-main-panel .pm-panel-container.pmm-desktop-custom-sized:not(.pm-panel-container--merge-mode):not(.pm-panel-container--branch-mode):not(.pm-panel-container--favorite-mode) > .pm-main-wrapper {
+          flex: 1 1 auto !important;
+          width: 100% !important;
+          min-width: 0 !important;
+          max-width: 100% !important;
+        }
+        /* PMM_DESKTOP_RESIZE_REAL_PANEL_TEST35: actual card follows the resizable wrapper, so the side panel remains attached. */
+        #preset-manager-main-panel .pm-panel-container.pmm-desktop-custom-sized:not(.pm-panel-container--merge-mode):not(.pm-panel-container--branch-mode):not(.pm-panel-container--favorite-mode) > .pm-main-wrapper > .preset-panel {
+          flex: 1 1 auto !important;
+          width: 100% !important;
+          min-width: 0 !important;
+          max-width: none !important;
+        }
+        #preset-manager-main-panel .pm-panel-container.pmm-desktop-custom-sized .preset-panel {
+          height: var(--pmm-custom-panel-height) !important;
+          max-height: calc(100dvh - 32px) !important;
+        }
       }
 
       /* 桌面端顶部工具栏容器响应式（基于工坊面板自身宽度） */
