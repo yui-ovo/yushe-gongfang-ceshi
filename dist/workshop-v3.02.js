@@ -16790,7 +16790,19 @@ console.info('[预设工坊] V2.97.21 已加载：快照模式仅保留条目与
 
       /* PMM_DESKTOP_HEADER_SCROLL_TEST100: separate inner and outer scrollports. */
       @media (hover: hover) and (pointer: fine) {
-        #preset-manager-main-panel:not(.pmm-mobile-layout-enabled) .pm-header {
+        /* Keep the sidebar anchor on the visible panel after restoring a desktop size. */
+        #preset-manager-main-panel:not(.pmm-mobile-layout-enabled) .pm-panel-container.pmm-desktop-custom-sized:not(.pm-panel-container--merge-mode):not(.pm-panel-container--branch-mode):not(.pm-panel-container--favorite-mode) > .pm-main-wrapper > .preset-panel {
+          flex: 1 1 auto !important;
+          width: 100% !important;
+          min-width: 0 !important;
+          max-width: none !important;
+        }
+        #preset-manager-main-panel:not(.pmm-mobile-layout-enabled) .pm-panel-container .preset-panel .pm-header::-webkit-scrollbar-track,
+        #preset-manager-main-panel:not(.pmm-mobile-layout-enabled) .pm-panel-container .preset-panel .pm-header .header-left .title-card::-webkit-scrollbar-track {
+          background: rgba(128, 128, 128, .16) !important;
+          border-radius: 4px !important;
+        }
+        #preset-manager-main-panel:not(.pmm-mobile-layout-enabled) .pm-panel-container .preset-panel .pm-header {
           box-sizing: border-box !important;
           min-width: 0 !important;
           max-width: 100% !important;
@@ -16798,16 +16810,17 @@ console.info('[预设工坊] V2.97.21 已加载：快照模式仅保留条目与
           overflow-x: auto !important;
           overflow-y: hidden !important;
           overscroll-behavior-x: contain !important;
-          scrollbar-width: thin !important;
-          scrollbar-color: var(--pm-border, #999) transparent !important;
+          scrollbar-width: auto !important;
+          scrollbar-color: auto !important;
         }
-        #preset-manager-main-panel:not(.pmm-mobile-layout-enabled) .pm-header > .header-left {
+        #preset-manager-main-panel:not(.pmm-mobile-layout-enabled) .pm-panel-container .preset-panel .pm-header > .header-left {
           flex: 0 0 auto !important;
           width: max-content !important;
           min-width: 0 !important;
           max-width: min(320px, 70%) !important;
         }
-        #preset-manager-main-panel:not(.pmm-mobile-layout-enabled) .pm-header .header-left .title-card {
+        #preset-manager-main-panel:not(.pmm-mobile-layout-enabled) .pm-panel-container .preset-panel .pm-header .header-left .title-card {
+          pointer-events: auto !important;
           box-sizing: border-box !important;
           width: 100% !important;
           max-width: 100% !important;
@@ -16816,19 +16829,19 @@ console.info('[预设工坊] V2.97.21 已加载：快照模式仅保留条目与
           overflow-x: auto !important;
           overflow-y: hidden !important;
           overscroll-behavior-x: contain !important;
-          scrollbar-width: thin !important;
-          scrollbar-color: var(--pm-border, #999) transparent !important;
+          scrollbar-width: auto !important;
+          scrollbar-color: auto !important;
         }
-        #preset-manager-main-panel:not(.pmm-mobile-layout-enabled) .pm-header .title-card > *,
-        #preset-manager-main-panel:not(.pmm-mobile-layout-enabled) .pm-header .title-actions > *,
-        #preset-manager-main-panel:not(.pmm-mobile-layout-enabled) .pm-header > .header-right > * {
+        #preset-manager-main-panel:not(.pmm-mobile-layout-enabled) .pm-panel-container .preset-panel .pm-header .title-card > *,
+        #preset-manager-main-panel:not(.pmm-mobile-layout-enabled) .pm-panel-container .preset-panel .pm-header .title-actions > *,
+        #preset-manager-main-panel:not(.pmm-mobile-layout-enabled) .pm-panel-container .preset-panel .pm-header > .header-right > * {
           flex-shrink: 0 !important;
         }
-        #preset-manager-main-panel:not(.pmm-mobile-layout-enabled) .pm-header .title-card > .title-content {
+        #preset-manager-main-panel:not(.pmm-mobile-layout-enabled) .pm-panel-container .preset-panel .pm-header .title-card > .title-content {
           flex: 0 0 auto !important;
           min-width: max-content !important;
         }
-        #preset-manager-main-panel:not(.pmm-mobile-layout-enabled) .pm-header > .header-right {
+        #preset-manager-main-panel:not(.pmm-mobile-layout-enabled) .pm-panel-container .preset-panel .pm-header > .header-right {
           flex: 0 0 auto !important;
           width: max-content !important;
           min-width: max-content !important;
@@ -16836,13 +16849,15 @@ console.info('[预设工坊] V2.97.21 已加载：快照模式仅保留条目与
           flex-wrap: nowrap !important;
           overflow: visible !important;
         }
-        #preset-manager-main-panel:not(.pmm-mobile-layout-enabled) .pm-header::-webkit-scrollbar,
-        #preset-manager-main-panel:not(.pmm-mobile-layout-enabled) .pm-header .title-card::-webkit-scrollbar {
-          height: 4px !important;
+        #preset-manager-main-panel:not(.pmm-mobile-layout-enabled) .pm-panel-container .preset-panel .pm-header::-webkit-scrollbar,
+        #preset-manager-main-panel:not(.pmm-mobile-layout-enabled) .pm-panel-container .preset-panel .pm-header .header-left .title-card::-webkit-scrollbar {
+          display: block !important;
+          width: 7px !important;
+          height: 7px !important;
         }
-        #preset-manager-main-panel:not(.pmm-mobile-layout-enabled) .pm-header::-webkit-scrollbar-thumb,
-        #preset-manager-main-panel:not(.pmm-mobile-layout-enabled) .pm-header .title-card::-webkit-scrollbar-thumb {
-          background: var(--pm-border, #999) !important;
+        #preset-manager-main-panel:not(.pmm-mobile-layout-enabled) .pm-panel-container .preset-panel .pm-header::-webkit-scrollbar-thumb,
+        #preset-manager-main-panel:not(.pmm-mobile-layout-enabled) .pm-panel-container .preset-panel .pm-header .header-left .title-card::-webkit-scrollbar-thumb {
+          background: var(--pm-text-secondary, #888) !important;
           border-radius: 4px !important;
         }
       }
