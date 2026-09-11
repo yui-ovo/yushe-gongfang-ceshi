@@ -16797,51 +16797,29 @@ console.info('[预设工坊] V2.97.21 已加载：快照模式仅保留条目与
         }
       }
 
-      /* 桌面端顶部工具栏容器响应式（基于工坊面板自身宽度） */
-      @media (min-width: 769px) {
-        #preset-manager-main-panel:not(.pmm-mobile-layout-enabled) .pm-panel-container {
-          container-type: inline-size;
-        }
-        #preset-manager-main-panel:not(.pmm-mobile-layout-enabled) .preset-panel {
-          container-type: inline-size;
-        }
-      }
-
-      @container (max-width: 600px) {
-        #preset-manager-main-panel:not(.pmm-mobile-layout-enabled) .pm-header {
+      /* PMM_DESKTOP_HEADER_NATURAL_WRAP_TEST36: the whole tool group moves to a second row only when its real width no longer fits beside the title. */
+      @media screen and (min-width: 769px) {
+        #preset-manager-main-panel .pm-header {
           flex-wrap: wrap !important;
           height: auto !important;
-          min-height: auto !important;
-          align-content: flex-start !important;
           row-gap: 8px !important;
-          padding-top: 10px !important;
-          padding-bottom: 10px !important;
         }
-        #preset-manager-main-panel:not(.pmm-mobile-layout-enabled) .pm-header > .header-right,
-        #preset-manager-main-panel:not(.pmm-mobile-layout-enabled) .pm-panel-container--merge-mode .pm-header > .header-right,
-        #preset-manager-main-panel:not(.pmm-mobile-layout-enabled) .pm-panel-container--branch-mode .pm-header > .header-right,
-        #preset-manager-main-panel:not(.pmm-mobile-layout-enabled) .pm-panel-container--favorite-mode .pm-header > .header-right {
-          width: 100% !important;
+        #preset-manager-main-panel .pm-header > .header-left {
+          flex: 0 0 auto !important;
           min-width: 0 !important;
           max-width: 100% !important;
-          flex: 0 0 100% !important;
+        }
+        #preset-manager-main-panel .pm-header > .header-right {
+          flex: 0 0 auto !important;
+          min-width: 0 !important;
+          max-width: 100% !important;
           margin-left: 0 !important;
           justify-content: flex-start !important;
           flex-wrap: nowrap !important;
-          overflow-x: auto !important;
-          overflow-y: hidden !important;
-          padding-bottom: 2px !important;
-          scrollbar-width: thin !important;
+          overflow: visible !important;
         }
-        #preset-manager-main-panel:not(.pmm-mobile-layout-enabled) .pm-header > .header-right > * {
+        #preset-manager-main-panel .pm-header > .header-right > * {
           flex-shrink: 0 !important;
-        }
-        #preset-manager-main-panel:not(.pmm-mobile-layout-enabled) .pm-header > .header-right::-webkit-scrollbar {
-          height: 3px !important;
-        }
-        #preset-manager-main-panel:not(.pmm-mobile-layout-enabled) .pm-header > .header-right::-webkit-scrollbar-thumb {
-          background: var(--pm-border, rgba(127, 127, 127, 0.3)) !important;
-          border-radius: 3px !important;
         }
       }
     `;

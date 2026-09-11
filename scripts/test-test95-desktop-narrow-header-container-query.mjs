@@ -2,69 +2,37 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
 const source = await readFile(new URL('../dist/workshop-v3.02.js', import.meta.url), 'utf8');
+const moduleStart = source.indexOf("const API_KEY = '__PMM_DESKTOP_FOUR_CORNER_RESIZE__';");
+const styleStart = source.indexOf('    style.textContent = `', moduleStart);
+const cssStart = source.indexOf('`', styleStart) + 1;
+const cssEnd = source.indexOf('\n    `;', cssStart);
+assert.ok(moduleStart >= 0 && styleStart > moduleStart && cssEnd > cssStart, '无法提取桌面缩放与顶部布局样式');
 
-// 1. Static CSS & Container Query Rule Validations
-const requiredMarkers = [
-  'container-type: inline-size',
-  '@container (max-width: 600px)',
-  '#preset-manager-main-panel:not(.pmm-mobile-layout-enabled) .pm-panel-container',
-  '#preset-manager-main-panel:not(.pmm-mobile-layout-enabled) .preset-panel',
-  '#preset-manager-main-panel:not(.pmm-mobile-layout-enabled) .pm-header',
+const css = source.slice(cssStart, cssEnd);
+const marker = 'PMM_DESKTOP_HEADER_NATURAL_WRAP_TEST36';
+const headerStart = css.indexOf(marker);
+assert.ok(headerStart >= 0, '必须提供桌面顶部工具组自然换行规则');
+const headerCss = css.slice(headerStart);
+
+for (const markerPart of [
+  '@media screen and (min-width: 769px)',
+  '#preset-manager-main-panel .pm-header {',
+  '#preset-manager-main-panel .pm-header > .header-left {',
+  '#preset-manager-main-panel .pm-header > .header-right {',
   'flex-wrap: wrap !important',
-  'width: 100% !important',
+  'flex: 0 0 auto !important',
+  'max-width: 100% !important',
   'margin-left: 0 !important',
   'justify-content: flex-start !important',
   'flex-wrap: nowrap !important',
-  'overflow-x: auto !important',
+  'overflow: visible !important',
   'flex-shrink: 0 !important',
-  '.pm-panel-container--branch-mode .pm-header > .header-right',
-  '.pm-panel-container--merge-mode .pm-header > .header-right',
-  '.pm-panel-container--favorite-mode .pm-header > .header-right',
-  'scrollbar-width: thin !important',
-];
-
-for (const marker of requiredMarkers) {
-  assert.ok(source.includes(marker), `workshop-v3.02.js 缺失必要容器查询规则：${marker}`);
-}
-
-// 2. Strict Desktop Scoping & Mobile Rule Isolation Checks
-assert.ok(
-  source.includes('@media (min-width: 769px) {\n        #preset-manager-main-panel:not(.pmm-mobile-layout-enabled) .pm-panel-container'),
-  '容器类型定义必须限定在桌面端视口 (min-width: 769px) 且排除移动端布局类'
-);
-
-assert.ok(
-  source.includes(':not(.pmm-mobile-layout-enabled) .pm-header'),
-  '容器查询样式必须限定桌面端，不得覆盖移动端已有样式'
-);
-
-// Verify no JS resize observer / polling was added for header responsiveness
-assert.ok(
-  !source.includes('ResizeObserver(entries => { for (const entry of entries) { if (entry.target.classList.contains(\'pm-header\'))'),
-  '不得使用 JS ResizeObserver 监听 header 尺寸，必须基于纯 CSS Container Query'
-);
-
-// 3. Functional / Layout Rule Checks
-const cqIndex = source.indexOf('@container (max-width: 600px)');
-assert.notEqual(cqIndex, -1, '找不到 @container (max-width: 600px) 声明');
-const cqBlock = source.slice(cqIndex, source.indexOf('}\n    `;', cqIndex) + 2);
-
-// Check that the container query resets margin-left and aligns flex-start
-assert.ok(cqBlock.includes('margin-left: 0 !important'), '第二行工具按钮必须重置 margin-left: 0');
-assert.ok(cqBlock.includes('justify-content: flex-start !important'), '第二行工具按钮必须左对齐排列');
-assert.ok(cqBlock.includes('width: 100% !important'), '第二行工具按钮组必须占满容器整行宽度');
-assert.ok(cqBlock.includes('flex: 0 0 100% !important'), '第二行工具按钮组必须强制 flex 换行');
-assert.ok(cqBlock.includes('overflow-x: auto !important'), '超窄宽度下工具按钮栏支持横向滚动兜底');
-assert.ok(cqBlock.includes('flex-shrink: 0 !important'), '工具按钮尺寸必须固定，禁止被压扁');
-
-// Check that all 4 desktop modes are covered in the container query selector
-for (const modeSelector of [
-  '.pm-header > .header-right',
-  '.pm-panel-container--branch-mode .pm-header > .header-right',
-  '.pm-panel-container--merge-mode .pm-header > .header-right',
-  '.pm-panel-container--favorite-mode .pm-header > .header-right'
 ]) {
-  assert.ok(cqBlock.includes(modeSelector), `容器查询规则未覆盖该模式：${modeSelector}`);
+  assert.ok(headerCss.includes(markerPart), `桌面顶部自然换行样式缺失：${markerPart}`);
 }
 
-console.log('test.95 回归通过：工坊顶部 header 成功实现基于面板容器自身宽度的 Container Query 响应式调整，窄面板换行左对齐横划兜底、宽面板恢复单行、全页面模式覆盖且移动端完全隔离。');
+assert.ok(!headerCss.includes(':not(.pmm-mobile-layout-enabled)'), '桌面规则不能被遗留移动布局类意外排除');
+assert.ok(!headerCss.includes('overflow-x: auto !important'), '窄面板必须换行，不能使用横向滚动代替');
+assert.ok(!headerCss.includes('container-type: inline-size'), '无需依赖固定阈值的容器查询；应根据两个真实 flex 项目自然换行');
+
+console.log('test.95 回归通过：桌面顶部栏按标题和工具组的实际宽度自然换行，宽度充足时保持单行，窄宽度时整组工具进入第二行，且不受遗留移动布局类影响。');

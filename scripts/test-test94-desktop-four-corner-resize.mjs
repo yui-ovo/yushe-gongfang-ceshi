@@ -26,18 +26,15 @@ for (const marker of [
   "PMM_DESKTOP_RESIZE_REAL_PANEL_TEST35",
   "#preset-manager-main-panel .pm-panel-container.pmm-desktop-custom-sized:not(.pm-panel-container--merge-mode):not(.pm-panel-container--branch-mode):not(.pm-panel-container--favorite-mode) > .pm-main-wrapper > .preset-panel",
   "max-width: none !important",
+  "PMM_DESKTOP_HEADER_NATURAL_WRAP_TEST36",
   "@media screen and (min-width: 769px)",
-  "container-type: inline-size",
-  "@container (max-width: 600px)",
+  "#preset-manager-main-panel .pm-header > .header-left",
   "flex-wrap: wrap !important",
-  "width: 100% !important",
+  "flex: 0 0 auto !important",
   "justify-content: flex-start !important",
   "margin-left: 0 !important",
-  "overflow-x: auto !important",
   "flex-wrap: nowrap !important",
-  ".pm-panel-container--branch-mode .pm-header > .header-right",
-  ".pm-panel-container--merge-mode .pm-header > .header-right",
-  ".pm-panel-container--favorite-mode .pm-header > .header-right",
+  "overflow: visible !important",
 ]) {
   assert.ok(source.includes(marker), `workshop-v3.02.js 必须包含四角缩放及容器查询逻辑标记：${marker}`);
 }
@@ -382,24 +379,25 @@ mockWin.innerWidth = 500;
 api.ensureHandles(container);
 assert.equal(container.querySelectorAll('.pmm-desktop-resize-handle').length, 0, '移动端环境下自动清理四角缩放 handle');
 
-// Test 3.8: Desktop Header Container Query Responsiveness (Narrow width adaptation)
+// Test 3.8: Desktop Header Natural Wrap Responsiveness (Narrow width adaptation)
 mockWin.innerWidth = 1920;
 api.ensureHandles(container);
 const styleEl = mockWin.document.getElementById('pmm-desktop-corner-resize-style');
-assert.ok(styleEl, '桌面端环境应自动安装尺寸与容器查询样式');
+assert.ok(styleEl, '桌面端环境应自动安装尺寸与顶部换行样式');
 const css = styleEl.textContent;
-assert.ok(css.includes('container-type: inline-size'), '必须在面板容器上定义 inline-size 容器查询类型');
-assert.ok(css.includes('@container (max-width: 600px)'), '必须使用 @container 响应面板容器自身宽度');
-assert.ok(css.includes('flex-wrap: wrap !important'), '窄宽度时 header 换行排列');
-assert.ok(css.includes('width: 100% !important'), '窄宽度时 header-right 占满整行');
-assert.ok(css.includes('margin-left: 0 !important'), '窄宽度时 header-right 清除右对齐与左边距');
-assert.ok(css.includes('justify-content: flex-start !important'), '窄宽度时 header-right 按钮从左向右排列');
-assert.ok(css.includes('overflow-x: auto !important'), '窄宽度时工具按钮支持横向滚动作为兜底');
-assert.ok(css.includes('flex-shrink: 0 !important'), '工具按钮不能被压扁');
-assert.ok(css.includes(':not(.pmm-mobile-layout-enabled)'), '容器查询样式限定桌面端，排除手机端');
-assert.ok(css.includes('.pm-panel-container--branch-mode'), '覆盖分支模式');
-assert.ok(css.includes('.pm-panel-container--merge-mode'), '覆盖缝合模式');
-assert.ok(css.includes('.pm-panel-container--favorite-mode'), '覆盖收藏模式');
+const headerMarker = 'PMM_DESKTOP_HEADER_NATURAL_WRAP_TEST36';
+const headerBlock = css.slice(css.indexOf(headerMarker));
+assert.ok(css.includes(headerMarker), '必须提供桌面端顶部自然换行规则');
+assert.ok(headerBlock.includes('@media screen and (min-width: 769px)'), '顶部换行规则必须限定桌面端视口');
+assert.ok(headerBlock.includes('#preset-manager-main-panel .pm-header {'), '所有工坊面板的顶部栏都应参与自然换行');
+assert.ok(headerBlock.includes('flex-wrap: wrap !important'), '工具组空间不足时 header 必须允许换到第二行');
+assert.ok(headerBlock.includes('.pm-header > .header-left'), '标题区域必须作为完整的第一行项目参与排版');
+assert.ok(headerBlock.includes('flex: 0 0 auto !important'), '标题和工具组必须按其实际宽度决定是否换行');
+assert.ok(headerBlock.includes('justify-content: flex-start !important'), '第二行工具按钮应从左侧开始排列');
+assert.ok(headerBlock.includes('flex-wrap: nowrap !important'), '工具组内部按钮不能被拆散成多行');
+assert.ok(headerBlock.includes('overflow: visible !important'), '工具组不能以横向滚动替代第二行');
+assert.ok(!headerBlock.includes(':not(.pmm-mobile-layout-enabled)'), '桌面规则不能因遗留移动布局类而失效');
+assert.ok(!headerBlock.includes('overflow-x: auto !important'), '顶部工具组不应添加横向滚动兜底');
 
 const realPanelSelector = '#preset-manager-main-panel .pm-panel-container.pmm-desktop-custom-sized:not(.pm-panel-container--merge-mode):not(.pm-panel-container--branch-mode):not(.pm-panel-container--favorite-mode) > .pm-main-wrapper > .preset-panel';
 const realPanelRuleStart = css.indexOf(realPanelSelector);
@@ -410,4 +408,4 @@ assert.ok(realPanelRule.includes('flex: 1 1 auto !important'), '实际面板必�
 assert.ok(realPanelRule.includes('width: 100% !important'), '实际面板必须占满缩放后的主包装器');
 assert.ok(realPanelRule.includes('max-width: none !important'), '实际面板不能继续被默认固定宽度限制');
 
-console.log('test.94 回归通过：桌面端面板四角拖动居中缩放、实际面板与侧栏锚点同步、双栏防挤压边界、双击重置、触屏隔离以及窄宽度工具栏容器查询自适应全部正常。');
+console.log('test.94 回归通过：桌面端面板四角拖动居中缩放、实际面板与侧栏锚点同步、双栏防挤压边界、双击重置、触屏隔离以及顶部工具组按实际宽度自然换行全部正常。');
