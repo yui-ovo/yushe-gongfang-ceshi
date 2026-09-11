@@ -7,7 +7,7 @@ const { chromium } = await import(process.env.PMM_PLAYWRIGHT_MODULE
 const files = Object.fromEntries(await Promise.all(['snapshot-name-dialog.js', 'worldbook-snapshots.js', 'worldbook-snapshot-core.js', 'worldbook-stitch-test3.js'].map(async name => [name, await readFile(new URL(`../dist/${name}`, import.meta.url), 'utf8')])));
 const html = `<!doctype html><html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>
 body{background:#151515;margin:0;color:#ddd;font:14px system-ui} #preset-manager-main-panel{margin:20px;--pm-panel-bg:#191919;--pm-card-bg:#242424;--pm-border:#373737;--pm-text-primary:#eee;--pm-hover-bg:#303030;--pm-accent:#429980}
-.preset-panel{padding:20px;background:#191919}.pmm-switch-snapshot-dialog{background:#222;padding:12px;color:#eee}
+.preset-panel{padding:20px;background:#191919}.pmm-switch-snapshot-dialog{display:flex;flex-direction:column;overflow:hidden;background:#222;padding:0;color:#eee}.pmm-switch-snapshot-head,.pmm-switch-snapshot-default,.pmm-switch-snapshot-create,.pmm-switch-snapshot-footer{flex-shrink:0;padding:12px}.pmm-switch-snapshot-list{min-height:0;overflow:auto}.pmm-switch-snapshot-row{min-height:72px;padding:8px;margin:4px}
 </style><div id="preset-manager-main-panel"><div class="pm-panel-container"><div class="pm-main-wrapper"><div class="preset-panel"><div class="header-right"></div>预设工坊 · 界面测试</div></div></div></div><button id="camera">相机</button><script>
 const cp=x=>JSON.parse(JSON.stringify(x)); const listeners=new Set();
 const world=(prefix,n=16)=>({entries:Object.fromEntries(Array.from({length:n},(_,i)=>[i,{uid:i,comment:prefix+' · '+['角色设定','日常互动','剧情推进','场景细节'][i%4]+' '+i,content:'正文保留',disable:i%3===0}]))});
@@ -15,7 +15,7 @@ window.fixture={selected:undefined,globals:['日常辅助','手动保留'],data:
 window.SillyTavern={getContext:()=>({characterId:fixture.selected,chatId:fixture.selected===undefined?'':fixture.chatId||'chat-one',characters:[{name:'小雨',avatar:'rain.png'},{name:'小夏',avatar:'summer.png'}],eventTypes:{CHAT_CHANGED:'chat'},eventSource:{on:(t,fn)=>listeners.add(fn),off:(t,fn)=>listeners.delete(fn)},getWorldInfoNames:()=>Object.keys(fixture.data),loadWorldInfo:async n=>cp(fixture.data[n]),saveWorldInfo:async(n,d)=>{fixture.data[n]=cp(d)}})};
 window.TavernHelper={getWorldbookNames:()=>Object.keys(fixture.data),getGlobalWorldbookNames:()=>[...fixture.globals],rebindGlobalWorldbooks:async ns=>{fixture.globals=[...ns]},getCharWorldbookNames:()=>({primary:'角色世界',additional:[]})};
 window.__PMM_WORLDBOOK_STITCH_TEST3__={state:{top:{dirty:false},bottom:{dirty:false}},refreshSnapshotBook:()=>{}};
-window.__PMM_SWITCH_SNAPSHOTS_TEST52__={close:()=>document.querySelector('#preset-fixture')?.remove(),isCapturing:()=>false,open:()=>{const root=document.createElement('div');root.id='preset-fixture';root.innerHTML='<section class="pmm-switch-snapshot-dialog"><header>预设快照</header><div class="pmm-switch-snapshot-row"><div class="pmm-switch-snapshot-bindings"><button class="pmm-switch-snapshot-lock">角色</button></div><div class="pmm-switch-snapshot-menu"></div></div></section>';document.body.append(root);__PMM_WORLDBOOK_SNAPSHOTS__.decoratePreset(root)}};
+window.__PMM_SWITCH_SNAPSHOTS_TEST52__={close:()=>document.querySelector('#preset-fixture')?.remove(),isCapturing:()=>false,open:()=>{const root=document.createElement('div');root.id='preset-fixture';root.innerHTML='<section class="pmm-switch-snapshot-dialog"><header class="pmm-switch-snapshot-head">预设快照</header><section class="pmm-switch-snapshot-default">预设默认</section><div class="pmm-switch-snapshot-create"><button>新建开关快照</button></div><div class="pmm-switch-snapshot-list"><article class="pmm-switch-snapshot-row"><div class="pmm-switch-snapshot-bindings"><button class="pmm-switch-snapshot-lock">角色</button></div>第一份快照</article></div><footer class="pmm-switch-snapshot-footer">快照说明</footer></section>';document.body.append(root);__PMM_WORLDBOOK_SNAPSHOTS__.decoratePreset(root)}};
 document.querySelector('#camera').onclick=()=>window.__PMM_WORLDBOOK_SNAPSHOTS__.open();
 </script><script type="module" src="/worldbook-snapshots.js"></script></html>`;
 const server = createServer((req, res) => {
@@ -51,11 +51,12 @@ try {
     assert.equal(await page.locator('[data-source-query]').count(),0);
     assert.equal(await page.locator('[data-wbs="new"]').count(),0);
     const initial=await page.locator('.pmm-wbs-dialog').boundingBox();
+    const initialHalfHeight=await page.evaluate(()=>Math.floor((window.visualViewport?.height || window.innerHeight)/2));
     if(width<769)assert.ok(Math.abs(initial.y+initial.height-836)<2,'Worldbook manager is bottom aligned');
-    assert.ok(initial.height>=450 && initial.height<=461);
+    assert.ok(initial.height>0 && initial.height<=initialHalfHeight+1,'Short worldbook snapshot sheet stays content-sized within half the visible viewport');
     await page.click('[data-hub-tab="global"]');
     await page.click('[data-hub-tab="character"]');
-    assert.ok(Math.abs((await page.locator('.pmm-wbs-dialog').boundingBox()).height-initial.height)<1);
+    assert.ok((await page.locator('.pmm-wbs-dialog').boundingBox()).height<=initialHalfHeight+1,'Changing snapshot tabs keeps the worldbook sheet within the same half-screen cap');
     await page.evaluate(()=>fixture.select(0));
     await page.locator('[data-wbs="new"]:enabled').waitFor();
     assert.equal(await page.locator('[data-wbs="sources"]').count(),0,'No all-role picker');
@@ -366,11 +367,27 @@ try {
     assert.equal(await page.locator('[data-group-filter]').inputValue(), '中文输入');
     await page.click('[data-wbs="cancel-edit"]');
     await page.click('[data-wbs="close"]');
+    await page.setViewportSize({width,height:width<600?844:900});
     await page.evaluate(()=>__PMM_SWITCH_SNAPSHOTS_TEST52__.open());
     await page.locator('#preset-fixture .pmm-switch-snapshot-dialog').waitFor();
+    const presetShortHeight=await page.locator('#preset-fixture .pmm-switch-snapshot-dialog').evaluate(node=>node.getBoundingClientRect().height);
+    const presetHalfHeight=await page.evaluate(()=>Math.floor((window.visualViewport?.height || window.innerHeight)/2));
     assert.equal(await page.locator('#preset-fixture .pmm-snapshot-tabs').count(),0);
     assert.equal(await page.locator('.pmm-switch-snapshot-menu .pmm-switch-snapshot-lock').count(), 0);
     assert.equal(await page.locator('.pmm-switch-snapshot-bindings .pmm-switch-snapshot-lock').isVisible(),true);
+    await page.evaluate(()=>{
+      const list=document.querySelector('#preset-fixture .pmm-switch-snapshot-list');
+      list.insertAdjacentHTML('beforeend',Array.from({length:24},(_,index)=>`<article class="pmm-switch-snapshot-row">快照 ${index+2}</article>`).join(''));
+    });
+    await page.waitForFunction(()=>{
+      const dialog=document.querySelector('#preset-fixture .pmm-switch-snapshot-dialog');
+      const list=document.querySelector('#preset-fixture .pmm-switch-snapshot-list');
+      const half=Math.floor((window.visualViewport?.height || window.innerHeight)/2);
+      return dialog && list && dialog.getBoundingClientRect().height<=half+1 && list.scrollHeight>list.clientHeight;
+    });
+    const presetLongHeight=await page.locator('#preset-fixture .pmm-switch-snapshot-dialog').evaluate(node=>node.getBoundingClientRect().height);
+    assert.ok(presetLongHeight>presetShortHeight+40,'Preset snapshot sheet grows when snapshots are added');
+    assert.ok(presetLongHeight<=presetHalfHeight+1,'Preset snapshot sheet stops at half the visible viewport');
     await page.evaluate(()=>__PMM_SWITCH_SNAPSHOTS_TEST52__.close());
     await page.click('#camera');
     await page.locator('.pmm-wbs-dialog').waitFor();
@@ -403,14 +420,24 @@ try {
     assert.equal(await page.locator('.pmm-wbs-overlay').getAttribute('data-wbs-tone'), tone);
     await page.screenshot({path:fileURLToPath(new URL(`compact-${mode}.png`, output))});
     await page.evaluate(async()=>{
-      for(let i=0;i<50;i++)await __PMM_WORLDBOOK_SNAPSHOTS__.engine.saveGroup({name:'分组 '+i,books:['世界书 '+i]});
+      await __PMM_WORLDBOOK_SNAPSHOTS__.engine.saveGroup({name:'分组 0',books:['世界书 0']});
     });
     await page.click('[data-hub-tab="global"]');
     await page.locator('[data-wbs="group-menu"]').first().waitFor();
     assert.equal(await page.locator('[data-wbs="snapshots"]').count(),0);
     await page.waitForFunction(()=>{const node=document.querySelector('.pmm-wbs-dialog');const rect=node?.getBoundingClientRect();return rect && rect.width>0 && rect.height>0;});
-    const compactHeight=await page.locator('.pmm-wbs-dialog').evaluate(node=>node.getBoundingClientRect().height);
-    assert.ok(compactHeight<=461);
+    const shortHeight=await page.locator('.pmm-wbs-dialog').evaluate(node=>node.getBoundingClientRect().height);
+    const visibleHalfHeight=await page.evaluate(()=>Math.floor((window.visualViewport?.height || window.innerHeight)/2));
+    assert.ok(shortHeight>0 && shortHeight<=visibleHalfHeight+1,'Short worldbook list keeps a compact content-driven sheet');
+    await page.evaluate(async()=>{
+      for(let i=1;i<50;i++)await __PMM_WORLDBOOK_SNAPSHOTS__.engine.saveGroup({name:'分组 '+i,books:['世界书 '+i]});
+    });
+    await page.click('[data-hub-tab="character"]');
+    await page.click('[data-hub-tab="global"]');
+    await page.locator('[data-wbs="group-menu"]').first().waitFor();
+    const cappedHeight=await page.locator('.pmm-wbs-dialog').evaluate(node=>node.getBoundingClientRect().height);
+    assert.ok(cappedHeight>shortHeight+20,'Worldbook snapshot sheet grows as more groups are shown');
+    assert.ok(cappedHeight<=visibleHalfHeight+1,'Worldbook snapshot sheet stops at half the visible viewport');
     await page.waitForFunction(()=>{const node=document.querySelector('.pmm-wbs-body');return node && node.scrollHeight>node.clientHeight;});
     await page.locator('.pmm-wbs-body').evaluate(node => { node.scrollTop=node.scrollHeight; });
     await page.locator('[data-wbs="group-menu"]').last().click();

@@ -14521,6 +14521,7 @@ import { requestSnapshotName } from './snapshot-name-dialog.js?v=2.98.0-test.32'
       overlay.style.removeProperty('width');
       overlay.style.removeProperty('height');
       overlay.style.removeProperty('--pmm-switch-snapshot-visible-height');
+      overlay.style.removeProperty('--pmm-switch-snapshot-sheet-max-height');
     };
     const update = () => {
       frame = 0;
@@ -14555,6 +14556,7 @@ import { requestSnapshotName } from './snapshot-name-dialog.js?v=2.98.0-test.32'
       overlay.style.setProperty('width', `${width}px`, 'important');
       overlay.style.setProperty('height', `${height}px`, 'important');
       overlay.style.setProperty('--pmm-switch-snapshot-visible-height', `${height}px`, 'important');
+      overlay.style.setProperty('--pmm-switch-snapshot-sheet-max-height', `${Math.max(1, Math.floor(height / 2))}px`, 'important');
     };
     const scheduleUpdate = () => {
       if (frame) return;

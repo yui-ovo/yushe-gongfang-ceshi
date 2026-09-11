@@ -222,11 +222,16 @@ style.textContent = `
   font-family:var(--pm-font-family,system-ui,sans-serif); text-shadow:none;
 }
 .pmm-wbs-dialog { width:600px; }
-.pmm-wbs-dialog,.pmm-snapshot-hub-preset .pmm-switch-snapshot-dialog {
-  height:min(460px,calc(var(--wbs-visible-height,var(--pmm-switch-snapshot-visible-height,100dvh)) - 32px))!important;
-  max-height:100%!important; color:var(--wbs-ink)!important;
+/* Let short snapshot sheets hug their content like the original preset UI.
+   Once a list grows, only its own body scrolls and the sheet stays within
+   half of the actual visible viewport. */
+.pmm-wbs-dialog:not(.is-editing):not(.pmm-wbs-batch-dialog),.pmm-snapshot-hub-preset .pmm-switch-snapshot-dialog {
+  height:auto!important;
+  max-height:50vh!important;
+  max-height:min(50dvh,var(--wbs-sheet-max-height,var(--pmm-switch-snapshot-sheet-max-height,50dvh)))!important;
+  color:var(--wbs-ink)!important;
 }
-.pmm-snapshot-hub-preset .pmm-switch-snapshot-list { flex:1!important; min-height:0!important; max-height:none!important; }
+.pmm-wbs-dialog:not(.is-editing):not(.pmm-wbs-batch-dialog) .pmm-wbs-body,.pmm-snapshot-hub-preset .pmm-switch-snapshot-list { flex:0 1 auto!important; min-height:0!important; max-height:none!important; overflow:auto!important; }
 .pmm-snapshot-hub-preset .pmm-switch-snapshot-head,.pmm-snapshot-hub-preset .pmm-switch-snapshot-default,.pmm-snapshot-hub-preset .pmm-switch-snapshot-create,.pmm-snapshot-hub-preset .pmm-switch-snapshot-footer { flex-shrink:0!important; }
 .pmm-wbs-source-section[hidden],.pmm-wbs-source[hidden] { display:none!important; }
 .pmm-wbs-source-search { position:sticky; top:-10px; z-index:1; background:var(--wbs-surface); padding-top:4px; }
@@ -471,9 +476,11 @@ function bindViewport() {
   const update = () => {
     frame = 0;
     if (!overlay) return;
-    const values={position:'fixed',inset:'auto',left:`${vv?.offsetLeft || 0}px`,top:`${vv?.offsetTop || 0}px`,right:'auto',bottom:'auto',width:`${vv?.width || TOP.innerWidth}px`,height:`${vv?.height || TOP.innerHeight}px`};
+    const visibleHeight=Math.max(1,Number(vv?.height || TOP.innerHeight || 1));
+    const values={position:'fixed',inset:'auto',left:`${vv?.offsetLeft || 0}px`,top:`${vv?.offsetTop || 0}px`,right:'auto',bottom:'auto',width:`${vv?.width || TOP.innerWidth}px`,height:`${visibleHeight}px`};
     for(const [name,value] of Object.entries(values))overlay.style.setProperty(name,value,'important');
-    overlay.style.setProperty('--wbs-visible-height', `${vv?.height || TOP.innerHeight}px`);
+    overlay.style.setProperty('--wbs-visible-height', `${visibleHeight}px`);
+    overlay.style.setProperty('--wbs-sheet-max-height', `${Math.max(1,Math.floor(visibleHeight/2))}px`);
   };
   const schedule = event => {
     if(menuId && ['resize','orientationchange','scroll'].includes(event?.type)) {
