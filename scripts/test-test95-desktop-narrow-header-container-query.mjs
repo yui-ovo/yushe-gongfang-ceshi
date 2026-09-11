@@ -7,7 +7,6 @@ const css=source.slice(start,source.indexOf('    `;',start));
 
 for(const marker of [
   '@media screen and (min-width: 769px)',
-  ':not(.pmm-mobile-layout-enabled)',
   'width: fit-content !important',
   'flex-wrap: wrap !important',
   'min-height: 80px !important',

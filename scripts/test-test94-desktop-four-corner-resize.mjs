@@ -377,7 +377,7 @@ const css = styleEl.textContent;
 assert.ok(css.includes('width: 100% !important'), '窄宽度时 header-right 占满整行');
 assert.ok(css.includes('flex-wrap: wrap !important'), '窄宽度时工具按钮改为换行');
 assert.ok(css.includes('flex: 0 0 auto !important'), '工具按钮不能被压扁');
-assert.ok(css.includes(':not(.pmm-mobile-layout-enabled)'), '容器查询样式限定桌面端，排除手机端');
+assert.ok(css.includes('@media screen and (min-width: 769px)'), '样式按桌面宽度限定，手机端不会命中');
 assert.ok(css.includes('.pm-panel-container--branch-mode'), '覆盖分支模式');
 assert.ok(css.includes('.pm-panel-container--merge-mode'), '覆盖缝合模式');
 assert.ok(css.includes('.pm-panel-container--favorite-mode'), '覆盖收藏模式');

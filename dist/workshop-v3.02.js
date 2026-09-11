@@ -16782,19 +16782,19 @@ console.info('[预设工坊] V2.97.21 已加载：快照模式仅保留条目与
       @media screen and (min-width: 769px) {
         /* A saved container can be wider than its fixed-size panel. Keep the
            side toolbar attached to that visible panel on the first render. */
-        #preset-manager-main-panel:not(.pmm-mobile-layout-enabled) .pm-panel-container:not(.pm-panel-container--merge-mode):not(.pm-panel-container--branch-mode):not(.pm-panel-container--favorite-mode) > .pm-main-wrapper {
+        #preset-manager-main-panel .pm-panel-container:not(.pm-panel-container--merge-mode):not(.pm-panel-container--branch-mode):not(.pm-panel-container--favorite-mode) > .pm-main-wrapper {
           display: inline-flex !important;
           flex: 0 1 auto !important;
           width: fit-content !important;
           max-width: 100% !important;
           min-width: 0 !important;
         }
-        #preset-manager-main-panel:not(.pmm-mobile-layout-enabled) .pm-panel-container:not(.pm-panel-container--merge-mode):not(.pm-panel-container--branch-mode):not(.pm-panel-container--favorite-mode) > .pm-main-wrapper > .preset-panel {
+        #preset-manager-main-panel .pm-panel-container:not(.pm-panel-container--merge-mode):not(.pm-panel-container--branch-mode):not(.pm-panel-container--favorite-mode) > .pm-main-wrapper > .preset-panel {
           min-width: 0 !important;
           max-width: 100% !important;
         }
 
-        #preset-manager-main-panel:not(.pmm-mobile-layout-enabled) .pm-panel-container .preset-panel .pm-header {
+        #preset-manager-main-panel .pm-panel-container .preset-panel .pm-header {
           box-sizing: border-box !important;
           min-width: 0 !important;
           max-width: 100% !important;
@@ -16802,7 +16802,7 @@ console.info('[预设工坊] V2.97.21 已加载：快照模式仅保留条目与
           min-height: 80px !important;
           overflow: hidden !important;
         }
-        #preset-manager-main-panel:not(.pmm-mobile-layout-enabled) .pm-panel-container .preset-panel .pm-header > .header-left {
+        #preset-manager-main-panel .pm-panel-container .preset-panel .pm-header > .header-left {
           flex: 0 1 260px !important;
           width: min(260px, 48%) !important;
           min-width: 160px !important;
@@ -16810,18 +16810,18 @@ console.info('[预设工坊] V2.97.21 已加载：快照模式仅保留条目与
           height: auto !important;
           overflow: visible !important;
         }
-        #preset-manager-main-panel:not(.pmm-mobile-layout-enabled) .pm-panel-container .preset-panel .pm-header .header-left .title-card {
+        #preset-manager-main-panel .pm-panel-container .preset-panel .pm-header .header-left .title-card {
           box-sizing: border-box !important;
           width: 100% !important;
           max-width: 100% !important;
           min-width: 0 !important;
           overflow: hidden !important;
         }
-        #preset-manager-main-panel:not(.pmm-mobile-layout-enabled) .pm-panel-container .preset-panel .pm-header > .header-right {
-          flex: 1 1 0 !important;
-          width: auto !important;
+        #preset-manager-main-panel .pm-panel-container .preset-panel .pm-header > .header-right {
+          flex: 0 1 300px !important;
+          width: min(300px, 48%) !important;
           min-width: 0 !important;
-          max-width: none !important;
+          max-width: 48% !important;
           height: auto !important;
           min-height: 36px !important;
           display: flex !important;
@@ -16832,7 +16832,7 @@ console.info('[预设工坊] V2.97.21 已加载：快照模式仅保留条目与
           row-gap: .25rem !important;
           overflow: visible !important;
         }
-        #preset-manager-main-panel:not(.pmm-mobile-layout-enabled) .pm-panel-container .preset-panel .pm-header > .header-right > * {
+        #preset-manager-main-panel .pm-panel-container .preset-panel .pm-header > .header-right > * {
           flex: 0 0 auto !important;
         }
       }
