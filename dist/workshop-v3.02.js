@@ -16788,51 +16788,62 @@ console.info('[预设工坊] V2.97.21 已加载：快照模式仅保留条目与
         max-height: calc(100dvh - 32px) !important;
       }
 
-      /* 桌面端顶部工具栏容器响应式（基于工坊面板自身宽度） */
-      @media (min-width: 769px) {
-        #preset-manager-main-panel:not(.pmm-mobile-layout-enabled) .pm-panel-container {
-          container-type: inline-size;
-        }
-        #preset-manager-main-panel:not(.pmm-mobile-layout-enabled) .preset-panel {
-          container-type: inline-size;
-        }
-      }
-
-      @container (max-width: 600px) {
+      /* PMM_DESKTOP_HEADER_SCROLL_TEST100: separate inner and outer scrollports. */
+      @media (hover: hover) and (pointer: fine) {
         #preset-manager-main-panel:not(.pmm-mobile-layout-enabled) .pm-header {
-          flex-wrap: wrap !important;
-          height: auto !important;
-          min-height: auto !important;
-          align-content: flex-start !important;
-          row-gap: 8px !important;
-          padding-top: 10px !important;
-          padding-bottom: 10px !important;
-        }
-        #preset-manager-main-panel:not(.pmm-mobile-layout-enabled) .pm-header > .header-right,
-        #preset-manager-main-panel:not(.pmm-mobile-layout-enabled) .pm-panel-container--merge-mode .pm-header > .header-right,
-        #preset-manager-main-panel:not(.pmm-mobile-layout-enabled) .pm-panel-container--branch-mode .pm-header > .header-right,
-        #preset-manager-main-panel:not(.pmm-mobile-layout-enabled) .pm-panel-container--favorite-mode .pm-header > .header-right {
-          width: 100% !important;
+          box-sizing: border-box !important;
           min-width: 0 !important;
           max-width: 100% !important;
-          flex: 0 0 100% !important;
-          margin-left: 0 !important;
-          justify-content: flex-start !important;
           flex-wrap: nowrap !important;
           overflow-x: auto !important;
           overflow-y: hidden !important;
-          padding-bottom: 2px !important;
+          overscroll-behavior-x: contain !important;
           scrollbar-width: thin !important;
+          scrollbar-color: var(--pm-border, #999) transparent !important;
         }
+        #preset-manager-main-panel:not(.pmm-mobile-layout-enabled) .pm-header > .header-left {
+          flex: 0 0 auto !important;
+          width: max-content !important;
+          min-width: 0 !important;
+          max-width: min(320px, 70%) !important;
+        }
+        #preset-manager-main-panel:not(.pmm-mobile-layout-enabled) .pm-header .header-left .title-card {
+          box-sizing: border-box !important;
+          width: 100% !important;
+          max-width: 100% !important;
+          min-width: 0 !important;
+          flex-wrap: nowrap !important;
+          overflow-x: auto !important;
+          overflow-y: hidden !important;
+          overscroll-behavior-x: contain !important;
+          scrollbar-width: thin !important;
+          scrollbar-color: var(--pm-border, #999) transparent !important;
+        }
+        #preset-manager-main-panel:not(.pmm-mobile-layout-enabled) .pm-header .title-card > *,
+        #preset-manager-main-panel:not(.pmm-mobile-layout-enabled) .pm-header .title-actions > *,
         #preset-manager-main-panel:not(.pmm-mobile-layout-enabled) .pm-header > .header-right > * {
           flex-shrink: 0 !important;
         }
-        #preset-manager-main-panel:not(.pmm-mobile-layout-enabled) .pm-header > .header-right::-webkit-scrollbar {
-          height: 3px !important;
+        #preset-manager-main-panel:not(.pmm-mobile-layout-enabled) .pm-header .title-card > .title-content {
+          flex: 0 0 auto !important;
+          min-width: max-content !important;
         }
-        #preset-manager-main-panel:not(.pmm-mobile-layout-enabled) .pm-header > .header-right::-webkit-scrollbar-thumb {
-          background: var(--pm-border, rgba(127, 127, 127, 0.3)) !important;
-          border-radius: 3px !important;
+        #preset-manager-main-panel:not(.pmm-mobile-layout-enabled) .pm-header > .header-right {
+          flex: 0 0 auto !important;
+          width: max-content !important;
+          min-width: max-content !important;
+          max-width: none !important;
+          flex-wrap: nowrap !important;
+          overflow: visible !important;
+        }
+        #preset-manager-main-panel:not(.pmm-mobile-layout-enabled) .pm-header::-webkit-scrollbar,
+        #preset-manager-main-panel:not(.pmm-mobile-layout-enabled) .pm-header .title-card::-webkit-scrollbar {
+          height: 4px !important;
+        }
+        #preset-manager-main-panel:not(.pmm-mobile-layout-enabled) .pm-header::-webkit-scrollbar-thumb,
+        #preset-manager-main-panel:not(.pmm-mobile-layout-enabled) .pm-header .title-card::-webkit-scrollbar-thumb {
+          background: var(--pm-border, #999) !important;
+          border-radius: 4px !important;
         }
       }
     `;
