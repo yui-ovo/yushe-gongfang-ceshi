@@ -12,7 +12,12 @@
   const MULTI_DRAG_FLOAT_WIDTH = 198;
   const MULTI_DRAG_FLOAT_HEIGHT = 58;
   const TOP_NOTIFICATION_STORAGE_KEY = 'pmm_top_notifications_enabled_v1';
-  const IS_ANDROID = /Android/i.test(String(TOP.navigator?.userAgent || SELF.navigator?.userAgent || ''));
+  const USER_AGENT = String(TOP.navigator?.userAgent || SELF.navigator?.userAgent || '');
+  const PLATFORM = String(TOP.navigator?.userAgentData?.platform || TOP.navigator?.platform || '');
+  const IS_ANDROID = /Android/i.test(USER_AGENT);
+  const IS_IOS = /iPad|iPhone|iPod/i.test(USER_AGENT)
+    || (/Mac/i.test(PLATFORM) && Number(TOP.navigator?.maxTouchPoints || 0) > 1);
+  const IS_TAURI = (() => { try { return Boolean(TOP.__TAURITAVERN__); } catch (_) { return false; } })();
   const MODE_CLASSES = ['pm-panel-container--merge-mode', 'pm-panel-container--branch-mode', 'pm-panel-container--favorite-mode'];
   const POSITION_OPTIONS = [
     [0, '角色定义之前'], [1, '角色定义之后'], [5, '示例消息之前'], [6, '示例消息之后'],
@@ -62,6 +67,7 @@
   let context = null;
   let operationTail = Promise.resolve();
   let hostObserver = null;
+  let worldbookViewportCleanup = null;
   let renderFrame = 0;
   let dragPayload = null;
   let worldMultiDragFloat = null;
@@ -2676,6 +2682,12 @@
     style.id = STYLE_ID;
     style.textContent = `
 #preset-manager-main-panel.pmm-worldbook-mode .pm-panel-container{position:relative!important}
+#preset-manager-main-panel.pmm-worldbook-browser-viewport>.pm-overlay,#preset-manager-main-panel.pmm-worldbook-browser-viewport .pm-overlay{position:absolute!important;inset:0!important;width:100%!important;height:100%!important;align-items:stretch!important;justify-content:stretch!important;overflow:hidden!important}
+#preset-manager-main-panel.pmm-worldbook-browser-viewport .pm-panel-container.pmm-worldbook-layout{display:grid!important;grid-template-columns:minmax(0,1fr)!important;grid-template-rows:minmax(0,1fr) var(--pmm-toolbar-h,40px) minmax(0,1fr)!important;gap:var(--pmm-gap,6px)!important;overflow:hidden!important}
+#preset-manager-main-panel.pmm-worldbook-browser-viewport .pm-panel-container.pmm-worldbook-layout>.pm-main-wrapper{display:contents!important}
+#preset-manager-main-panel.pmm-worldbook-browser-viewport .pm-panel-container.pmm-worldbook-layout>.pm-main-wrapper>.preset-panel{grid-column:1!important;grid-row:1!important;min-width:0!important;min-height:0!important;width:100%!important;height:100%!important}
+#preset-manager-main-panel.pmm-worldbook-browser-viewport .pm-panel-container.pmm-worldbook-layout>.pm-main-wrapper>.side-panel-root{grid-column:1!important;grid-row:2!important;position:relative!important;left:auto!important;right:auto!important;top:auto!important;bottom:auto!important;transform:none!important;align-self:center!important;justify-self:center!important;margin:0!important}
+#preset-manager-main-panel.pmm-worldbook-browser-viewport .pm-panel-container.pmm-worldbook-layout>.preset-panel{grid-column:1!important;grid-row:3!important;min-width:0!important;min-height:0!important;width:100%!important;height:100%!important}
 #preset-manager-main-panel.pmm-worldbook-mode .pm-panel-container--merge-mode button[title="取消当前预设全部分组"]{display:none!important}
 #preset-manager-main-panel.pmm-worldbook-mode .pm-main-wrapper>.preset-panel .theme-switch-card{display:none!important}
 #preset-manager-main-panel .pmm-wb-native-hidden{display:none!important}
@@ -2728,6 +2740,114 @@
 
   function wait(milliseconds) { return new Promise(resolve => TOP.setTimeout(resolve, milliseconds)); }
 
+  function shouldBindMobileWorldbookViewport() {
+    if (IS_TAURI) return false;
+    return IS_ANDROID || IS_IOS || Boolean(TOP.matchMedia?.('(max-width: 768px)')?.matches);
+  }
+
+  function bindMobileWorldbookViewport() {
+    worldbookViewportCleanup?.();
+    worldbookViewportCleanup = null;
+    if (!shouldBindMobileWorldbookViewport() || !state.host || !state.container) return;
+
+    const host = state.host;
+    const container = state.container;
+    const timeout = TOP.setTimeout?.bind(TOP);
+    const clearTimeout = TOP.clearTimeout?.bind(TOP);
+    const request = TOP.requestAnimationFrame?.bind(TOP) || (callback => timeout(callback, 0));
+    const cancel = TOP.cancelAnimationFrame?.bind(TOP) || clearTimeout;
+    let frame = 0;
+    let orientationTimer = 0;
+    const settleTimers = new Set();
+    const hostProperties = ['position', 'inset', 'left', 'top', 'right', 'bottom', 'width', 'height', 'min-height', 'max-height'];
+    const panelProperties = ['width', 'height', 'min-height', 'max-height'];
+    const rememberInline = (element, properties) => new Map(properties.map(name => [name, {
+      value: element.style.getPropertyValue(name),
+      priority: element.style.getPropertyPriority(name),
+    }]));
+    const restoreInline = (element, remembered) => {
+      for (const [name, previous] of remembered) {
+        if (previous.value) element.style.setProperty(name, previous.value, previous.priority);
+        else element.style.removeProperty(name);
+      }
+    };
+    const hostInline = rememberInline(host, hostProperties);
+    const panelInline = rememberInline(container, panelProperties);
+
+    const finitePositive = value => {
+      const number = Number(value);
+      return Number.isFinite(number) && number > 0 ? number : 0;
+    };
+    const update = () => {
+      frame = 0;
+      if (!state.open || state.host !== host || !host.isConnected || !container.isConnected) return;
+      const overlay = host.querySelector(':scope > .pm-overlay') || host.querySelector('.pm-overlay');
+      if (!overlay) return;
+      const viewport = TOP.visualViewport;
+      const screenHeight = finitePositive(TOP.screen?.availHeight || TOP.screen?.height);
+      const screenWidth = finitePositive(TOP.screen?.availWidth || TOP.screen?.width);
+      let visibleWidth = finitePositive(viewport?.width || TOP.innerWidth || DOC.documentElement?.clientWidth);
+      let visibleHeight = finitePositive(viewport?.height || TOP.innerHeight || DOC.documentElement?.clientHeight);
+      // 某些远程手机浏览器在地址栏切换期间会短暂报告一条很小的 visualViewport。
+      // 只有数值明显失真时才以屏幕 CSS 尺寸兜底，避免把正常地址栏高度强行放大。
+      if (visibleWidth < 240 && screenWidth >= 240) visibleWidth = screenWidth;
+      if (visibleHeight < 320 && screenHeight >= 320) visibleHeight = Math.max(320, screenHeight * .82);
+      const pageLeft = Number.isFinite(Number(viewport?.pageLeft))
+        ? Number(viewport.pageLeft)
+        : Number(TOP.scrollX || TOP.pageXOffset || 0) + Number(viewport?.offsetLeft || 0);
+      const pageTop = Number.isFinite(Number(viewport?.pageTop))
+        ? Number(viewport.pageTop)
+        : Number(TOP.scrollY || TOP.pageYOffset || 0) + Number(viewport?.offsetTop || 0);
+
+      const hostValues = {
+        position:'absolute', inset:'auto', left:`${pageLeft}px`, top:`${pageTop}px`, right:'auto', bottom:'auto',
+        width:`${visibleWidth}px`, height:`${visibleHeight}px`, 'min-height':`${visibleHeight}px`, 'max-height':`${visibleHeight}px`,
+      };
+      for (const [name, value] of Object.entries(hostValues)) host.style.setProperty(name, value, 'important');
+      host.classList.add('pmm-worldbook-browser-viewport');
+
+      const computed = TOP.getComputedStyle?.(overlay);
+      const horizontalPadding = finitePositive(computed?.paddingLeft) + finitePositive(computed?.paddingRight);
+      const verticalPadding = finitePositive(computed?.paddingTop) + finitePositive(computed?.paddingBottom);
+      const panelWidth = Math.max(1, Math.floor(visibleWidth - horizontalPadding));
+      const panelHeight = Math.max(1, Math.floor(visibleHeight - verticalPadding));
+      const panelValues = { width:`${panelWidth}px`, height:`${panelHeight}px`, 'min-height':`${panelHeight}px`, 'max-height':`${panelHeight}px` };
+      for (const [name, value] of Object.entries(panelValues)) container.style.setProperty(name, value, 'important');
+    };
+    const schedule = () => {
+      if (!frame) frame = request(update);
+    };
+    const settle = () => {
+      schedule();
+      for (const delay of [80, 180, 360]) {
+        const timer = timeout?.(() => {
+          settleTimers.delete(timer);
+          schedule();
+        }, delay);
+        if (timer) settleTimers.add(timer);
+      }
+    };
+    const onOrientationChange = () => {
+      schedule();
+      if (orientationTimer) clearTimeout?.(orientationTimer);
+      orientationTimer = timeout?.(() => { orientationTimer = 0; settle(); }, 120) || 0;
+    };
+    const viewport = TOP.visualViewport;
+    const targets = [[TOP, 'resize', schedule], [TOP, 'scroll', schedule], [TOP, 'orientationchange', onOrientationChange], [viewport, 'resize', schedule], [viewport, 'scroll', schedule]];
+    targets.forEach(([target, name, listener]) => target?.addEventListener(name, listener, { passive: true }));
+    settle();
+    worldbookViewportCleanup = () => {
+      targets.forEach(([target, name, listener]) => target?.removeEventListener(name, listener));
+      if (frame) cancel?.(frame);
+      if (orientationTimer) clearTimeout?.(orientationTimer);
+      for (const timer of settleTimers) clearTimeout?.(timer);
+      settleTimers.clear();
+      host.classList.remove('pmm-worldbook-browser-viewport');
+      restoreInline(host, hostInline);
+      restoreInline(container, panelInline);
+    };
+  }
+
   async function ensureNormalMode(container) {
     const activeMode = MODE_CLASSES.some(name => container.classList.contains(name));
     if (!activeMode) return true;
@@ -2763,14 +2883,17 @@
     clearWorldDropIndicators();
     host.classList.add('pmm-worldbook-mode');
     container.classList.add('pm-panel-container--merge-mode', 'pmm-worldbook-layout');
+    setStatus('读取世界书…');
+    renderPanels();
+    bindMobileWorldbookViewport();
     try {
       state.busy = true;
-      setStatus('读取世界书…');
       await refreshWorldNames();
       await loadWorldSide(state.bottom);
       if (state.topType === 'world') await loadWorldSide(state.top);
       setStatus('已同步');
       renderPanels();
+      bindMobileWorldbookViewport();
     } catch (error) {
       console.error('[世界书缝合] 打开失败', error);
       notify('error', `打开失败：${error?.message || error}`);
@@ -2791,6 +2914,8 @@
     endNativePresetDragState();
     clearNativeDropIndicators();
     clearWorldDropIndicators();
+    worldbookViewportCleanup?.();
+    worldbookViewportCleanup = null;
     state.open = false;
     state.busy = false;
     state.status = '已同步';

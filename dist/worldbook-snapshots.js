@@ -469,82 +469,27 @@ function watchTheme() {
 }
 function bindViewport() {
   const vv = TOP.visualViewport;
-  const timeout = TOP.setTimeout?.bind(TOP);
-  const clearTimeout = TOP.clearTimeout?.bind(TOP);
-  const request = TOP.requestAnimationFrame?.bind(TOP) || (callback => timeout(callback, 0));
-  const cancel = TOP.cancelAnimationFrame?.bind(TOP) || clearTimeout;
-  const userAgent = String(TOP.navigator?.userAgent || '');
-  const platform = String(TOP.navigator?.userAgentData?.platform || TOP.navigator?.platform || '');
-  const isIOS = /iPad|iPhone|iPod/i.test(userAgent)
-    || (/Mac/i.test(platform) && Number(TOP.navigator?.maxTouchPoints || 0) > 1);
   let frame = 0;
-  let orientationTimer = 0;
-  const settleTimers = new Set();
   const update = () => {
     frame = 0;
-    if (!overlay?.isConnected) return;
-    const activeElement = DOC.activeElement;
-    const keyboardTarget = !!activeElement
-      && overlay.contains(activeElement)
-      && /^(INPUT|TEXTAREA|SELECT)$/.test(activeElement.tagName || '');
-    const useFixedKeyboardViewport = isIOS && keyboardTarget && !!vv;
-    const left = useFixedKeyboardViewport
-      ? Number(vv.offsetLeft || 0)
-      : Number.isFinite(Number(vv?.pageLeft))
-        ? Number(vv.pageLeft)
-        : Number(TOP.scrollX || TOP.pageXOffset || 0) + Number(vv?.offsetLeft || 0);
-    const top = useFixedKeyboardViewport
-      ? Number(vv.offsetTop || 0)
-      : Number.isFinite(Number(vv?.pageTop))
-        ? Number(vv.pageTop)
-        : Number(TOP.scrollY || TOP.pageYOffset || 0) + Number(vv?.offsetTop || 0);
-    const visibleWidth=Math.max(1,Number(vv?.width || TOP.innerWidth || DOC.documentElement?.clientWidth || 1));
+    if (!overlay) return;
     const visibleHeight=Math.max(1,Number(vv?.height || TOP.innerHeight || 1));
-    // 手机浏览器对 fixed 与 visualViewport.offsetTop 的组合处理并不一致，直接叠加会把弹窗推离屏幕。
-    // 普通状态沿用预设快照已验证的页面坐标定位；仅 iOS 键盘聚焦时切回 visual viewport 内的 fixed。
-    const values={position:useFixedKeyboardViewport?'fixed':'absolute',inset:'auto',left:`${left}px`,top:`${top}px`,right:'auto',bottom:'auto',width:`${visibleWidth}px`,height:`${visibleHeight}px`};
+    const values={position:'fixed',inset:'auto',left:`${vv?.offsetLeft || 0}px`,top:`${vv?.offsetTop || 0}px`,right:'auto',bottom:'auto',width:`${vv?.width || TOP.innerWidth}px`,height:`${visibleHeight}px`};
     for(const [name,value] of Object.entries(values))overlay.style.setProperty(name,value,'important');
-    overlay.style.setProperty('--wbs-visible-height', `${visibleHeight}px`, 'important');
-    overlay.style.setProperty('--wbs-sheet-min-height', `${Math.max(1,Math.floor(visibleHeight*.5))}px`, 'important');
-    overlay.style.setProperty('--wbs-sheet-max-height', `${Math.max(1,Math.floor(visibleHeight*.6))}px`, 'important');
+    overlay.style.setProperty('--wbs-visible-height', `${visibleHeight}px`);
+    overlay.style.setProperty('--wbs-sheet-min-height', `${Math.max(1,Math.floor(visibleHeight*.5))}px`);
+    overlay.style.setProperty('--wbs-sheet-max-height', `${Math.max(1,Math.floor(visibleHeight*.6))}px`);
   };
   const schedule = event => {
     if(menuId && ['resize','orientationchange','scroll'].includes(event?.type)) {
       menuId='';overlay?.querySelectorAll('.pmm-wbs-menu').forEach(node=>node.remove());
     }
-    if (!frame) frame = request(update);
+    if (!frame) frame = TOP.requestAnimationFrame(update);
   };
-  const settleViewport = event => {
-    if (event?.target && !overlay?.contains(event.target)) return;
-    schedule(event);
-    for (const delay of [80, 180, 360]) {
-      const timer = timeout?.(() => {
-        settleTimers.delete(timer);
-        schedule();
-      }, delay);
-      if (timer) settleTimers.add(timer);
-    }
-  };
-  const onOrientationChange = event => {
-    schedule(event);
-    if (orientationTimer) clearTimeout?.(orientationTimer);
-    orientationTimer = timeout?.(() => {
-      orientationTimer = 0;
-      settleViewport();
-    }, 120) || 0;
-  };
-  const targets = [[TOP, 'resize', schedule], [TOP, 'scroll', schedule], [TOP, 'orientationchange', onOrientationChange], [vv, 'resize', schedule], [vv, 'scroll', schedule], [overlay, 'focusin', settleViewport], [overlay, 'focusout', settleViewport]];
-  targets.forEach(([target, name, listener]) => target?.addEventListener(name, listener, { passive: true }));
-  settleViewport();
-  viewportCleanup = () => {
-    targets.forEach(([target, name, listener]) => target?.removeEventListener(name, listener));
-    if (frame) cancel?.(frame);
-    if (orientationTimer) clearTimeout?.(orientationTimer);
-    for (const timer of settleTimers) clearTimeout?.(timer);
-    settleTimers.clear();
-    frame = 0;
-    orientationTimer = 0;
-  };
+  const targets = [[TOP, 'resize'], [TOP, 'scroll'], [TOP, 'orientationchange'], [vv, 'resize'], [vv, 'scroll'], [overlay, 'focusin'], [overlay, 'focusout']];
+  targets.forEach(([target, name]) => target?.addEventListener(name, schedule, { passive: true }));
+  update();
+  viewportCleanup = () => { targets.forEach(([target, name]) => target?.removeEventListener(name, schedule)); if (frame) TOP.cancelAnimationFrame(frame); };
 }
 function say(text,sticky=false) {
   TOP.clearTimeout(messageTimer); messageTimer=0;
