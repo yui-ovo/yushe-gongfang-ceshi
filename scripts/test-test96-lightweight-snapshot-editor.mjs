@@ -93,7 +93,7 @@ assert.ok(managerEvents.includes("saveDefaultSnapshot({ silent: true })) openSna
 assert.ok(snapshots.includes("const EDITOR_OVERLAY_ID = 'pmm-switch-snapshot-editor-overlay'"), '编辑器没有独立 Overlay ID');
 assert.ok(snapshots.includes('function bindSnapshotEditorToVisibleViewport'), '编辑器没有绑定 VisualViewport');
 assert.ok(snapshots.includes('--pmm-switch-editor-visible-height'), '编辑器没有使用手机可视高度变量');
-assert.ok(snapshots.includes('.pmm-switch-editor-name input{') && snapshots.includes('font-size:16px!important'), '手机输入框没有保持 16px 字号');
+assert.ok(!mount.includes('id="pmm-switch-editor-name"'), '编辑页不应预先显示快照名称');
 assert.ok(snapshots.includes('pointer-events:auto!important'), '独立 Overlay 没有明确启用交互');
 
 console.log('test.96 通过：原生相机统一进入独立轻量编辑器，lazy render、draft 隔离、兼容存储与返回流程均已覆盖。');

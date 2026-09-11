@@ -1,3 +1,4 @@
+import { requestSnapshotName } from './snapshot-name-dialog.js?v=2.98.0-test.30';
 import { createWorldbookSnapshots, copy } from './worldbook-snapshot-core.js?v=2.98.0-test.28';
 
 const SELF = window, TOP = window.parent || window, DOC = TOP.document;
@@ -740,8 +741,7 @@ function ensureBookEntries(details) {
   filterDraft(name);
 }
 function draftMarkup() {
-  return '<label>快照名称<div class="pmm-wbs-name-field"><input type="text" data-name value="'+h(draft.name)+'" maxlength="100" autocomplete="off">'+button('focus-name',icon('edit'),'class="pmm-wbs-name-edit" aria-label="编辑快照名称"')+'</div></label>'
-    +'<small>共 '+Object.keys(draft.data).length+' 本世界书 · 点击书名展开或收起</small><div data-entries>'
+  return '<small>共 '+Object.keys(draft.data).length+' 本世界书 · 点击书名展开或收起</small><div data-entries>'
     +Object.entries(draft.data).map(([name,data])=>{
       const isOpen=!!draft.expanded[name];
       const entriesContent=isOpen?bookEntriesMarkup(name,data):'';
@@ -874,7 +874,6 @@ async function close(force = false) {
   if (!force) try { await engine.transition(); } catch (error) { TOP.toastr?.warning?.(error.message); }
 }
 function onInput(event) {
-  if (draft && event.target.matches('[data-name]')) draft.name = event.target.value;
   if (editGroup && event.target.matches('[data-group-name]')) { editGroup.name = event.target.value; syncGroupSave(); }
   if (editGroup && event.target.matches('[data-group-filter]')) { groupQuery=event.target.value; filterGroupBooks(); }
   if (draft && event.target.matches('[data-filter-book]')) {
@@ -958,7 +957,6 @@ function onClick(event) {
     return;
   }
   if (action === 'close') { void close(); return; }
-  if (action === 'focus-name') { overlay.querySelector('[data-name]')?.focus(); return; }
   if (action === 'focus-group-name') { overlay.querySelector('[data-group-name]')?.focus(); return; }
   if (action === 'dismiss-message') { say(''); return; }
   if(['choose','sources','back-sources','snapshots','groups','back-groups','manage-snapshots'].includes(action))say('');
@@ -984,6 +982,10 @@ function onClick(event) {
         draft={...captured,expanded:Object.fromEntries(Object.keys(captured.data).map(name=>[name,Object.keys(captured.data).length===1])),queries:{},previews:{}};
       } catch(error) { engine.setCapturing(false);throw error; }
     } else if (action === 'save-draft') {
+      const editingDraft = draft;
+      const name = await requestSnapshotName(overlay, draft.name);
+      if (name === null || draft !== editingDraft) return;
+      draft.name = name;
       const returnToGroups=page==='global' && section==='groups' && draft.scope==='group';
       const editing=!!draft.id;
       if(editing) {

@@ -70,6 +70,6 @@ for (const marker of [
 }
 
 const stylesheet = section('function installStyle()', 'function install()');
-assert.ok(stylesheet.includes('.pmm-switch-editor-name input{') && stylesheet.includes('font-size:16px!important'), 'iOS 仍会因小号轻量编辑器名称输入框自动缩放页面');
+assert.ok((await readFile(new URL('../dist/snapshot-name-dialog.js', import.meta.url), 'utf8')).includes('font-size:16px'), 'iOS 仍会因小号命名弹窗输入框自动缩放页面');
 
 console.log('test.78 回归通过：主页快照可在角色/聊天临时覆盖后恢复，轻量编辑器输入框不会触发 iOS 自动缩放。');

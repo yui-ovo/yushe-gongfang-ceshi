@@ -4,7 +4,7 @@ import { readFile, mkdir } from 'node:fs/promises';
 import { pathToFileURL, fileURLToPath } from 'node:url';
 const { chromium } = await import(process.env.PMM_PLAYWRIGHT_MODULE
   ? pathToFileURL(process.env.PMM_PLAYWRIGHT_MODULE).href : 'playwright');
-const files = Object.fromEntries(await Promise.all(['worldbook-snapshots.js', 'worldbook-snapshot-core.js', 'worldbook-stitch-test3.js'].map(async name => [name, await readFile(new URL(`../dist/${name}`, import.meta.url), 'utf8')])));
+const files = Object.fromEntries(await Promise.all(['snapshot-name-dialog.js', 'worldbook-snapshots.js', 'worldbook-snapshot-core.js', 'worldbook-stitch-test3.js'].map(async name => [name, await readFile(new URL(`../dist/${name}`, import.meta.url), 'utf8')])));
 const html = `<!doctype html><html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>
 body{background:#151515;margin:0;color:#ddd;font:14px system-ui} #preset-manager-main-panel{margin:20px;--pm-panel-bg:#191919;--pm-card-bg:#242424;--pm-border:#373737;--pm-text-primary:#eee;--pm-hover-bg:#303030;--pm-accent:#429980}
 .preset-panel{padding:20px;background:#191919}.pmm-switch-snapshot-dialog{background:#222;padding:12px;color:#eee}
@@ -60,15 +60,9 @@ try {
     assert.equal(await page.locator('[data-wbs="sources"]').count(),0,'No all-role picker');
     await page.screenshot({path:fileURLToPath(new URL('role-'+width+'.png',output))});
     await page.click('[data-wbs="new"]');
-    assert.equal(await page.locator('[data-wbs="focus-name"]').count(),1,'Editable name has pencil affordance');
+    assert.equal(await page.locator('[data-name]').count(),0,'Name is deferred until Save');
     const draftGap=await page.evaluate(()=>document.querySelector('.pmm-wbs-body.is-draft').getBoundingClientRect().top-document.querySelector('.pmm-snapshot-tabs').getBoundingClientRect().bottom);
     assert.ok(draftGap<=12,'Snapshot editor starts close to the tabs');
-    const nameBounds=await page.locator('[data-name]').boundingBox(),pencilBounds=await page.locator('[data-wbs="focus-name"]').boundingBox();
-    assert.ok(nameBounds.height<=40,'Snapshot name input stays compact');
-    assert.ok(Math.abs((nameBounds.y+nameBounds.height/2)-(pencilBounds.y+pencilBounds.height/2))<=1,'Snapshot name pencil is vertically centered');
-    await page.click('[data-wbs="focus-name"]');
-    assert.equal(await page.evaluate(()=>document.activeElement?.matches('[data-name]')),true,'Pencil focuses snapshot name');
-    await page.locator('[data-name]').fill('日常 · 温柔模式');
     const before = await page.evaluate(() => fixture.data['角色世界'].entries[0].disable);
     const previewSwitch=page.locator('[data-toggle-book="角色世界"][data-toggle="1"]');
     const previewSwitchBefore=await previewSwitch.isChecked();
@@ -93,6 +87,12 @@ try {
     await page.locator('[data-filter-book="角色世界"]').fill('');
     await page.screenshot({ path:fileURLToPath(new URL(`draft-${width}.png`, output)) });
     await page.click('[data-wbs="save-draft"]');
+    await page.locator('input#name').waitFor();
+    await page.getByRole('button',{name:'返回编辑',exact:true}).click();
+    assert.ok(await page.locator('[data-draft-book]').count(),'Cancel naming retains draft');
+    await page.click('[data-wbs="save-draft"]');
+    await page.locator('input#name').fill('日常 · 温柔模式');
+    await page.locator('button[type="submit"]').click();
     await page.getByText('日常 · 温柔模式', {exact:true}).waitFor();
     assert.equal(await page.locator('.pmm-switch-snapshot-default.is-saved').count(),1,'Character default reuses preset component');
     assert.equal(await page.locator('[data-wbs="reset-bundle"].pmm-switch-snapshot-reset-all').count(),1,'Character default has preset reset button');
@@ -185,7 +185,6 @@ try {
     assert.ok(toggle.width<=32 && toggle.height<=20,'Compact visual toggle');
     await page.selectOption('[data-group-plan]','__new_snapshot__');
     assert.equal(await page.locator('[data-draft-book]').count(),2,'Inline create automatically uses the current group');
-    await page.locator('[data-name]').fill('分组 · 剧情模式');
     assert.equal(await page.locator('[data-draft-book]').count(),2,'Both books loaded into draft');
     assert.equal(await page.locator('[data-draft-book][open]').count(),0,'Multiple books begin collapsed');
     assert.equal(await page.locator('[data-draft-book] summary:visible').count(),2,'Both headings visible together');
@@ -208,6 +207,12 @@ try {
     await page.locator('[data-draft-book="剧情补充"] summary').click();
     assert.equal(await page.locator('[data-toggle-book="剧情补充"][data-toggle="0"]').isChecked(),true,'Collapse preserves draft toggle');
     await page.click('[data-wbs="save-draft"]');
+    await page.locator('input#name').waitFor();
+    await page.getByRole('button',{name:'返回编辑',exact:true}).click();
+    assert.ok(await page.locator('[data-draft-book]').count(),'Cancel naming retains draft');
+    await page.click('[data-wbs="save-draft"]');
+    await page.locator('input#name').fill('分组 · 剧情模式');
+    await page.locator('button[type="submit"]').click();
     await page.locator('[data-group-plan] option').filter({hasText:'分组 · 剧情模式'}).waitFor({state:'attached'});
     assert.equal(await page.locator('[data-wbs="new-group"]').count(),1,'Inline create returns to the current group page after Save');
     assert.equal(await page.locator('[data-group-plan]').inputValue(),'','Inline create does not change the selected plan');
@@ -242,6 +247,12 @@ try {
     if(!await page.locator('[data-wbs="edit-snapshot"]').count())await page.click('[data-wbs="menu"]');
     await page.click('[data-wbs="edit-snapshot"]');
     await page.click('[data-wbs="save-draft"]');
+    await page.locator('input#name').waitFor();
+    await page.getByRole('button',{name:'返回编辑',exact:true}).click();
+    assert.ok(await page.locator('[data-draft-book]').count(),'Cancel naming retains draft');
+    await page.click('[data-wbs="save-draft"]');
+
+    await page.locator('button[type="submit"]').click();
     assert.equal(await page.locator('[data-wbs="use-plan"]').count(),0,'Plan selection only belongs in group dropdown');
     await page.click('[data-wbs="dismiss-message"]');
     assert.equal(await page.locator('[data-message]').isVisible(),false);
