@@ -16653,22 +16653,12 @@ console.info('[预设工坊] V2.97.21 已加载：快照模式仅保留条目与
   function isDesktop(doc) {
     const view = doc?.defaultView || TOP || window;
     try {
-      const width = view.innerWidth || 0;
-      if (width <= 768) return false;
-      const mm = (typeof view.matchMedia === 'function')
-        ? q => view.matchMedia(q)
-        : (typeof globalThis.matchMedia === 'function')
-        ? q => globalThis.matchMedia(q)
-        : null;
-      if (mm) {
-        const finePointer = Boolean(mm('(any-pointer: fine)')?.matches || mm('(pointer: fine)')?.matches);
-        const canHover = Boolean(mm('(any-hover: hover)')?.matches || mm('(hover: hover)')?.matches);
-        if (!finePointer && !canHover) return false;
-      }
+      /* Tauri's initial window can report neither hover nor fine-pointer.
+         Window width is stable here and matches the CSS desktop boundary. */
+      return (view.innerWidth || 0) > 768;
     } catch (_) {
       return false;
     }
-    return true;
   }
 
   function getStorage() {
@@ -16788,77 +16778,62 @@ console.info('[预设工坊] V2.97.21 已加载：快照模式仅保留条目与
         max-height: calc(100dvh - 32px) !important;
       }
 
-      /* PMM_DESKTOP_HEADER_SCROLL_TEST100: separate inner and outer scrollports. */
-      @media (hover: hover) and (pointer: fine) {
-        /* Keep the sidebar anchor on the visible panel after restoring a desktop size. */
-        #preset-manager-main-panel:not(.pmm-mobile-layout-enabled) .pm-panel-container.pmm-desktop-custom-sized:not(.pm-panel-container--merge-mode):not(.pm-panel-container--branch-mode):not(.pm-panel-container--favorite-mode) > .pm-main-wrapper > .preset-panel {
-          flex: 1 1 auto !important;
-          width: 100% !important;
+      /* PMM_DESKTOP_HEADER_WRAP_TEST101: desktop headers use a second line instead of a horizontal scrollbar. */
+      @media screen and (min-width: 769px) {
+        /* A saved container can be wider than its fixed-size panel. Keep the
+           side toolbar attached to that visible panel on the first render. */
+        #preset-manager-main-panel:not(.pmm-mobile-layout-enabled) .pm-panel-container:not(.pm-panel-container--merge-mode):not(.pm-panel-container--branch-mode):not(.pm-panel-container--favorite-mode) > .pm-main-wrapper {
+          display: inline-flex !important;
+          flex: 0 1 auto !important;
+          width: fit-content !important;
+          max-width: 100% !important;
           min-width: 0 !important;
-          max-width: none !important;
         }
-        #preset-manager-main-panel:not(.pmm-mobile-layout-enabled) .pm-panel-container .preset-panel .pm-header::-webkit-scrollbar-track,
-        #preset-manager-main-panel:not(.pmm-mobile-layout-enabled) .pm-panel-container .preset-panel .pm-header .header-left .title-card::-webkit-scrollbar-track {
-          background: rgba(128, 128, 128, .16) !important;
-          border-radius: 4px !important;
+        #preset-manager-main-panel:not(.pmm-mobile-layout-enabled) .pm-panel-container:not(.pm-panel-container--merge-mode):not(.pm-panel-container--branch-mode):not(.pm-panel-container--favorite-mode) > .pm-main-wrapper > .preset-panel {
+          min-width: 0 !important;
+          max-width: 100% !important;
         }
+
         #preset-manager-main-panel:not(.pmm-mobile-layout-enabled) .pm-panel-container .preset-panel .pm-header {
           box-sizing: border-box !important;
           min-width: 0 !important;
           max-width: 100% !important;
-          flex-wrap: nowrap !important;
-          overflow-x: auto !important;
-          overflow-y: hidden !important;
-          overscroll-behavior-x: contain !important;
-          scrollbar-width: auto !important;
-          scrollbar-color: auto !important;
+          height: auto !important;
+          min-height: 80px !important;
+          overflow: hidden !important;
         }
         #preset-manager-main-panel:not(.pmm-mobile-layout-enabled) .pm-panel-container .preset-panel .pm-header > .header-left {
-          flex: 0 0 auto !important;
-          width: max-content !important;
-          min-width: 0 !important;
-          max-width: min(320px, 70%) !important;
+          flex: 0 1 260px !important;
+          width: min(260px, 48%) !important;
+          min-width: 160px !important;
+          max-width: 48% !important;
+          height: auto !important;
+          overflow: visible !important;
         }
         #preset-manager-main-panel:not(.pmm-mobile-layout-enabled) .pm-panel-container .preset-panel .pm-header .header-left .title-card {
-          pointer-events: auto !important;
           box-sizing: border-box !important;
           width: 100% !important;
           max-width: 100% !important;
           min-width: 0 !important;
-          flex-wrap: nowrap !important;
-          overflow-x: auto !important;
-          overflow-y: hidden !important;
-          overscroll-behavior-x: contain !important;
-          scrollbar-width: auto !important;
-          scrollbar-color: auto !important;
-        }
-        #preset-manager-main-panel:not(.pmm-mobile-layout-enabled) .pm-panel-container .preset-panel .pm-header .title-card > *,
-        #preset-manager-main-panel:not(.pmm-mobile-layout-enabled) .pm-panel-container .preset-panel .pm-header .title-actions > *,
-        #preset-manager-main-panel:not(.pmm-mobile-layout-enabled) .pm-panel-container .preset-panel .pm-header > .header-right > * {
-          flex-shrink: 0 !important;
-        }
-        #preset-manager-main-panel:not(.pmm-mobile-layout-enabled) .pm-panel-container .preset-panel .pm-header .title-card > .title-content {
-          flex: 0 0 auto !important;
-          min-width: max-content !important;
+          overflow: hidden !important;
         }
         #preset-manager-main-panel:not(.pmm-mobile-layout-enabled) .pm-panel-container .preset-panel .pm-header > .header-right {
-          flex: 0 0 auto !important;
-          width: max-content !important;
-          min-width: max-content !important;
+          flex: 1 1 0 !important;
+          width: auto !important;
+          min-width: 0 !important;
           max-width: none !important;
-          flex-wrap: nowrap !important;
+          height: auto !important;
+          min-height: 36px !important;
+          display: flex !important;
+          flex-wrap: wrap !important;
+          align-content: center !important;
+          justify-content: flex-end !important;
+          column-gap: .25rem !important;
+          row-gap: .25rem !important;
           overflow: visible !important;
         }
-        #preset-manager-main-panel:not(.pmm-mobile-layout-enabled) .pm-panel-container .preset-panel .pm-header::-webkit-scrollbar,
-        #preset-manager-main-panel:not(.pmm-mobile-layout-enabled) .pm-panel-container .preset-panel .pm-header .header-left .title-card::-webkit-scrollbar {
-          display: block !important;
-          width: 7px !important;
-          height: 7px !important;
-        }
-        #preset-manager-main-panel:not(.pmm-mobile-layout-enabled) .pm-panel-container .preset-panel .pm-header::-webkit-scrollbar-thumb,
-        #preset-manager-main-panel:not(.pmm-mobile-layout-enabled) .pm-panel-container .preset-panel .pm-header .header-left .title-card::-webkit-scrollbar-thumb {
-          background: var(--pm-text-secondary, #888) !important;
-          border-radius: 4px !important;
+        #preset-manager-main-panel:not(.pmm-mobile-layout-enabled) .pm-panel-container .preset-panel .pm-header > .header-right > * {
+          flex: 0 0 auto !important;
         }
       }
     `;
