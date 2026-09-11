@@ -115,7 +115,7 @@ const engine = createWorldbookSnapshots({
 });
 
 let overlay = null, viewportCleanup = null, themeCleanup = null, busy = false, disposed = false;
-let batchOverlay = null, batchBooks = [], batchNames = [], batchSelected = new Set(), batchQuery = '', batchBusy = false, batchBoundExpanded = false;
+let batchOverlay = null, batchViewportCleanup = null, batchBooks = [], batchNames = [], batchSelected = new Set(), batchQuery = '', batchBusy = false, batchBoundExpanded = false;
 let page = 'character', section = 'snapshots', book = '', books = [], items = [], draft = null;
 let picker = false, pickerReturnBook = '', editGroup = null, groupQuery = '', renameId = '', menuId = '', message = '', lastFocus = null;
 let eventSource = null, eventType = '', eventTimer = 0;
@@ -359,7 +359,7 @@ style.textContent = `
 .pmm-native-worldbook-actions { margin-left:auto; display:flex; align-items:center; gap:3px; flex:none; }
 .pmm-native-worldbook-action { width:30px!important; height:30px!important; min-width:30px!important; min-height:30px!important; margin:0!important; padding:0!important; display:grid!important; place-items:center; border-radius:8px!important; }
 .pmm-native-worldbook-action i { pointer-events:none; }
-.pmm-wbs-batch-dialog { height:min(560px,calc(100dvh - 32px))!important; }
+.pmm-wbs-batch-dialog { height:min(560px,calc(var(--wbs-batch-visible-height,100dvh) - 32px))!important; max-height:calc(var(--wbs-batch-visible-height,100dvh) - 32px)!important; }
 .pmm-wbs-batch-tools { display:flex; gap:8px; align-items:center; margin-bottom:10px; }
 .pmm-wbs-dialog .pmm-wbs-batch-search { margin:0!important; height:36px!important; min-height:36px!important; }
 .pmm-wbs-batch-select-all { flex:none; white-space:nowrap; min-height:36px!important; padding:7px 11px!important; }
@@ -491,6 +491,41 @@ function bindViewport() {
   update();
   viewportCleanup = () => { targets.forEach(([target, name]) => target?.removeEventListener(name, schedule)); if (frame) TOP.cancelAnimationFrame(frame); };
 }
+function bindBatchViewport() {
+  batchViewportCleanup?.(); batchViewportCleanup = null;
+  const node = batchOverlay;
+  if (!node) return;
+  const vv = TOP.visualViewport;
+  let frame = 0, settleTimer = 0;
+  const positive = (...values) => values.map(Number).find(value => Number.isFinite(value) && value > 0) || 1;
+  const offset = value => Number.isFinite(Number(value)) ? Number(value) : 0;
+  const update = () => {
+    frame = 0;
+    if (batchOverlay !== node || !node.isConnected) return;
+    const width = positive(vv?.width, TOP.innerWidth, DOC.documentElement?.clientWidth);
+    const height = positive(vv?.height, TOP.innerHeight, DOC.documentElement?.clientHeight);
+    const values = {
+      position:'fixed', inset:'auto', left:`${offset(vv?.offsetLeft)}px`, top:`${offset(vv?.offsetTop)}px`, right:'auto', bottom:'auto',
+      width:`${width}px`, height:`${height}px`,
+    };
+    for (const [name, value] of Object.entries(values)) node.style.setProperty(name, value, 'important');
+    node.style.setProperty('--wbs-batch-visible-height', `${height}px`);
+  };
+  const schedule = () => { if (!frame) frame = TOP.requestAnimationFrame(update); };
+  const settle = () => {
+    schedule();
+    TOP.clearTimeout(settleTimer);
+    settleTimer = TOP.setTimeout(schedule, 180);
+  };
+  const targets = [[TOP, 'resize'], [TOP, 'scroll'], [TOP, 'orientationchange'], [vv, 'resize'], [vv, 'scroll'], [node, 'focusin'], [node, 'focusout']];
+  targets.forEach(([target, name]) => target?.addEventListener(name, settle, { passive:true }));
+  update();
+  batchViewportCleanup = () => {
+    targets.forEach(([target, name]) => target?.removeEventListener(name, settle));
+    if (frame) TOP.cancelAnimationFrame(frame);
+    TOP.clearTimeout(settleTimer);
+  };
+}
 function say(text,sticky=false) {
   TOP.clearTimeout(messageTimer); messageTimer=0;
   message = text;
@@ -587,6 +622,7 @@ function filterBatchRows() {
   if(selectAll){selectAll.disabled=!names.length;selectAll.textContent=all?'取消全选':'全选';}
 }
 function closeBatch() {
+  batchViewportCleanup?.(); batchViewportCleanup=null;
   batchOverlay?.remove(); batchOverlay=null; batchBooks=[]; batchNames=[]; batchSelected.clear(); batchQuery=''; batchBusy=false;batchBoundExpanded=false;
 }
 async function deleteBatchSelection() {
@@ -633,7 +669,7 @@ async function openBatch() {
     else if(action==='delete')void deleteBatchSelection();
   });
   batchOverlay.addEventListener('keydown',event=>{if(event.key==='Escape'){event.stopPropagation();closeBatch();}});
-  DOC.body.append(batchOverlay);theme(batchOverlay);renderBatch();
+  DOC.body.append(batchOverlay);theme(batchOverlay);bindBatchViewport();renderBatch();
 }
 function makeNativeWorldbookButton(action,label,iconName) {
   const button=DOC.createElement('button');button.type='button';
