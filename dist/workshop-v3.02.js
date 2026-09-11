@@ -11185,8 +11185,9 @@ html.pmm-dnd-compat-active #preset-manager-main-panel{user-select:none!important
     --pmm-user-item-height:36px;
     --pmm-user-item-gap:1px;
     --pmm-user-group-gap:2px;
-    --pmm-user-split-left:50fr;
-    --pmm-user-split-right:50fr;
+    /* 与桌面 JS 默认值一致：左侧略宽，让双屏第一张卡片的完整工具栏优先保持单行。 */
+    --pmm-user-split-left:52fr;
+    --pmm-user-split-right:48fr;
   }
 
   #preset-manager-main-panel .pm-panel-container--merge-mode,
@@ -11237,12 +11238,12 @@ html.pmm-dnd-compat-active #preset-manager-main-panel{user-select:none!important
     #preset-manager-main-panel .pm-panel-container--favorite-mode > .preset-panel{
       width:100%!important;max-width:none!important;justify-self:stretch!important;
     }
-    /* Tauri 的原生标题宿主会比浏览器酒馆多收缩一层；固定同一可用宽度，
-       让名称、铅笔和第二排动作与普通桌面酒馆一致，不再把动作文字逐字换行。 */
+    /* Tauri 的原生标题宿主会比浏览器酒馆多收缩一层；标题卡片会在宽屏时适度变长，
+       利用右侧余白，同时在较窄桌面保留原先的紧凑宽度。 */
     #preset-manager-main-panel .pm-panel-container--merge-mode .pm-header>.header-left,
     #preset-manager-main-panel .pm-panel-container--branch-mode .pm-header>.header-left,
     #preset-manager-main-panel .pm-panel-container--favorite-mode .pm-header>.header-left{
-      flex:0 0 220px!important;width:220px!important;min-width:220px!important;max-width:220px!important;
+      flex:0 0 clamp(220px,18vw,240px)!important;width:clamp(220px,18vw,240px)!important;min-width:220px!important;max-width:240px!important;
     }
     #preset-manager-main-panel .pm-panel-container--merge-mode .pm-header>.header-left .title-card,
     #preset-manager-main-panel .pm-panel-container--branch-mode .pm-header>.header-left .title-card,
@@ -16726,11 +16727,32 @@ console.info('[预设工坊] V2.97.21 已加载：快照模式仅保留条目与
     container.style.setProperty('--pmm-custom-panel-height', `${Math.round(height)}px`);
   }
 
-  function restoreDefaultSize(container) {
-    clearSavedSize();
+  /* 双击只重置横向尺寸。先暂时撤去自定义宽度并读取页面本身的默认宽度，
+     因此单屏、分屏和不同窗口宽度都会回到各自原生的桌面尺寸；高度保持用户当前设置。 */
+  function measureNaturalWidth(container, fallbackWidth) {
+    const hadCustomSize = container.classList.contains(CUSTOM_SIZED_CLASS);
+    const customWidth = container.style.getPropertyValue('--pmm-custom-panel-width');
     container.classList.remove(CUSTOM_SIZED_CLASS);
     container.style.removeProperty('--pmm-custom-panel-width');
-    container.style.removeProperty('--pmm-custom-panel-height');
+    const rect = container.getBoundingClientRect?.() || {};
+    const measuredWidth = Math.round(Number(rect.width) || 0);
+    if (hadCustomSize) container.classList.add(CUSTOM_SIZED_CLASS);
+    if (customWidth) container.style.setProperty('--pmm-custom-panel-width', customWidth);
+    return measuredWidth > 0 ? measuredWidth : fallbackWidth;
+  }
+
+  function restoreDefaultSize(container) {
+    const doc = container.ownerDocument || DOC;
+    const view = doc.defaultView || TOP || window;
+    const bounds = getBounds(container, view);
+    const rect = container.getBoundingClientRect?.() || {};
+    const currentHeight = parseFloat(container.style.getPropertyValue('--pmm-custom-panel-height')) || Number(rect.height) || bounds.minH;
+    const naturalWidth = measureNaturalWidth(container, Number(rect.width) || bounds.minW);
+    const width = Math.min(bounds.maxW, Math.max(bounds.minW, naturalWidth));
+    const height = Math.min(bounds.maxH, Math.max(bounds.minH, currentHeight));
+    applyDimensions(container, width, height);
+    saveSavedSize(width, height);
+    return { width, height };
   }
 
   function installStyle(doc) {
@@ -16997,6 +17019,7 @@ console.info('[预设工坊] V2.97.21 已加载：快照模式仅保留条目与
     isDualMode,
     getBounds,
     applyDimensions,
+    measureNaturalWidth,
     restoreDefaultSize,
     ensureHandles,
     scanAndMount,
@@ -17006,5 +17029,5 @@ console.info('[预设工坊] V2.97.21 已加载：快照模式仅保留条目与
     HANDLE_CLASS,
     CUSTOM_SIZED_CLASS,
   };
-  console.info('[预设工坊] test.94 已加载：桌面端四角均可拖动自由缩放，居中扩缩与双击恢复默认已就绪。');
+  console.info('[预设工坊] test.94 已加载：桌面端四角均可拖动自由缩放，居中扩缩与双击仅恢复默认宽度已就绪。');
 })();

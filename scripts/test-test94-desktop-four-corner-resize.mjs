@@ -15,9 +15,13 @@ for (const marker of [
   "Math.min(980,",
   "Math.min(560,",
   "Math.min(420,",
+  "--pmm-user-split-left:52fr",
+  "--pmm-user-split-right:48fr",
+  "flex:0 0 clamp(220px,18vw,240px)!important",
   "targetW = Math.round(startW + 2 * signX * dx)",
   "targetH = Math.round(startH + 2 * signY * dy)",
   "onHandleDblClick",
+  "measureNaturalWidth",
   "restoreDefaultSize",
   "saveSavedSize",
   "clearSavedSize",
@@ -76,6 +80,7 @@ class MockElement {
     this.dataset = {};
     this.listeners = new Map();
     this._rect = { left: 100, top: 100, width: 620, height: 700 };
+    this._naturalRect = null;
   }
   setAttribute(k, v) { this[k] = v; }
   getAttribute(k) { return this[k]; }
@@ -145,7 +150,12 @@ class MockElement {
     }
     return null;
   }
-  getBoundingClientRect() { return { ...this._rect }; }
+  getBoundingClientRect() {
+    if (!this.classList.contains('pmm-desktop-custom-sized') && this._naturalRect) {
+      return { ...this._naturalRect };
+    }
+    return { ...this._rect };
+  }
   setPointerCapture() {}
   releasePointerCapture() {}
 }
@@ -351,12 +361,17 @@ simulateDrag(seHandle, -500, -500);
 const dualWidth = parseFloat(container.style.getPropertyValue('--pmm-custom-panel-width'));
 assert.equal(dualWidth, 980, '双栏模式最小宽度受动态保护为 980px，防止两栏严重挤压');
 
-// Test 3.6: Double-click Restore Default Size
+// Test 3.6: Double-click restores the native default WIDTH only and keeps the current height
 // Clicking once should not reset
 seHandle.dispatchEvent({ type: 'click', preventDefault: () => {}, stopPropagation: () => {} });
 assert.ok(container.classList.contains('pmm-desktop-custom-sized'), '单击缩放角不执行恢复默认');
 
-// Double click any handle restores default size and clears storage
+// Simulate the page's non-customized dual-panel width separately from the active custom size.
+container._rect = { left: 100, top: 100, width: 980, height: 640 };
+container._naturalRect = { left: 64, top: 80, width: 1312, height: 700 };
+container.style.setProperty('--pmm-custom-panel-height', '640px');
+
+// Double click any handle restores native width, preserves height, and persists that combination.
 let defaultPrevented = false;
 seHandle.dispatchEvent({
   type: 'dblclick',
@@ -364,10 +379,11 @@ seHandle.dispatchEvent({
   stopPropagation: () => {}
 });
 
-assert.equal(container.classList.contains('pmm-desktop-custom-sized'), false, '双击恢复后应移除自定义尺寸样式类');
-assert.equal(container.style.getPropertyValue('--pmm-custom-panel-width'), '', '双击恢复后应清除宽度自定义变量');
-assert.equal(container.style.getPropertyValue('--pmm-custom-panel-height'), '', '双击恢复后应清除高度自定义变量');
-assert.equal(api.loadSavedSize(), null, '双击恢复后应同步清除 localStorage 存储记录');
+assert.equal(defaultPrevented, true, '双击缩放角应阻止浏览器默认行为');
+assert.ok(container.classList.contains('pmm-desktop-custom-sized'), '双击后须保留自定义尺寸类以维持当前高度');
+assert.equal(container.style.getPropertyValue('--pmm-custom-panel-width'), '1312px', '双击后宽度必须回到该模式原生默认宽度');
+assert.equal(container.style.getPropertyValue('--pmm-custom-panel-height'), '640px', '双击恢复宽度不能改动当前高度');
+assert.deepEqual(api.loadSavedSize(), { width: 1312, height: 640 }, '双击后的默认宽度与保留高度必须同步保存');
 
 // Test 3.7: Mobile cleans up handles if present
 container.classList.remove('pm-panel-container--branch-mode');
@@ -408,4 +424,4 @@ assert.ok(realPanelRule.includes('flex: 1 1 auto !important'), '实际面板必�
 assert.ok(realPanelRule.includes('width: 100% !important'), '实际面板必须占满缩放后的主包装器');
 assert.ok(realPanelRule.includes('max-width: none !important'), '实际面板不能继续被默认固定宽度限制');
 
-console.log('test.94 回归通过：桌面端面板四角拖动居中缩放、实际面板与侧栏锚点同步、双栏防挤压边界、双击重置、触屏隔离以及顶部工具组按实际宽度自然换行全部正常。');
+console.log('test.94 回归通过：桌面端面板四角拖动居中缩放、实际面板与侧栏锚点同步、双栏防挤压边界、双击仅恢复原生宽度并保留高度、触屏隔离以及顶部工具组按实际宽度自然换行全部正常。');
