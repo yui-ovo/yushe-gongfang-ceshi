@@ -51,12 +51,14 @@ try {
     assert.equal(await page.locator('[data-source-query]').count(),0);
     assert.equal(await page.locator('[data-wbs="new"]').count(),0);
     const initial=await page.locator('.pmm-wbs-dialog').boundingBox();
-    const initialHalfHeight=await page.evaluate(()=>Math.floor((window.visualViewport?.height || window.innerHeight)/2));
+    const initialHalfHeight=await page.evaluate(()=>Math.floor((window.visualViewport?.height || window.innerHeight)*.5));
+    const initialMaxHeight=await page.evaluate(()=>Math.floor((window.visualViewport?.height || window.innerHeight)*.6));
     if(width<769)assert.ok(Math.abs(initial.y+initial.height-836)<2,'Worldbook manager is bottom aligned');
-    assert.ok(initial.height>0 && initial.height<=initialHalfHeight+1,'Short worldbook snapshot sheet stays content-sized within half the visible viewport');
+    if(width<600)assert.ok(initial.height>=initialHalfHeight-1,'Short mobile worldbook sheet starts at half the visible viewport');
+    assert.ok(initial.height>0 && initial.height<=initialMaxHeight+1,'Worldbook snapshot sheet stays within sixty percent of the visible viewport');
     await page.click('[data-hub-tab="global"]');
     await page.click('[data-hub-tab="character"]');
-    assert.ok((await page.locator('.pmm-wbs-dialog').boundingBox()).height<=initialHalfHeight+1,'Changing snapshot tabs keeps the worldbook sheet within the same half-screen cap');
+    assert.ok((await page.locator('.pmm-wbs-dialog').boundingBox()).height<=initialMaxHeight+1,'Changing snapshot tabs keeps the worldbook sheet within the same height cap');
     await page.evaluate(()=>fixture.select(0));
     await page.locator('[data-wbs="new"]:enabled').waitFor();
     assert.equal(await page.locator('[data-wbs="sources"]').count(),0,'No all-role picker');
@@ -371,7 +373,9 @@ try {
     await page.evaluate(()=>__PMM_SWITCH_SNAPSHOTS_TEST52__.open());
     await page.locator('#preset-fixture .pmm-switch-snapshot-dialog').waitFor();
     const presetShortHeight=await page.locator('#preset-fixture .pmm-switch-snapshot-dialog').evaluate(node=>node.getBoundingClientRect().height);
-    const presetHalfHeight=await page.evaluate(()=>Math.floor((window.visualViewport?.height || window.innerHeight)/2));
+    const presetHalfHeight=await page.evaluate(()=>Math.floor((window.visualViewport?.height || window.innerHeight)*.5));
+    const presetMaxHeight=await page.evaluate(()=>Math.floor((window.visualViewport?.height || window.innerHeight)*.6));
+    if(width<600)assert.ok(presetShortHeight>=presetHalfHeight-1,'Short mobile preset sheet starts at half the visible viewport');
     assert.equal(await page.locator('#preset-fixture .pmm-snapshot-tabs').count(),0);
     assert.equal(await page.locator('.pmm-switch-snapshot-menu .pmm-switch-snapshot-lock').count(), 0);
     assert.equal(await page.locator('.pmm-switch-snapshot-bindings .pmm-switch-snapshot-lock').isVisible(),true);
@@ -382,12 +386,12 @@ try {
     await page.waitForFunction(()=>{
       const dialog=document.querySelector('#preset-fixture .pmm-switch-snapshot-dialog');
       const list=document.querySelector('#preset-fixture .pmm-switch-snapshot-list');
-      const half=Math.floor((window.visualViewport?.height || window.innerHeight)/2);
-      return dialog && list && dialog.getBoundingClientRect().height<=half+1 && list.scrollHeight>list.clientHeight;
+      const max=Math.floor((window.visualViewport?.height || window.innerHeight)*.6);
+      return dialog && list && dialog.getBoundingClientRect().height<=max+1 && list.scrollHeight>list.clientHeight;
     });
     const presetLongHeight=await page.locator('#preset-fixture .pmm-switch-snapshot-dialog').evaluate(node=>node.getBoundingClientRect().height);
     assert.ok(presetLongHeight>presetShortHeight+40,'Preset snapshot sheet grows when snapshots are added');
-    assert.ok(presetLongHeight<=presetHalfHeight+1,'Preset snapshot sheet stops at half the visible viewport');
+    assert.ok(presetLongHeight<=presetMaxHeight+1,'Preset snapshot sheet stops at sixty percent of the visible viewport');
     await page.evaluate(()=>__PMM_SWITCH_SNAPSHOTS_TEST52__.close());
     await page.click('#camera');
     await page.locator('.pmm-wbs-dialog').waitFor();
@@ -427,8 +431,9 @@ try {
     assert.equal(await page.locator('[data-wbs="snapshots"]').count(),0);
     await page.waitForFunction(()=>{const node=document.querySelector('.pmm-wbs-dialog');const rect=node?.getBoundingClientRect();return rect && rect.width>0 && rect.height>0;});
     const shortHeight=await page.locator('.pmm-wbs-dialog').evaluate(node=>node.getBoundingClientRect().height);
-    const visibleHalfHeight=await page.evaluate(()=>Math.floor((window.visualViewport?.height || window.innerHeight)/2));
-    assert.ok(shortHeight>0 && shortHeight<=visibleHalfHeight+1,'Short worldbook list keeps a compact content-driven sheet');
+    const visibleHalfHeight=await page.evaluate(()=>Math.floor((window.visualViewport?.height || window.innerHeight)*.5));
+    const visibleMaxHeight=await page.evaluate(()=>Math.floor((window.visualViewport?.height || window.innerHeight)*.6));
+    assert.ok(shortHeight>=visibleHalfHeight-1 && shortHeight<=visibleMaxHeight+1,'Short mobile worldbook list starts at half screen and stays below the maximum');
     await page.evaluate(async()=>{
       for(let i=1;i<50;i++)await __PMM_WORLDBOOK_SNAPSHOTS__.engine.saveGroup({name:'分组 '+i,books:['世界书 '+i]});
     });
@@ -437,7 +442,7 @@ try {
     await page.locator('[data-wbs="group-menu"]').first().waitFor();
     const cappedHeight=await page.locator('.pmm-wbs-dialog').evaluate(node=>node.getBoundingClientRect().height);
     assert.ok(cappedHeight>shortHeight+20,'Worldbook snapshot sheet grows as more groups are shown');
-    assert.ok(cappedHeight<=visibleHalfHeight+1,'Worldbook snapshot sheet stops at half the visible viewport');
+    assert.ok(cappedHeight<=visibleMaxHeight+1,'Worldbook snapshot sheet stops at sixty percent of the visible viewport');
     await page.waitForFunction(()=>{const node=document.querySelector('.pmm-wbs-body');return node && node.scrollHeight>node.clientHeight;});
     await page.locator('.pmm-wbs-body').evaluate(node => { node.scrollTop=node.scrollHeight; });
     await page.locator('[data-wbs="group-menu"]').last().click();

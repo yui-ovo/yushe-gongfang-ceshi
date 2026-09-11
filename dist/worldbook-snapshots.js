@@ -17,6 +17,23 @@ function rememberWorldTab(value) { if(['character','global'].includes(value?.pag
 const STITCH = '__PMM_WORLDBOOK_STITCH_TEST3__';
 TOP[KEY]?.cleanup?.();
 const h = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+function makeSnapshotId() {
+  try {
+    const value=TOP.crypto?.randomUUID?.();
+    if(value)return value;
+  } catch(_) {}
+  try {
+    const bytes=new Uint8Array(16);
+    TOP.crypto?.getRandomValues?.(bytes);
+    if(typeof TOP.crypto?.getRandomValues==='function') {
+      bytes[6]=(bytes[6]&15)|64;
+      bytes[8]=(bytes[8]&63)|128;
+      const hex=[...bytes].map(value=>value.toString(16).padStart(2,'0')).join('');
+      return `${hex.slice(0,8)}-${hex.slice(8,12)}-${hex.slice(12,16)}-${hex.slice(16,20)}-${hex.slice(20)}`;
+    }
+  } catch(_) {}
+  return `pmm-wbs-${Date.now().toString(36)}-${Math.random().toString(36).slice(2,10)}`;
+}
 const ctx = () => TOP.SillyTavern?.getContext?.() || {};
 function notifyNativeSelect(select) {
   if(!select)return;
@@ -78,7 +95,7 @@ async function catalog() {
 const engine = createWorldbookSnapshots({
   readStore: () => { const raw = TOP.localStorage.getItem(STORAGE); return raw ? JSON.parse(raw) : null; },
   writeStore: store => TOP.localStorage.setItem(STORAGE, JSON.stringify(store)),
-  id: () => TOP.crypto.randomUUID(), character, chat, catalog,
+  id: makeSnapshotId, character, chat, catalog,
   globals: () => helper('getGlobalWorldbookNames')(),
   setGlobals: async names => {
     await helper('rebindGlobalWorldbooks')(names);
@@ -190,30 +207,6 @@ style.textContent = `
   --wbs-shadow:rgba(0,0,0,.23); --wbs-shine:rgba(255,255,255,.045);
 }
 [data-wbs-tone="light"] { --wbs-base:#f5f5f5; --wbs-shadow:rgba(35,39,48,.085); --wbs-shine:rgba(255,255,255,.85); }
-/* Snapshot-only backing: an opaque theme base behind the translucent tint.
-   Android needs this even when feature detection reports working blur. */
-.pmm-wbs-overlay.pmm-snapshot-opaque,.pmm-snapshot-hub-preset.pmm-snapshot-opaque {
-  --wbs-safe-surface:linear-gradient(var(--pm-panel-bg,transparent),var(--pm-panel-bg,transparent)),var(--wbs-base);
-  --wbs-safe-card:linear-gradient(var(--pm-card-bg,transparent),var(--pm-card-bg,transparent)),var(--wbs-base);
-}
-@supports not ((backdrop-filter:blur(1px)) or (-webkit-backdrop-filter:blur(1px))) {
-  .pmm-wbs-overlay,.pmm-snapshot-hub-preset {
-    --wbs-safe-surface:linear-gradient(var(--pm-panel-bg,transparent),var(--pm-panel-bg,transparent)),var(--wbs-base);
-    --wbs-safe-card:linear-gradient(var(--pm-card-bg,transparent),var(--pm-card-bg,transparent)),var(--wbs-base);
-  }
-  .pmm-wbs-overlay.pmm-wbs-overlay .pmm-wbs-dialog,.pmm-snapshot-hub-preset.pmm-snapshot-hub-preset .pmm-switch-snapshot-dialog {
-    background:var(--wbs-safe-surface)!important;
-  }
-  .pmm-wbs-overlay.pmm-wbs-overlay .pmm-wbs-row,.pmm-snapshot-hub-preset.pmm-snapshot-hub-preset .pmm-switch-snapshot-row {
-    background:var(--wbs-safe-card)!important;
-  }
-}
-.pmm-wbs-overlay.pmm-snapshot-opaque .pmm-wbs-dialog,.pmm-snapshot-hub-preset.pmm-snapshot-opaque .pmm-switch-snapshot-dialog {
-  background:var(--wbs-safe-surface)!important;
-}
-.pmm-wbs-overlay.pmm-snapshot-opaque .pmm-wbs-row,.pmm-snapshot-hub-preset.pmm-snapshot-opaque .pmm-switch-snapshot-row {
-  background:var(--wbs-safe-card)!important;
-}
 .pmm-wbs-overlay { background:rgba(0,0,0,.27); }
 .pmm-wbs-dialog,.pmm-snapshot-hub-preset .pmm-switch-snapshot-dialog {
   background:linear-gradient(145deg,var(--wbs-shine),transparent 46%),var(--wbs-surface);
@@ -222,16 +215,15 @@ style.textContent = `
   font-family:var(--pm-font-family,system-ui,sans-serif); text-shadow:none;
 }
 .pmm-wbs-dialog { width:600px; }
-/* Let short snapshot sheets hug their content like the original preset UI.
-   Once a list grows, only its own body scrolls and the sheet stays within
-   half of the actual visible viewport. */
+/* Keep mobile snapshot sheets comfortably tall while allowing content to
+   grow a little further before their own list starts scrolling. */
 .pmm-wbs-dialog:not(.is-editing):not(.pmm-wbs-batch-dialog),.pmm-snapshot-hub-preset .pmm-switch-snapshot-dialog {
   height:auto!important;
-  max-height:50vh!important;
-  max-height:min(50dvh,var(--wbs-sheet-max-height,var(--pmm-switch-snapshot-sheet-max-height,50dvh)))!important;
+  max-height:60vh!important;
+  max-height:min(60dvh,var(--wbs-sheet-max-height,var(--pmm-switch-snapshot-sheet-max-height,60dvh)))!important;
   color:var(--wbs-ink)!important;
 }
-.pmm-wbs-dialog:not(.is-editing):not(.pmm-wbs-batch-dialog) .pmm-wbs-body,.pmm-snapshot-hub-preset .pmm-switch-snapshot-list { flex:0 1 auto!important; min-height:0!important; max-height:none!important; overflow:auto!important; }
+.pmm-wbs-dialog:not(.is-editing):not(.pmm-wbs-batch-dialog) .pmm-wbs-body,.pmm-snapshot-hub-preset .pmm-switch-snapshot-list { flex:1 1 auto!important; min-height:0!important; max-height:none!important; overflow:auto!important; }
 .pmm-snapshot-hub-preset .pmm-switch-snapshot-head,.pmm-snapshot-hub-preset .pmm-switch-snapshot-default,.pmm-snapshot-hub-preset .pmm-switch-snapshot-create,.pmm-snapshot-hub-preset .pmm-switch-snapshot-footer { flex-shrink:0!important; }
 .pmm-wbs-source-section[hidden],.pmm-wbs-source[hidden] { display:none!important; }
 .pmm-wbs-source-search { position:sticky; top:-10px; z-index:1; background:var(--wbs-surface); padding-top:4px; }
@@ -383,7 +375,13 @@ style.textContent = `
 .pmm-wbs-batch-row>span small { margin:2px 0 0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .pmm-wbs-batch-check { width:18px; flex:none; text-align:center; color:var(--pm-accent,currentColor); }
 .pmm-wbs-danger { color:#ef6b6b!important; }
-@media(max-width:600px) { .pmm-wbs-head { padding:18px 16px 12px; } .pmm-wbs-body { padding:10px 14px 14px; } .pmm-snapshot-tabs { margin:0 14px 8px; } .pmm-wbs-foot { padding:10px 15px; } .pmm-wbs-dialog { border-radius:26px; } }
+@media(max-width:600px) {
+  .pmm-wbs-dialog:not(.is-editing):not(.pmm-wbs-batch-dialog),.pmm-snapshot-hub-preset .pmm-switch-snapshot-dialog {
+    min-height:50vh!important;
+    min-height:min(50dvh,var(--wbs-sheet-min-height,var(--pmm-switch-snapshot-sheet-min-height,50dvh)))!important;
+  }
+  .pmm-wbs-head { padding:18px 16px 12px; } .pmm-wbs-body { padding:10px 14px 14px; } .pmm-snapshot-tabs { margin:0 14px 8px; } .pmm-wbs-foot { padding:10px 15px; } .pmm-wbs-dialog { border-radius:26px; }
+}
 `;
 DOC.head.append(style);
 const tabLabels = { character: '角色世界书', global: '全局世界书' };
@@ -413,7 +411,6 @@ function decoratePreset(root) {
 }
 function theme(target = overlay) {
   if (!target) return;
-  target.classList.toggle('pmm-snapshot-opaque', /Android/i.test(TOP.navigator?.userAgent || SELF.navigator?.userAgent || ''));
   const main = DOC.querySelector('#preset-manager-main-panel .pmm-wb-inline-panel') || DOC.querySelector('#preset-manager-main-panel .preset-panel');
   const floating = DOC.querySelector('#preset-manager-floating-panel .floating-panel-root') || DOC.querySelector('#preset-manager-floating-panel .panel-wrapper')
     || SELF.document.querySelector('.floating-panel-root');
@@ -480,7 +477,8 @@ function bindViewport() {
     const values={position:'fixed',inset:'auto',left:`${vv?.offsetLeft || 0}px`,top:`${vv?.offsetTop || 0}px`,right:'auto',bottom:'auto',width:`${vv?.width || TOP.innerWidth}px`,height:`${visibleHeight}px`};
     for(const [name,value] of Object.entries(values))overlay.style.setProperty(name,value,'important');
     overlay.style.setProperty('--wbs-visible-height', `${visibleHeight}px`);
-    overlay.style.setProperty('--wbs-sheet-max-height', `${Math.max(1,Math.floor(visibleHeight/2))}px`);
+    overlay.style.setProperty('--wbs-sheet-min-height', `${Math.max(1,Math.floor(visibleHeight*.5))}px`);
+    overlay.style.setProperty('--wbs-sheet-max-height', `${Math.max(1,Math.floor(visibleHeight*.6))}px`);
   };
   const schedule = event => {
     if(menuId && ['resize','orientationchange','scroll'].includes(event?.type)) {
