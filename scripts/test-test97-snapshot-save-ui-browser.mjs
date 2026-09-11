@@ -35,7 +35,9 @@ try {
     const state=await page.locator('.pmm-switch-editor-switch').first().evaluate(el=>{const s=getComputedStyle(el),t=getComputedStyle(el,'::before');return {background:s.backgroundColor,shadow:s.boxShadow,after:getComputedStyle(el,'::after').content,width:t.width,height:t.height}});
     assert.deepEqual(state,{background:'rgba(0, 0, 0, 0)',shadow:'none',after:'none',width:'30px',height:'18px'});
     await page.locator('[data-pmm-editor-action="toggle-group-power"]').first().click();
-    await page.locator('[data-pmm-editor-action="toggle-group"]').first().click();
+    assert.equal(await page.locator('.pmm-switch-editor-entries:not([hidden])').count(),0,'Power switch must not expand group');
+    await page.locator('.pmm-switch-editor-group-head strong').first().click();
+    assert.equal(await page.locator('.pmm-switch-editor-entries:not([hidden])').count(),1,'Title expands group');
     await page.locator('[data-pmm-editor-action="toggle-prompt"]').first().click();
     const draftBefore=await page.locator('.pmm-switch-editor-list').innerHTML();
     const storeBefore=await page.evaluate(()=>localStorage.getItem('pmm.switch-snapshots.v1'));
@@ -53,6 +55,7 @@ try {
     await page.locator('[data-pmm-editor-action="save"]').click();
     await page.locator('input#name').fill('新的开关方案 · 这是一个很长很长的名称用于验证按钮始终同一行');
     await page.setViewportSize({width,height:480});
+    if(width<769) await page.waitForFunction(()=>document.querySelector('.pmm-switch-editor-overlay').getBoundingClientRect().height<=480);
     const box=await page.locator('form').boundingBox();assert.ok(box.y>=0 && box.y+box.height<=480);
     await page.screenshot({path:fileURLToPath(new URL('name-'+width+'-'+tone+'.png',output))});
     await page.locator('button[type="submit"]').click();

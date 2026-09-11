@@ -1635,7 +1635,6 @@
           </div>
           <div class="pmm-wb-header-right">
              <span class="pmm-wb-status">${h(state.status)}</span>
-             ${toolbarButton('snapshots', '世界书快照', 'fa-camera', `data-wb-side="${sideName}"`)}
              ${sideName === 'top' ? typeSwitchMarkup() : ''}
              ${sideName === 'top' ? themeToolbarSlotMarkup() : ''}
              ${toolbarButton('multi', side.multi ? '退出多选' : '多选', 'fa-check-double', `data-wb-side="${sideName}"`)}
@@ -2120,7 +2119,6 @@
     if (action === 'source-picker') return openSourcePicker(sideName);
     if (action === 'rename-source') return renameWorldSource(sideName);
     if (action === 'select-source') return;
-    if (action === 'snapshots') return TOP.__PMM_WORLDBOOK_SNAPSHOTS__?.open('character');
     if (action === 'entry-search') {
       side.searchOpen = !side.searchOpen;
       if (!side.searchOpen) {

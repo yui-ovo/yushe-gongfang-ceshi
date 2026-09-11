@@ -1,5 +1,5 @@
 // Shared by preset, character and global snapshot editors.
-export function requestSnapshotName(parent, value, maxLength = 100) {
+export function requestSnapshotName(parent, value, maxLength = 100, kind = 'snapshot') {
   if (!parent?.isConnected) return Promise.resolve(null);
   const doc = parent.ownerDocument;
   const previousFocus = doc.activeElement;
@@ -18,6 +18,11 @@ export function requestSnapshotName(parent, value, maxLength = 100) {
     input:focus-visible,button:focus-visible{outline:2px solid var(--pm-quote-color,var(--SmartThemeQuoteColor,#a5a5ad));outline-offset:2px}
     footer{display:flex;justify-content:flex-end;gap:8px;margin-top:18px} button{min-height:36px;padding:0 14px;border:1px solid var(--pm-border,var(--SmartThemeBorderColor,#666));border-radius:8px;background:transparent;color:inherit;font:inherit;font-size:13px;cursor:pointer} button[type=submit]{background:color-mix(in srgb,var(--pm-quote-color,var(--SmartThemeQuoteColor,#aaa)) 20%,transparent)}
   </style><div class="backdrop"><form role="dialog" aria-modal="true" aria-labelledby="title"><h3 id="title">保存快照</h3><p>为刚刚调整的方案起个名字。</p><label for="name">快照名称</label><input id="name" autocomplete="off" required><footer><button type="button">返回编辑</button><button type="submit">保存</button></footer></form></div>`;
+  if (kind === 'group') {
+    root.querySelector('h3').textContent = '保存分组';
+    root.querySelector('p').textContent = '为选好的世界书分组起个名字。';
+    root.querySelector('label').textContent = '分组名称';
+  }
   const input = root.querySelector('input');
   input.maxLength = maxLength;
   input.value = String(value || '').slice(0, maxLength);
@@ -43,7 +48,7 @@ export function requestSnapshotName(parent, value, maxLength = 100) {
     root.querySelector('form').addEventListener('submit', event => {
       event.preventDefault();
       const name = input.value.trim();
-      if (!name) { input.setCustomValidity('请填写快照名称'); input.reportValidity(); return; }
+      if (!name) { input.setCustomValidity(kind === 'group' ? '请填写分组名称' : '请填写快照名称'); input.reportValidity(); return; }
       finish(name);
     });
     input.addEventListener('input', () => input.setCustomValidity(''));
