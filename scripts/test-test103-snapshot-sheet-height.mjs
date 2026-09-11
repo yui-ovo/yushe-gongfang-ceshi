@@ -15,8 +15,8 @@ assert.ok(sheet.includes('max-height:min(60dvh,var(--wbs-sheet-max-height,var(--
 assert.ok(worldbook.includes('min-height:min(50dvh,var(--wbs-sheet-min-height,var(--pmm-switch-snapshot-sheet-min-height,50dvh)))!important;'), '手机快照弹窗默认必须至少占真实可视区的一半');
 assert.ok(!sheet.includes('height:min(460px'), '快照弹窗不得继续固定为 460px');
 assert.ok(sheet.includes('.pmm-wbs-dialog:not(.is-editing):not(.pmm-wbs-batch-dialog) .pmm-wbs-body,.pmm-snapshot-hub-preset .pmm-switch-snapshot-list { flex:1 1 auto!important; min-height:0!important; max-height:none!important; overflow:auto!important; }'), '空余高度与超出内容必须由世界书正文或预设快照列表承接');
-assert.ok(worldbook.includes("overlay.style.setProperty('--wbs-sheet-min-height', `${Math.max(1,Math.floor(visibleHeight*.5))}px`);"), '世界书必须按真实可视区同步默认半屏高度');
-assert.ok(worldbook.includes("overlay.style.setProperty('--wbs-sheet-max-height', `${Math.max(1,Math.floor(visibleHeight*.6))}px`);"), '世界书必须按真实可视区同步六成上限');
+assert.ok(worldbook.includes("overlay.style.setProperty('--wbs-sheet-min-height', `${Math.max(1,Math.floor(visibleHeight*.5))}px`, 'important');"), '世界书必须按真实可视区同步默认半屏高度');
+assert.ok(worldbook.includes("overlay.style.setProperty('--wbs-sheet-max-height', `${Math.max(1,Math.floor(visibleHeight*.6))}px`, 'important');"), '世界书必须按真实可视区同步六成上限');
 assert.ok(workshop.includes("overlay.style.setProperty('--pmm-switch-snapshot-sheet-min-height', `${Math.max(1, Math.floor(height * 0.5))}px`, 'important');"), '预设快照必须按真实可视区同步默认半屏高度');
 assert.ok(workshop.includes("overlay.style.setProperty('--pmm-switch-snapshot-sheet-max-height', `${Math.max(1, Math.floor(height * 0.6))}px`, 'important');"), '预设快照必须按真实可视区同步六成上限');
 assert.ok(workshop.includes("overlay.style.removeProperty('--pmm-switch-snapshot-sheet-min-height');"), '预设快照关闭后必须清理默认高度变量');
