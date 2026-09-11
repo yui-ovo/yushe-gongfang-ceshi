@@ -12,8 +12,8 @@ body.light{--SmartThemeBodyColor:#443d3d;--SmartThemeBlurTintColor:#f7f5f4;--Sma
 button[role=switch]{background:#75636d!important;box-shadow:0 0 0 5px #75636d!important;padding:8px!important;min-height:40px!important}button[role=switch]::after{content:'✓';background:red}
 </style><script>
 const presetName='【日月西】Gemini & Claude v0.4 @电波系';
-const prompts=Array.from({length:120},(_,i)=>({id:'p'+i,name:'条目 '+i,enabled:i%3!==0,content:'正文保持'}));
-window.fixture={prompts};window.getPreset=()=>({prompts:structuredClone(fixture.prompts)});
+const prompts=Array.from({length:120},(_,i)=>({id:'p'+i,name:'条目 '+i,enabled:i%3!==0,content:i===0?'<b>正文只读</b>':i===1?'长正文'.repeat(20000):''}));
+window.fixture={prompts,reads:0};window.getPreset=()=>{fixture.reads++;return {prompts:structuredClone(fixture.prompts)}};
 window.SillyTavern={getContext:()=>({getPresetManager:()=>({getSelectedPresetName:()=>presetName}),characters:[],eventSource:{on(){},off(){}}})};
 window.__PMM_BAIBAI_COMPAT__={snapshotBranchState:()=>({sections:Array.from({length:12},(_,i)=>({id:'baibai_g'+i,displayName:['🔒预设头部','🌎世界引擎','🐚人物活化','🎵文风指导'][i%4],itemIds:prompts.slice(i*10,i*10+10).map(p=>p.id)}))}),readGroupEnabledStates:()=>Array.from({length:12},(_,i)=>({id:'g'+i,name:'分组'+i,enabled:true}))};
 </script><script type="module" src="/preset.js"></script>`;
@@ -39,6 +39,33 @@ try {
     await page.locator('.pmm-switch-editor-group-head strong').first().click();
     assert.equal(await page.locator('.pmm-switch-editor-entries:not([hidden])').count(),1,'Title expands group');
     await page.locator('[data-pmm-editor-action="toggle-prompt"]').first().click();
+    assert.equal(await page.locator('.pmm-switch-editor-preview').count(),0,'Toggle must not create preview DOM');
+    const readsBefore=await page.evaluate(()=>fixture.reads);
+    const previewTitle=page.locator('[data-pmm-editor-action="preview-prompt"]').first();
+    await previewTitle.click();
+    assert.equal(await page.locator('.pmm-switch-editor-preview').count(),1,'Only the opened body is rendered');
+    assert.equal(await page.locator('.pmm-switch-editor-preview-content').textContent(),'<b>正文只读</b>');
+    assert.equal(await page.locator('.pmm-switch-editor-preview-content b').count(),0,'Body is displayed as plain text');
+    await page.locator('.pmm-switch-editor-preview-content').evaluate(node=>node.dataset.reuse='yes');
+    await previewTitle.click();
+    assert.equal(await page.locator('.pmm-switch-editor-preview:visible').count(),0,'Title collapses body');
+    await previewTitle.click();
+    assert.equal(await page.locator('.pmm-switch-editor-preview-content').getAttribute('data-reuse'),'yes','Reopen reuses the body DOM');
+    await page.locator('[data-pmm-editor-action="preview-prompt"]').nth(1).click();
+    assert.equal(await page.locator('.pmm-switch-editor-preview').count(),2);
+    const longBody=page.locator('.pmm-switch-editor-preview').nth(1);
+    assert.ok((await longBody.boundingBox()).height<=220,'Long body scrolls within a bounded area');
+    assert.equal(await longBody.locator('.pmm-switch-editor-preview-content').textContent(),'长正文'.repeat(20000));
+    await previewTitle.scrollIntoViewIfNeeded();
+    await page.screenshot({path:fileURLToPath(new URL('body-'+width+'-'+tone+'.png',output))});
+    await page.locator('[data-pmm-editor-action="preview-prompt"]').nth(2).click();
+    assert.equal(await page.locator('.pmm-switch-editor-preview-content').nth(2).textContent(),'（正文为空）');
+    assert.equal(await page.evaluate(()=>fixture.reads),readsBefore,'Expanding bodies never rereads the preset');
+    assert.equal(await page.locator('.pmm-switch-editor-preview input,.pmm-switch-editor-preview textarea,.pmm-switch-editor-preview [contenteditable]').count(),0,'Preview is read only');
+    await page.locator('.pmm-switch-editor-group-head strong').first().click();
+    await page.locator('.pmm-switch-editor-group-head strong').first().click();
+    assert.equal(await page.locator('.pmm-switch-editor-preview').count(),3,'Group reopen does not duplicate previews');
+    await page.locator('[data-pmm-editor-action="preview-prompt"][aria-expanded="true"]').evaluateAll(nodes=>nodes.forEach(node=>node.click()));
     const draftBefore=await page.locator('.pmm-switch-editor-list').innerHTML();
     const storeBefore=await page.evaluate(()=>localStorage.getItem('pmm.switch-snapshots.v1'));
     await page.screenshot({path:fileURLToPath(new URL('editor-'+width+'-'+tone+'.png',output))});
@@ -62,6 +89,9 @@ try {
     await page.locator('.pmm-switch-snapshot-dialog').waitFor();
     const saved=await page.evaluate(()=>__PMM_SWITCH_SNAPSHOTS_TEST52__.list().find(s=>s.name.startsWith('新的开关方案')));
     assert.ok(saved);assert.equal(saved.groupStates[0].enabled,false);assert.equal(saved.states[0].enabled,true);
+    for(const state of saved.states)assert.deepEqual(Object.keys(state).sort(),['enabled','id','name']);
+    assert.equal(await page.evaluate(()=>localStorage.getItem('pmm.switch-snapshots.v1').includes('正文只读')),false,'Content must never be stored');
+    assert.equal(JSON.stringify(saved).includes('content'),false);
     assert.equal(await page.evaluate(()=>fixture.prompts[0].enabled),false,'Saving must not apply the draft');
     await page.setViewportSize({width,height:844});
     await page.waitForTimeout(100);
@@ -87,13 +117,20 @@ try {
     assert.ok(shortLayout<2,'Short name and controls share a row');
     // Mixed standalone/group order, including before the first group and between groups.
     await page.evaluate(()=>{
+      fixture.prompts[0].content='本次打开时的当前正文';
       fixture.prompts=[{id:'before',name:'作者声明',enabled:false},...fixture.prompts.slice(0,10),{id:'between',name:'预设简介',enabled:false},...fixture.prompts.slice(10),{id:'after',name:'常见问题',enabled:false}];
     });
     await page.locator('[data-pmm-snapshot-action="new"]').click();
     assert.equal(await page.locator('.pmm-switch-editor-standalone').count(),3);
     assert.equal(await page.locator('.pmm-switch-editor-group .pmm-switch-editor-prompt').count(),0,'Grouped entries stay lazy');
-    const rowOrder=await page.locator('.pmm-switch-editor-list').evaluate(list=>[...list.children].map(row=>row.dataset.pmmEditorGroup || row.querySelector('.pmm-switch-editor-prompt>span')?.textContent));
+    const rowOrder=await page.locator('.pmm-switch-editor-list').evaluate(list=>[...list.children].map(row=>row.dataset.pmmEditorGroup || row.querySelector('.pmm-switch-editor-prompt-title>span')?.textContent));
     assert.deepEqual(rowOrder,['作者声明','g0','预设简介',...Array.from({length:11},(_,i)=>'g'+(i+1)),'常见问题']);
+    await page.locator('.pmm-switch-editor-group-head strong').first().click();
+    await page.locator('.pmm-switch-editor-group [data-pmm-editor-action="preview-prompt"]').first().click();
+    assert.equal(await page.locator('.pmm-switch-editor-preview-content').textContent(),'本次打开时的当前正文','Reopening uses current preset text, not historical text');
+    await page.locator('.pmm-switch-editor-group-head strong').first().click();
+    await page.locator('.pmm-switch-editor-standalone [data-pmm-editor-action="preview-prompt"]').first().click();
+    assert.equal(await page.locator('.pmm-switch-editor-standalone .pmm-switch-editor-preview-content').textContent(),'（正文为空）','Standalone entries support preview too');
     await page.locator('.pmm-switch-editor-standalone [role="switch"]').first().click();
     await page.screenshot({path:fileURLToPath(new URL('mixed-'+width+'-'+tone+'.png',output))});
     await page.locator('[data-pmm-editor-action="save"]').click();

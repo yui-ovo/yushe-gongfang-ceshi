@@ -14691,6 +14691,8 @@ import { requestSnapshotName } from './snapshot-name-dialog.js?v=2.98.0-test.32'
       returnContext: { source: 'native-preset', presetName: text(returnContext?.presetName) || presetName },
       name: defaultSnapshotName(),
       promptStates,
+      // Session-only text from the same prompt read; never passed to snapshot storage.
+      promptContents: prompts.filter(prompt => prompt && typeof prompt === 'object').map(prompt => String(prompt.content ?? '')),
       groups,
       rows,
       expandedGroups: new Set(),
@@ -14726,10 +14728,35 @@ import { requestSnapshotName } from './snapshot-name-dialog.js?v=2.98.0-test.32'
   function snapshotEditorPromptMarkup(index) {
     const prompt = snapshotEditorSession?.promptStates?.[index];
     if (!prompt) return '';
-    return `<div class="pmm-switch-editor-prompt" data-pmm-editor-prompt-index="${index}">
-      <span title="${escapeHtml(prompt.name)}">${escapeHtml(prompt.name)}</span>
+    return `<div class="pmm-switch-editor-prompt-block"><div class="pmm-switch-editor-prompt" data-pmm-editor-prompt-index="${index}">
+      <button type="button" class="pmm-switch-editor-prompt-title" data-pmm-editor-action="preview-prompt" data-pmm-editor-prompt-index="${index}" aria-expanded="false" title="${escapeHtml(prompt.name)}"><i class="fa-solid fa-chevron-right" aria-hidden="true"></i><span>${escapeHtml(prompt.name)}</span></button>
       ${snapshotEditorSwitchMarkup(prompt.enabled, 'toggle-prompt', `data-pmm-editor-prompt-index="${index}" aria-label="${escapeHtml(prompt.name)}"`)}
-    </div>`;
+    </div></div>`;
+  }
+
+  function toggleSnapshotPromptPreview(button) {
+    const session = snapshotEditorSession;
+    const index = Number(button.dataset.pmmEditorPromptIndex);
+    const block = button.closest('.pmm-switch-editor-prompt-block');
+    if (!session || !block || !session.promptStates[index]) return;
+    const expanded = button.getAttribute('aria-expanded') !== 'true';
+    let preview = block.querySelector('.pmm-switch-editor-preview');
+    if (expanded && !preview) {
+      preview = DOC.createElement('div');
+      preview.className = 'pmm-switch-editor-preview';
+      const label = DOC.createElement('small');
+      label.textContent = '当前预设正文（只读）';
+      const body = DOC.createElement('div');
+      body.className = 'pmm-switch-editor-preview-content';
+      const content = session.promptContents[index] || '';
+      body.textContent = content.trim() ? content : '（正文为空）';
+      preview.append(label, body);
+      block.append(preview);
+    }
+    if (preview) preview.hidden = !expanded;
+    button.setAttribute('aria-expanded', String(expanded));
+    button.querySelector('i')?.classList.toggle('fa-chevron-right', !expanded);
+    button.querySelector('i')?.classList.toggle('fa-chevron-down', expanded);
   }
 
   function snapshotEditorGroupElement(groupId) {
@@ -14887,6 +14914,8 @@ import { requestSnapshotName } from './snapshot-name-dialog.js?v=2.98.0-test.32'
         group.enabled = !group.enabled;
         button.classList.toggle('is-on', group.enabled);
         button.setAttribute('aria-checked', group.enabled ? 'true' : 'false');
+      } else if (action === 'preview-prompt') {
+        toggleSnapshotPromptPreview(button);
       } else if (action === 'toggle-prompt') {
         const index = Number(button.dataset.pmmEditorPromptIndex);
         const prompt = snapshotEditorSession.promptStates[index];
@@ -15256,6 +15285,8 @@ import { requestSnapshotName } from './snapshot-name-dialog.js?v=2.98.0-test.32'
       .pmm-switch-editor-list{min-height:0!important;flex:1 1 auto!important;overflow:auto!important;overscroll-behavior:contain!important;padding:4px 12px 10px!important;-webkit-overflow-scrolling:touch!important}
       .pmm-switch-editor-group{margin:7px 0!important;overflow:hidden!important;border:1px solid var(--pm-border,var(--SmartThemeBorderColor,rgba(148,163,184,.27)))!important;border-radius:11px!important;background:rgba(127,127,127,.035)!important}.pmm-switch-editor-group-head{cursor:pointer!important;display:flex!important;align-items:center!important;gap:7px!important;min-height:43px!important;padding:0 9px 0 5px!important}.pmm-switch-editor-expand{display:flex!important;align-items:center!important;justify-content:center!important;width:34px!important;height:40px!important;flex:0 0 auto!important;border:0!important;background:transparent!important;color:inherit!important;cursor:pointer!important;opacity:.68!important}.pmm-switch-editor-expand i{font-size:10px!important}.pmm-switch-editor-group-icon{width:15px!important;flex:0 0 auto!important;color:var(--pm-quote-color,var(--SmartThemeQuoteColor,#7c93ce))!important;font-size:12px!important;opacity:.8!important}.pmm-switch-editor-group-head strong{min-width:0!important;flex:1 1 auto!important;overflow:hidden!important;text-overflow:ellipsis!important;white-space:nowrap!important;font-size:12px!important;font-weight:650!important}.pmm-switch-editor-group-head small{flex:0 0 auto!important;font-size:10px!important;opacity:.58!important}
       .pmm-switch-editor-dialog button.pmm-switch-editor-switch{appearance:none!important;-webkit-appearance:none!important;position:relative!important;display:block!important;box-sizing:border-box!important;width:44px!important;height:36px!important;min-width:44px!important;min-height:36px!important;max-width:44px!important;max-height:36px!important;padding:0!important;margin:0!important;flex:0 0 44px!important;border:0!important;border-radius:0!important;background:transparent!important;background-image:none!important;box-shadow:none!important;filter:none!important;outline:none!important;color:inherit!important;cursor:pointer!important;transform:none!important}.pmm-switch-editor-dialog button.pmm-switch-editor-switch::after{content:none!important;display:none!important}.pmm-switch-editor-dialog button.pmm-switch-editor-switch:focus-visible{outline:2px solid currentColor!important;outline-offset:0!important;border-radius:6px!important}.pmm-switch-editor-dialog button.pmm-switch-editor-switch::before{content:''!important;position:absolute!important;inset:auto!important;left:7px!important;top:9px!important;width:30px!important;height:18px!important;border:1px solid var(--pm-border,var(--SmartThemeBorderColor,rgba(148,163,184,.42)))!important;border-radius:999px!important;background:rgba(127,127,127,.16)!important;box-shadow:none!important;transform:none!important;box-sizing:border-box!important;transition:background .16s ease!important}.pmm-switch-editor-dialog button.pmm-switch-editor-switch>span{position:absolute!important;left:10px!important;top:12px!important;width:12px!important;height:12px!important;border:0!important;box-shadow:none!important;border-radius:50%!important;background:currentColor!important;opacity:.6!important;transition:transform .16s ease,opacity .16s ease!important}.pmm-switch-editor-dialog button.pmm-switch-editor-switch.is-on::before{border-color:color-mix(in srgb,var(--pm-quote-color,var(--SmartThemeQuoteColor,#7c93ce)) 75%,transparent)!important;background:color-mix(in srgb,var(--pm-quote-color,var(--SmartThemeQuoteColor,#7c93ce)) 55%,transparent)!important}.pmm-switch-editor-dialog button.pmm-switch-editor-switch.is-on>span{transform:translateX(12px)!important;opacity:1!important}
+      .pmm-switch-editor-dialog .pmm-switch-editor-prompt-title{display:flex!important;align-items:center!important;gap:8px!important;min-width:0!important;flex:1 1 auto!important;min-height:43px!important;padding:6px 0!important;margin:0!important;border:0!important;background:transparent!important;box-shadow:none!important;color:inherit!important;font:inherit!important;font-size:12px!important;text-align:left!important;cursor:pointer!important;appearance:none!important}.pmm-switch-editor-prompt-title>span{overflow:hidden!important;text-overflow:ellipsis!important;white-space:nowrap!important}.pmm-switch-editor-prompt-title>i{flex:none!important;font-size:10px!important;opacity:.6!important}.pmm-switch-editor-prompt-title::before,.pmm-switch-editor-prompt-title::after{content:none!important}.pmm-switch-editor-prompt-title:focus-visible{outline:2px solid currentColor!important;outline-offset:-2px!important}
+      .pmm-switch-editor-preview{max-height:180px!important;overflow:auto!important;margin:0 8px!important;padding:8px 4px 11px 18px!important;border-top:1px dashed var(--pm-border,rgba(127,127,127,.25))!important;overscroll-behavior:contain!important}.pmm-switch-editor-preview[hidden]{display:none!important}.pmm-switch-editor-preview>small{display:block!important;margin:0 0 5px!important;font-size:10px!important;opacity:.52!important}.pmm-switch-editor-preview-content{white-space:pre-wrap!important;overflow-wrap:anywhere!important;user-select:text!important;-webkit-user-select:text!important;font-size:12px!important;line-height:1.65!important;opacity:.82!important}
       .pmm-switch-editor-entries{border-top:1px solid rgba(148,163,184,.16)!important;background:rgba(0,0,0,.035)!important}.pmm-switch-editor-prompt{display:flex!important;align-items:center!important;gap:10px!important;min-height:43px!important;padding:0 8px 0 16px!important;border-bottom:1px solid rgba(148,163,184,.13)!important;content-visibility:auto!important;contain-intrinsic-size:auto 43px!important}.pmm-switch-editor-prompt:last-child{border-bottom:0!important}.pmm-switch-editor-prompt>span{min-width:0!important;flex:1 1 auto!important;overflow:hidden!important;text-overflow:ellipsis!important;white-space:nowrap!important;font-size:12px!important}.pmm-switch-editor-group-empty{padding:18px!important;text-align:center!important;font-size:11px!important;opacity:.55!important}
       .pmm-switch-editor-dialog>footer{display:flex!important;align-items:center!important;justify-content:flex-end!important;gap:8px!important;flex:0 0 auto!important;padding:10px 14px max(10px,env(safe-area-inset-bottom,0px))!important;border-top:1px solid var(--pm-border,var(--SmartThemeBorderColor,rgba(148,163,184,.23)))!important}.pmm-switch-editor-dialog>footer button{min-height:34px!important;padding:0 13px!important;border:1px solid var(--pm-border,var(--SmartThemeBorderColor,rgba(148,163,184,.32)))!important;border-radius:8px!important;background:rgba(127,127,127,.07)!important;color:inherit!important;font:inherit!important;font-size:12px!important;cursor:pointer!important}.pmm-switch-editor-dialog>footer button:last-child{border-color:color-mix(in srgb,var(--pm-quote-color,var(--SmartThemeQuoteColor,#7c93ce)) 60%,transparent)!important;background:color-mix(in srgb,var(--pm-quote-color,var(--SmartThemeQuoteColor,#7c93ce)) 18%,transparent)!important;font-weight:650!important}.pmm-switch-editor-dialog>footer button i{margin-right:6px!important}
       @media(max-width:768px){.pmm-switch-editor-overlay{align-items:flex-end!important;padding:max(8px,env(safe-area-inset-top,0px)) max(8px,env(safe-area-inset-right,0px)) 0 max(8px,env(safe-area-inset-left,0px))!important}.pmm-switch-editor-dialog{width:100%!important;height:min(760px,calc(var(--pmm-switch-editor-visible-height,100dvh) - max(8px,env(safe-area-inset-top,0px))))!important;max-height:calc(var(--pmm-switch-editor-visible-height,100dvh) - max(8px,env(safe-area-inset-top,0px)))!important;border-radius:17px 17px 0 0!important}.pmm-switch-editor-summary{align-items:flex-start!important;flex-direction:column!important;gap:2px!important}.pmm-switch-editor-summary small{text-align:left!important}}
