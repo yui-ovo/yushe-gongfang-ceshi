@@ -10,6 +10,8 @@ for (const marker of [
   "const CORNERS = ['nw', 'ne', 'sw', 'se']",
   "cursor: nwse-resize",
   "cursor: nesw-resize",
+  "any-pointer: fine",
+  "any-hover: hover",
   "Math.min(980,",
   "Math.min(560,",
   "Math.min(420,",
@@ -21,9 +23,17 @@ for (const marker of [
   "clearSavedSize",
   "pmm-desktop-custom-sized",
   "pmm-desktop-resize-handle",
-  "width: 100% !important",
-  "PMM_DESKTOP_HEADER_WRAP_TEST101",
+  "container-type: inline-size",
+  "@container (max-width: 600px)",
   "flex-wrap: wrap !important",
+  "width: 100% !important",
+  "justify-content: flex-start !important",
+  "margin-left: 0 !important",
+  "overflow-x: auto !important",
+  "flex-wrap: nowrap !important",
+  ".pm-panel-container--branch-mode .pm-header > .header-right",
+  ".pm-panel-container--merge-mode .pm-header > .header-right",
+  ".pm-panel-container--favorite-mode .pm-header > .header-right",
 ]) {
   assert.ok(source.includes(marker), `workshop-v3.02.js 必须包含四角缩放及容器查询逻辑标记：${marker}`);
 }
@@ -233,7 +243,7 @@ assert.equal(api.isDesktop(win390x844.document), false, '390x844 touch 应识别
 const win768x1024 = new MockWindow({ innerWidth: 768, innerHeight: 1024, pointerFine: false, anyPointerFine: false, hoverSupport: false, anyHoverSupport: false });
 assert.equal(api.isDesktop(win768x1024.document), false, '768x1024 touch 应识别为平板，不启用');
 
-// 5. 1280x800 -> desktop by viewport width. Tauri may not expose pointer media features.
+// 5. 1280x800 touch + mouse(any-pointer:fine) -> desktop -> 应启用
 const win1280x800TouchMouse = new MockWindow({
   innerWidth: 1280,
   innerHeight: 800,
@@ -242,11 +252,11 @@ const win1280x800TouchMouse = new MockWindow({
   hoverSupport: false,
   anyHoverSupport: true
 });
-assert.equal(api.isDesktop(win1280x800TouchMouse.document), true, '1280x800 应按桌面宽度启用');
+assert.equal(api.isDesktop(win1280x800TouchMouse.document), true, '1280x800 touch + mouse(any-pointer:fine) 应识别为桌面端并启用');
 
-// 宽度超过手机断点时，即使运行时不报告 pointer / hover，也必须注入桌面样式。
+// 纯触控平板 (1024x768 无 fine pointer / 无 hover) -> 不启用
 const touchTabletWin = new MockWindow({ innerWidth: 1024, innerHeight: 768, pointerFine: false, anyPointerFine: false, hoverSupport: false, anyHoverSupport: false });
-assert.equal(api.isDesktop(touchTabletWin.document), true, '1024px 宽的 Tauri 窗口不应因缺少 pointer 媒体能力跳过桌面样式');
+assert.equal(api.isDesktop(touchTabletWin.document), false, '纯触屏平板（无 fine pointer / 无 hover）不应创建桌面缩放热区');
 
 // Test 3.2: Handles creation on .pm-panel-container
 const rootPanel = mockWin.document.createElement('div');
@@ -374,12 +384,18 @@ api.ensureHandles(container);
 const styleEl = mockWin.document.getElementById('pmm-desktop-corner-resize-style');
 assert.ok(styleEl, '桌面端环境应自动安装尺寸与容器查询样式');
 const css = styleEl.textContent;
+assert.ok(css.includes('container-type: inline-size'), '必须在面板容器上定义 inline-size 容器查询类型');
+assert.ok(css.includes('@container (max-width: 600px)'), '必须使用 @container 响应面板容器自身宽度');
+assert.ok(css.includes('flex-wrap: wrap !important'), '窄宽度时 header 换行排列');
 assert.ok(css.includes('width: 100% !important'), '窄宽度时 header-right 占满整行');
-assert.ok(css.includes('flex-wrap: wrap !important'), '窄宽度时工具按钮改为换行');
-assert.ok(css.includes('flex: 0 0 auto !important'), '工具按钮不能被压扁');
-assert.ok(css.includes('@media screen and (min-width: 769px)'), '样式按桌面宽度限定，手机端不会命中');
+assert.ok(css.includes('margin-left: 0 !important'), '窄宽度时 header-right 清除右对齐与左边距');
+assert.ok(css.includes('justify-content: flex-start !important'), '窄宽度时 header-right 按钮从左向右排列');
+assert.ok(css.includes('overflow-x: auto !important'), '窄宽度时工具按钮支持横向滚动作为兜底');
+assert.ok(css.includes('flex-shrink: 0 !important'), '工具按钮不能被压扁');
+assert.ok(css.includes(':not(.pmm-mobile-layout-enabled)'), '容器查询样式限定桌面端，排除手机端');
 assert.ok(css.includes('.pm-panel-container--branch-mode'), '覆盖分支模式');
 assert.ok(css.includes('.pm-panel-container--merge-mode'), '覆盖缝合模式');
 assert.ok(css.includes('.pm-panel-container--favorite-mode'), '覆盖收藏模式');
 
 console.log('test.94 回归通过：桌面端面板四角拖动居中缩放、双栏防挤压边界、双击重置、触屏隔离以及窄宽度工具栏容器查询自适应全部正常。');
+
