@@ -76,12 +76,15 @@ try {
       const title=row.querySelector('.pmm-switch-snapshot-name');
       return {centers:[copy.y+copy.height/2,...buttons.map(b=>b.y+b.height/2)],truncated:title.scrollWidth>title.clientWidth,overflow:row.scrollWidth>row.clientWidth};
     });
-    assert.ok(Math.max(...cardLayout.centers)-Math.min(...cardLayout.centers)<2,'Name and all buttons must share one row');
-    assert.equal(cardLayout.truncated,true,'Long name must ellipsize');
+    assert.ok(cardLayout.centers[1]>cardLayout.centers[0]+12,'Long names move all controls below the full name');
+    assert.equal(cardLayout.truncated,false,'Long name remains fully visible');
     assert.equal(cardLayout.overflow,false,'Card must not overflow horizontally');
     await card.locator('[data-pmm-snapshot-action="menu"]').click();
     await page.locator('[data-pmm-snapshot-action="rename"]').waitFor();
     await page.locator('[data-pmm-snapshot-action="menu"]').click();
+    await card.locator('.pmm-switch-snapshot-name').evaluate(el=>el.textContent='日常');
+    const shortLayout=await card.evaluate(row=>{const copy=row.querySelector('.pmm-switch-snapshot-copy').getBoundingClientRect(),controls=row.querySelector('.pmm-switch-snapshot-controls').getBoundingClientRect();return Math.abs(copy.y+copy.height/2-controls.y-controls.height/2)});
+    assert.ok(shortLayout<2,'Short name and controls share a row');
     // Mixed standalone/group order, including before the first group and between groups.
     await page.evaluate(()=>{
       fixture.prompts=[{id:'before',name:'作者声明',enabled:false},...fixture.prompts.slice(0,10),{id:'between',name:'预设简介',enabled:false},...fixture.prompts.slice(10),{id:'after',name:'常见问题',enabled:false}];
