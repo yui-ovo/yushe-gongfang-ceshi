@@ -1,9 +1,10 @@
 {
   "name": "yushe-gongfang-ceshi",
-  "version": "2.98.0-test.38",
+  "version": "2.98.0-test.39",
   "private": true,
   "type": "module",
   "scripts": {
+    "test:worldbook-unsaved-target": "node scripts/test-worldbook-unsaved-target.mjs",
     "test:snapshot-background": "node scripts/test-snapshot-background-browser.mjs",
     "test:snapshot-ui": "node scripts/test-test97-snapshot-save-ui-browser.mjs && node scripts/test-worldbook-snapshots-browser.mjs",
     "test:desktop-resize-layout": "node scripts/test-test100-desktop-resize-real-panel-browser.mjs",

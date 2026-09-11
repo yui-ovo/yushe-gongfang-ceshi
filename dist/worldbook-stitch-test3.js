@@ -829,7 +829,7 @@
   // to BaiBai's own Vue app, so always prefer PMM's PromptPanel: it owns the
   // cross-panel-drop listener that can preserve the target section id.
   function nativePresetDropDispatcher() {
-    const panel = state.nativeTop;
+    const panel = currentNativePresetPanel();
     if (!panel) return null;
     const seen = new Set();
     const roots = [panel, ...panel.querySelectorAll('.prompt-panel, .prompt-panel *')];
@@ -867,8 +867,14 @@
     return nativePresetDropDispatcher()?.component || null;
   }
 
+  function currentNativePresetPanel() {
+    const live = DOC.querySelector('#preset-manager-main-panel .pm-main-wrapper > .preset-panel');
+    if (live) state.nativeTop = live;
+    return state.nativeTop?.isConnected === false ? null : state.nativeTop;
+  }
+
   function nativePresetSnapshot() {
-    const panel = state.nativeTop;
+    const panel = currentNativePresetPanel();
     if (!panel) return { name: '', prompts: [], selected: new Set(), runtimePrompts: null, panelComponent: null, panelDropHandler: null };
     let prompts = null;
     let runtimePrompts = null;
@@ -901,6 +907,11 @@
     }
     const select = panel.querySelector('.title-select');
     const name = String(select?.value || select?.selectedOptions?.[0]?.textContent || getLoadedPresetNameSafe() || '').trim();
+    // The core owns unsaved additions. Rendered component props can still describe
+    // the previous frame after a worldbook switch; never use those to reject a new ID.
+    const bridge = SELF.__PMM_WORLDBOOK_PRESET_DROP_BRIDGE__ || TOP.__PMM_WORLDBOOK_PRESET_DROP_BRIDGE__;
+    const draft = bridge?.snapshot?.();
+    if (draft?.name === name && Array.isArray(draft.prompts)) prompts = clone(draft.prompts);
     return { name, prompts, selected, runtimePrompts, panelComponent, panelDropHandler:dispatcher?.drop || null };
   }
 
@@ -1049,8 +1060,8 @@
     if (!keys.length) return notify('warning', '请先在下方世界书勾选需要缝合的条目');
     const entries = keys.map(key => findEntry(source, key)).filter(Boolean).map(clone);
     if (!entries.length) return;
-    const target = nativePresetSnapshot();
     await enqueue(move ? '移动到上方预设' : '复制到上方预设', async () => {
+      const target = nativePresetSnapshot();
       const additions = entries.map(worldToPreset);
       if (await emitNativePresetDrop(target, additions, placement)) {
         if (move) {
